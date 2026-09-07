@@ -1,7 +1,8 @@
 # pnk stack: PostgreSQL + pnk-id + pnk-mail
 # Expects sibling checkout: ../pnk-id and this repo (pnk-mail)
 #
-#   cp deploy/.env.example .env   # or edit below
+#   cp deploy/.env.example .env
+#   # fill secrets + real HTTPS URLs
 #   docker compose up -d --build
 
 name: pnk
@@ -29,6 +30,9 @@ services:
     build:
       context: ../pnk-id
       dockerfile: Dockerfile
+      args:
+        APP_URL: ${APP_URL:-https://id.pnkmail.ru}
+        NEXT_PUBLIC_MAIL_URL: ${NEXT_PUBLIC_MAIL_URL:-https://pnkmail.ru}
     restart: unless-stopped
     depends_on:
       postgres:
@@ -51,6 +55,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_PNK_ID_URL: ${NEXT_PUBLIC_PNK_ID_URL:-https://id.pnkmail.ru}
+        NEXT_PUBLIC_MAIL_URL: ${NEXT_PUBLIC_MAIL_URL:-https://pnkmail.ru}
     restart: unless-stopped
     depends_on:
       postgres:
