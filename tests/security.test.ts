@@ -28,7 +28,6 @@ describe("assertSameOrigin", async () => {
 
   it("blocks foreign Origin", () => {
     process.env.NEXT_PUBLIC_MAIL_URL = "http://localhost:3000";
-    process.env.NODE_ENV = "test";
     const r = assertSameOrigin({
       headers: new Headers({ origin: "https://evil.example" }),
       nextUrl: { origin: "http://localhost:3000" },

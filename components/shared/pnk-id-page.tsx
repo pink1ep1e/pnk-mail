@@ -1218,7 +1218,7 @@ function AvatarCropper({
       const signX = d.corner.includes("e") ? 1 : -1;
       const signY = d.corner.includes("s") ? 1 : -1;
       const delta = Math.abs(dx) > Math.abs(dy) ? dx * signX : dy * signY;
-      let size = d.osize + delta;
+      const size = d.osize + delta;
       let x = d.ox;
       let y = d.oy;
       if (d.corner.includes("w")) x = d.ox + (d.osize - size);

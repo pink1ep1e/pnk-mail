@@ -41,15 +41,15 @@ export const folders: {
 ];
 
 export function folderCounts(list: MailMessage[]) {
-  const counts: Partial<Record<FolderId, { unread: number; total: number }>> =
-    {};
+  const counts: Record<string, { unread: number; total: number }> = {};
   for (const m of list) {
-    const cur = counts[m.folder] ?? { unread: 0, total: 0 };
+    const key = m.folder || "inbox";
+    const cur = counts[key] ?? { unread: 0, total: 0 };
     cur.total += 1;
     if (m.unread) cur.unread += 1;
-    counts[m.folder] = cur;
+    counts[key] = cur;
   }
-  return counts;
+  return counts as Partial<Record<FolderId, { unread: number; total: number }>>;
 }
 
 export function initials(name: string) {
