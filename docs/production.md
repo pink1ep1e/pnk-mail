@@ -84,8 +84,8 @@ docker compose logs -f pnk-id pnk-mail
 При старте:
 
 1. Postgres поднимается, init создаёт `pnk_id` + `pnk_mail`
-2. **pnk-id**: `prisma db push` + seed OAuth-клиента `pnk-mail`
-3. **pnk-mail**: `prisma db push`
+2. **pnk-id** / **pnk-mail**: `prisma db push` (схемы)
+3. OAuth-клиент `pnk-mail` — один раз через seed (см. ниже)
 
 Проверка:
 
@@ -128,13 +128,29 @@ sudo nginx -t && sudo systemctl reload nginx
 sudo certbot --nginx -d id.pnkmail.ru -d pnkmail.ru -d www.pnkmail.ru
 ```
 
-После смены доменов пересоберите seed (redirect URI):
+OAuth seed (первый запуск или после смены доменов / `PNK_ID_CLIENT_SECRET`):
+
+```bash
+# Node на VPS:
+cd /opt/pnk/pnk-id
+set -a && source /opt/pnk/pnk-mail/.env && set +a
+export DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:5432/pnk_id?schema=public"
+npm ci && npx prisma generate && npm run db:seed
+```
+
+Или одноразовый контейнер с исходниками:
 
 ```bash
 cd /opt/pnk/pnk-mail
-docker compose exec pnk-id npx tsx prisma/seed.ts
-docker compose up -d --build
+docker run --rm --network pnk-mail_default \
+  -v /opt/pnk/pnk-id:/app -w /app \
+  --env-file .env \
+  -e DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/pnk_id?schema=public" \
+  node:20-bookworm-slim \
+  bash -c "npm ci && npx prisma generate && npx tsx prisma/seed.ts"
 ```
+
+(имя сети: `docker network ls | grep pnk`)
 
 ## 6. DNS и исходящая почта
 
