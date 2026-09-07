@@ -128,29 +128,26 @@ sudo nginx -t && sudo systemctl reload nginx
 sudo certbot --nginx -d id.pnkmail.ru -d pnkmail.ru -d www.pnkmail.ru
 ```
 
-OAuth seed (первый запуск или после смены доменов / `PNK_ID_CLIENT_SECRET`):
-
-```bash
-# Node на VPS:
-cd /opt/pnk/pnk-id
-set -a && source /opt/pnk/pnk-mail/.env && set +a
-export DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:5432/pnk_id?schema=public"
-npm ci && npx prisma generate && npm run db:seed
-```
-
-Или одноразовый контейнер с исходниками:
+OAuth seed (первый запуск или после смены доменов / `PNK_ID_CLIENT_SECRET`).
+Нужен **Node ≥ 18** — на типичном VPS системный Node слишком старый, поэтому seed через контейнер:
 
 ```bash
 cd /opt/pnk/pnk-mail
-docker run --rm --network pnk-mail_default \
+set -a && source .env && set +a
+NET=$(docker network ls --format '{{.Name}}' | grep -E 'pnk.*default' | head -1)
+echo "network: $NET"
+
+docker run --rm --network "$NET" \
   -v /opt/pnk/pnk-id:/app -w /app \
-  --env-file .env \
+  -e NEXT_PUBLIC_MAIL_URL \
+  -e PNK_ID_CLIENT_SECRET \
+  -e SEED_DEMO_PASSWORD \
   -e DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/pnk_id?schema=public" \
   node:20-bookworm-slim \
   bash -c "npm ci && npx prisma generate && npx tsx prisma/seed.ts"
 ```
 
-(имя сети: `docker network ls | grep pnk`)
+Ожидаемый вывод: `Seed OK` и redirect на `https://pnkmail.ru/api/auth/callback/pnk-id`.
 
 ## 6. DNS и исходящая почта
 
