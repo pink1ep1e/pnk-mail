@@ -31,6 +31,19 @@ sudo apt install -y git docker.io docker-compose-v2 nginx certbot python3-certbo
 sudo usermod -aG docker $USER   # re-login
 ```
 
+Если `No space left on device` при build:
+
+```bash
+df -h
+cd /opt/pnk/pnk-mail && docker compose stop pnk-id pnk-mail
+docker builder prune -af
+docker system prune -af
+# seed оставлял node_modules на хосте — не тащить в build context:
+rm -rf /opt/pnk/pnk-id/node_modules /opt/pnk/pnk-mail/node_modules
+rm -rf /opt/pnk/pnk-id/.next /opt/pnk/pnk-mail/.next
+df -h
+```
+
 ## 2. Клонирование
 
 ```bash
