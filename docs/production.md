@@ -31,18 +31,24 @@ sudo apt install -y git docker.io docker-compose-v2 nginx certbot python3-certbo
 sudo usermod -aG docker $USER   # re-login
 ```
 
-Если `No space left on device` при build:
+Если `No space left on device` при build (типичный VPS ~10G):
 
 ```bash
 df -h
-cd /opt/pnk/pnk-mail && docker compose stop pnk-id pnk-mail
+cd /opt/pnk/pnk-mail && docker compose stop pnk-id pnk-mail || true
 docker builder prune -af
 docker system prune -af
-# seed оставлял node_modules на хосте — не тащить в build context:
 rm -rf /opt/pnk/pnk-id/node_modules /opt/pnk/pnk-mail/node_modules
 rm -rf /opt/pnk/pnk-id/.next /opt/pnk/pnk-mail/.next
+# собирать по одному сервису, не параллельно:
+docker compose build pnk-id
+docker builder prune -af
+docker compose build pnk-mail
+docker compose up -d
 df -h
 ```
+
+Схема БД не создаётся при старте контейнера — один раз через Docker seed / `prisma db push` (см. ниже).
 
 ## 2. Клонирование
 
