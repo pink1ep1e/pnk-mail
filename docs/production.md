@@ -144,10 +144,14 @@ docker run --rm --network "$NET" \
   -e SEED_DEMO_PASSWORD \
   -e DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/pnk_id?schema=public" \
   node:20-bookworm-slim \
-  bash -c "npm ci && npx prisma generate && npx tsx prisma/seed.ts"
+  bash -c "apt-get update -qq && apt-get install -y -qq openssl >/dev/null \
+    && npm ci && npx prisma generate \
+    && npx prisma db push --skip-generate \
+    && npx tsx prisma/seed.ts"
 ```
 
 Ожидаемый вывод: `Seed OK` и redirect на `https://pnkmail.ru/api/auth/callback/pnk-id`.
+Если id-контейнер уже поднимался — таблицы могли создаться entrypoint’ом; `db push` всё равно безопасен (идемпотентен).
 
 ## 6. DNS и исходящая почта
 
