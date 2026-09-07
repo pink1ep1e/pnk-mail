@@ -13,6 +13,11 @@ RUN apt-get update -y && apt-get install -y openssl ca-certificates && rm -rf /v
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV DATABASE_URL="postgresql://pnk:pnk@127.0.0.1:5432/pnk_mail?schema=public"
+ENV NEXT_PUBLIC_PNK_ID_URL="http://localhost:3100"
+ENV NEXT_PUBLIC_MAIL_URL="http://localhost:3000"
+ENV PNK_ID_CLIENT_SECRET="build-time-placeholder"
+ENV MAIL_VAULT_SECRET="build-time-placeholder-min-32-characters!!"
 RUN npx prisma generate && npx next build
 
 FROM node:20-bookworm-slim AS runner
