@@ -57,7 +57,22 @@ nano .env
 
 `PNK_ID_CLIENT_SECRET` один и тот же в compose для id (seed) и mail (OAuth).
 
-## 4. Запуск
+## Диск / Docker (если `No space left on device`)
+
+```bash
+df -h
+docker system df
+# освободить место (удалит неиспользуемые образы/кэш сборки)
+docker builder prune -af
+docker system prune -af
+# затем снова
+cd /opt/pnk/pnk-id && git pull
+cd /opt/pnk/pnk-mail && git pull
+docker compose up -d --build
+```
+
+Образы теперь slim: в runtime не копируется весь `node_modules` (только Next standalone + Prisma).
+
 
 ```bash
 cd /opt/pnk/pnk-mail

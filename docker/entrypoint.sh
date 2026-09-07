@@ -1,4 +1,4 @@
 #!/bin/sh
 set -e
-npx prisma db push --skip-generate
+./node_modules/.bin/prisma db push --skip-generate
 exec node server.js
