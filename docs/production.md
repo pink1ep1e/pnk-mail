@@ -170,7 +170,21 @@ docker run --rm --network "$NET" \
 ```
 
 Ожидаемый вывод: `Seed OK` и redirect на `https://pnkmail.ru/api/auth/callback/pnk-id`.
-Если id-контейнер уже поднимался — таблицы могли создаться entrypoint’ом; `db push` всё равно безопасен (идемпотентен).
+
+Схема **pnk_mail** (один раз, после того как postgres Up):
+
+```bash
+cd /opt/pnk/pnk-mail
+set -a && source .env && set +a
+NET=$(docker network ls --format '{{.Name}}' | grep -E 'pnk.*default' | head -1)
+docker run --rm --network "$NET" \
+  -v /opt/pnk/pnk-mail:/app -w /app \
+  -e DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/pnk_mail?schema=public" \
+  node:20-bookworm-slim \
+  bash -c "apt-get update -qq && apt-get install -y -qq openssl >/dev/null \
+    && npm ci && npx prisma generate && npx prisma db push --skip-generate"
+rm -rf /opt/pnk/pnk-mail/node_modules
+```
 
 ## 6. DNS и исходящая почта
 
