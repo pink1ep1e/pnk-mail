@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>pnk почта — полная инструкция по запуску</title>
+  <style>
+    :root {
+      --bg: #0c0d10;
+      --card: #1a1c22;
+      --muted: rgba(255,255,255,.55);
+      --dim: rgba(255,255,255,.35);
+      --text: #f4f6fb;
+      --blue: #0066ff;
+      --blue2: #4d9fff;
+      --line: rgba(255,255,255,.08);
+      --ok: #3dd68c;
+      --warn: #f5a524;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Manrope, Segoe UI, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.55;
+    }
+    .wrap { max-width: 880px; margin: 0 auto; padding: 40px 20px 80px; }
+    h1 {
+      font-size: 32px;
+      letter-spacing: -.03em;
+      margin: 0 0 8px;
+    }
+    h2 {
+      font-size: 22px;
+      letter-spacing: -.02em;
+      margin: 40px 0 14px;
+      padding-top: 8px;
+      border-top: 1px solid var(--line);
+    }
+    h3 { font-size: 16px; margin: 22px 0 8px; color: #fff; }
+    p, li { color: var(--muted); }
+    a { color: var(--blue2); }
+    .brand {
+      display: inline-flex; align-items: center; gap: 8px; margin-bottom: 18px;
+    }
+    .brand span {
+      background: var(--blue); color: #fff; font-weight: 700;
+      padding: 6px 10px; border-radius: 10px; font-size: 13px;
+    }
+    .lead { font-size: 16px; color: var(--muted); margin-bottom: 24px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 18px 20px;
+      margin: 14px 0;
+    }
+    .grid { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; }
+    @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
+    table {
+      width: 100%; border-collapse: collapse; font-size: 14px;
+    }
+    th, td {
+      text-align: left; padding: 10px 8px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    th { color: var(--dim); font-weight: 600; font-size: 12px; text-transform: uppercase; }
+    code, pre {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12.5px;
+    }
+    code {
+      background: #0f1115; padding: 2px 6px; border-radius: 6px; color: #cde;
+    }
+    pre {
+      background: #0f1115;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px 16px;
+      overflow: auto;
+      color: #d7e2ff;
+      margin: 10px 0 0;
+    }
+    .tag {
+      display: inline-block; font-size: 11px; font-weight: 700;
+      padding: 3px 8px; border-radius: 999px; margin-right: 6px;
+    }
+    .tag-ok { background: rgba(61,214,140,.15); color: var(--ok); }
+    .tag-warn { background: rgba(245,165,36,.15); color: var(--warn); }
+    .tag-blue { background: rgba(0,102,255,.18); color: var(--blue2); }
+    .toc a { display: block; padding: 6px 0; text-decoration: none; }
+    .toc a:hover { text-decoration: underline; }
+    .step { counter-increment: step; }
+    .step::before {
+      content: counter(step);
+      display: inline-flex; width: 24px; height: 24px; border-radius: 8px;
+      background: var(--blue); color: #fff; font-size: 12px; font-weight: 700;
+      align-items: center; justify-content: center; margin-right: 8px;
+    }
+    ol.steps { list-style: none; padding: 0; counter-reset: step; }
+    ol.steps > li { margin: 0 0 18px; }
+    .note {
+      border-left: 3px solid var(--blue);
+      padding: 10px 14px;
+      background: rgba(0,102,255,.08);
+      border-radius: 0 12px 12px 0;
+      margin: 12px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="brand"><span>pnk</span> <strong>почта</strong> · инструкция запуска</div>
+    <h1>Как поставить и запустить проект полностью</h1>
+    <p class="lead">
+      Два сервиса: <strong>pnk-id</strong> (аккаунты / вход) и <strong>pnk-mail</strong> (сама почта).
+      Ниже — локальный запуск и production на VPS, чтобы письма ходили как у обычной почты (в том числе на @yandex.ru).
+    </p>
+
+    <div class="card toc">
+      <strong style="color:#fff">Содержание</strong>
+      <a href="#arch">1. Архитектура</a>
+      <a href="#local">2. Локальный запуск (Windows / Mac / Linux)</a>
+      <a href="#vps">3. VPS: установка с нуля</a>
+      <a href="#env">4. Переменные окружения</a>
+      <a href="#dns">5. DNS + доставка на Yandex/Gmail</a>
+      <a href="#oauth">6. OAuth между ID и почтой</a>
+      <a href="#check">7. Проверка «как обычная почта»</a>
+      <a href="#troubleshoot">8. Частые проблемы</a>
+    </div>
+
+    <h2 id="arch">1. Архитектура</h2>
+    <div class="grid">
+      <div class="card">
+        <span class="tag tag-blue">pnk-id</span>
+        <p style="margin:8px 0 0;color:#fff"><strong>Порт 3100</strong></p>
+        <p>Регистрация, логин, кабинет, OAuth. База SQLite (Prisma).</p>
+      </div>
+      <div class="card">
+        <span class="tag tag-blue">pnk-mail</span>
+        <p style="margin:8px 0 0;color:#fff"><strong>Порт 3000</strong></p>
+        <p>UI почты, ящики, отправка. База SQLite (Prisma).</p>
+      </div>
+    </div>
+    <div class="card">
+      <table>
+        <tr><th>Куда</th><th>Кто доставляет</th></tr>
+        <tr><td><code>user@pnkmail.ru</code> → другой <code>@pnkmail.ru</code></td><td>Сразу в БД (Inbox / Sent)</td></tr>
+        <tr><td>На <code>@yandex.ru</code> / Gmail</td><td>Resend или Amazon SES + DNS (SPF/DKIM/DMARC)</td></tr>
+        <tr><td>Входящие с интернета на ваш домен</td><td>Фаза 2: MX + Inbound (пока не обязательно)</td></tr>
+      </table>
+    </div>
+    <div class="note">
+      <span class="tag tag-warn">Важно</span>
+      Если <code>MAIL_TRANSPORT=console</code>, письма наружу <strong>не уходят</strong> — только пишутся в лог сервера.
+      Внутри @pnkmail.ru при этом всё работает.
+    </div>
+
+    <h2 id="local">2. Локальный запуск</h2>
+    <ol class="steps">
+      <li class="step"><strong style="color:#fff">Нужно</strong>
+        <p>Node.js 20+, Git, два каталога: <code>pnk-id</code> и <code>pnk-mail</code>.</p>
+      </li>
+      <li class="step"><strong style="color:#fff">pnk-id</strong>
+<pre>cd pnk-id
+npm install
+# создайте .env (см. раздел 4)
+npx prisma db push
+npx prisma db seed
+npm run dev
+# → http://localhost:3100</pre>
+      </li>
+      <li class="step"><strong style="color:#fff">pnk-mail</strong>
+<pre>cd pnk-mail
+npm install
+# создайте .env.local из .env.local.example
+npx prisma db push
+npm run dev
+# → http://localhost:3000</pre>
+      </li>
+      <li class="step"><strong style="color:#fff">Проверка локально</strong>
+        <p>Откройте почту → «Создать ящик» / Войти через ID → напишите письмо на второй @pnkmail.ru аккаунт.</p>
+      </li>
+    </ol>
+
+    <h2 id="vps">3. VPS: установка с нуля (Ubuntu 22.04+)</h2>
+    <ol class="steps">
+      <li class="step"><strong style="color:#fff">Сервер</strong>
+        <p>2+ GB RAM, открыты порты 22, 80, 443. Домен указывает A-записями на IP VPS.</p>
+      </li>
+      <li class="step"><strong style="color:#fff">Node.js + Nginx + Certbot</strong>
+<pre>curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt update
+sudo apt install -y nodejs nginx certbot python3-certbot-nginx git
+node -v   # v20+
+npm i -g pm2</pre>
+      </li>
+      <li class="step"><strong style="color:#fff">Клонирование</strong>
+<pre>sudo mkdir -p /var/www
+cd /var/www
+# подставьте ваши git-репозитории
+sudo git clone &lt;url-pnk-id&gt; pnk-id
+sudo git clone &lt;url-pnk-mail&gt; pnk-mail
+sudo chown -R $USER:$USER /var/www/pnk-id /var/www/pnk-mail</pre>
+      </li>
+      <li class="step"><strong style="color:#fff">Сборка ID</strong>
+<pre>cd /var/www/pnk-id
+npm ci
+# заполните .env (раздел 4) — APP_URL=https://id.pnkmail.ru
+npx prisma db push
+npx prisma db seed
+npm run build
+pm2 start npm --name pnk-id -- start -- -p 3100</pre>
+      </li>
+      <li class="step"><strong style="color:#fff">Сборка Mail</strong>
+<pre>cd /var/www/pnk-mail
+npm ci
+# заполните .env.local (раздел 4)
+npx prisma db push
+npm run build
+pm2 start npm --name pnk-mail -- start -- -p 3000
+pm2 save
+pm2 startup</pre>
+      </li>
+      <li class="step"><strong style="color:#fff">Nginx</strong>
+        <p>Файл <code>/etc/nginx/sites-available/pnk</code>:</p>
+<pre>server {
+  server_name id.pnkmail.ru;
+  location / {
+    proxy_pass http://127.0.0.1:3100;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+}
+
+server {
+  server_name pnkmail.ru www.pnkmail.ru;
+  client_max_body_size 20m;
+  location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+}</pre>
+<pre>sudo ln -sf /etc/nginx/sites-available/pnk /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx
+sudo certbot --nginx -d id.pnkmail.ru -d pnkmail.ru -d www.pnkmail.ru</pre>
+      </li>
+    </ol>
+
+    <h2 id="env">4. Переменные окружения</h2>
+    <h3>pnk-id → файл <code>.env</code></h3>
+<pre>DATABASE_URL="file:./dev.db"
+APP_URL="https://id.pnkmail.ru"
+COOKIE_NAME="pnk_id_session"
+SESSION_SECRET="вставьте_openssl_rand_hex_32"
+JWT_SECRET="другой_openssl_rand_hex_32"
+NEXT_PUBLIC_MAIL_URL="https://pnkmail.ru"
+NODE_ENV="production"</pre>
+    <p>Секреты: <code>openssl rand -hex 32</code></p>
+
+    <h3>pnk-mail → файл <code>.env.local</code></h3>
+<pre>DATABASE_URL="file:./dev.db"
+NEXT_PUBLIC_PNK_ID_URL="https://id.pnkmail.ru"
+NEXT_PUBLIC_MAIL_URL="https://pnkmail.ru"
+PNK_ID_CLIENT_SECRET="тот_же_секрет_что_в_seed_OAuth_клиента"
+MAIL_FROM_DOMAIN="pnkmail.ru"
+MAIL_TRANSPORT="resend"
+RESEND_API_KEY="re_xxxxxxxx"
+NODE_ENV="production"</pre>
+
+    <h3>Вариант Amazon SES</h3>
+<pre>MAIL_TRANSPORT="ses"
+SES_SMTP_HOST="email-smtp.eu-central-1.amazonaws.com"
+SES_SMTP_PORT="587"
+SES_SMTP_USER="..."
+SES_SMTP_PASS="..."</pre>
+
+    <div class="note">
+      <code>PNK_ID_CLIENT_SECRET</code> в production обязателен. В БД ID секрет клиента хранится как SHA-256
+      (см. <code>prisma/seed.ts</code>). После смены секрета обновите seed / запись OAuthClient.
+    </div>
+
+    <h2 id="dns">5. DNS + доставка (иначе Яндекс не примет)</h2>
+    <div class="card">
+      <table>
+        <tr><th>Тип</th><th>Имя</th><th>Значение</th></tr>
+        <tr><td>A</td><td>@</td><td>IP вашего VPS</td></tr>
+        <tr><td>A</td><td>id</td><td>IP вашего VPS</td></tr>
+        <tr><td>TXT</td><td>@</td><td><code>v=spf1 include:_spf.resend.com ~all</code><br/>или <code>include:amazonses.com</code></td></tr>
+        <tr><td>CNAME/TXT</td><td>из панели Resend/SES</td><td>DKIM (обязательно)</td></tr>
+        <tr><td>TXT</td><td>_dmarc</td><td><code>v=DMARC1; p=quarantine; pct=100; rua=mailto:dmarc@pnkmail.ru</code></td></tr>
+      </table>
+    </div>
+    <ol class="steps">
+      <li class="step">Зарегистрируйте домен <code>pnkmail.ru</code> в Resend или SES.</li>
+      <li class="step">Добавьте DNS-записи → дождитесь статуса Verified.</li>
+      <li class="step">Пропишите ключи в <code>.env.local</code>, перезапустите: <code>pm2 restart pnk-mail</code>.</li>
+      <li class="step">Отправьте тест на свой @yandex.ru.</li>
+    </ol>
+    <p>
+      Без SPF/DKIM/DMARC Яндекс кладёт в спам или отклоняет.
+      Не шлите «голым» Postfix с IP VPS без прогрева — для старта SES/Resend надёжнее.
+    </p>
+
+    <h2 id="oauth">6. OAuth: связать ID и почту</h2>
+    <p>В seed ID клиент <code>pnk-mail</code> должен иметь redirect:</p>
+    <pre>https://pnkmail.ru/api/auth/callback/pnk-id</pre>
+    <p>Локально:</p>
+    <pre>http://localhost:3000/api/auth/callback/pnk-id</pre>
+    <p>
+      URL входа с почты: <code>https://id.pnkmail.ru/login?service=mail</code>
+      (это уже делает код через <code>NEXT_PUBLIC_PNK_ID_URL</code>).
+    </p>
+
+    <h2 id="check">7. Чеклист «работает как обычная почта»</h2>
+    <div class="card">
+      <p><span class="tag tag-ok">✓</span> Регистрация на ID, вход в /mail</p>
+      <p><span class="tag tag-ok">✓</span> Письмо между двумя ящиками @pnkmail.ru видно во «Входящих»</p>
+      <p><span class="tag tag-ok">✓</span> Ответ/новое письмо сохраняется в «Отправленные»</p>
+      <p><span class="tag tag-ok">✓</span> Письмо на @yandex.ru / Gmail приходит (не только в console-лог)</p>
+      <p><span class="tag tag-ok">✓</span> HTTPS на обоих доменах, куки Secure в production</p>
+      <p><span class="tag tag-warn">~</span> Входящие с чужих доменов на ваш MX — отдельная фаза (пока нет)</p>
+    </div>
+
+    <h2 id="troubleshoot">8. Частые проблемы</h2>
+    <div class="card">
+      <table>
+        <tr><th>Симптом</th><th>Что проверить</th></tr>
+        <tr>
+          <td>Письмо на Yandex не приходит</td>
+          <td><code>MAIL_TRANSPORT</code> не console; ключ Resend/SES; DNS Verified; смотреть спам</td>
+        </tr>
+        <tr>
+          <td>После логина ошибка token / redirect</td>
+          <td>redirect_uri в OAuth клиенте = ваш HTTPS callback; совпадает CLIENT_SECRET</td>
+        </tr>
+        <tr>
+          <td>EADDRINUSE :3100 / :3000</td>
+          <td>Уже запущен старый процесс — <code>pm2 ls</code> / убить PID</td>
+        </tr>
+        <tr>
+          <td>Пустой inbox после входа</td>
+          <td><code>npx prisma db push</code> в pnk-mail; cookies сессии; смотреть Network → /api/mail/messages</td>
+        </tr>
+        <tr>
+          <td>JWT / invalid_token</td>
+          <td>Один и тот же JWT_SECRET у ID; не пересоздавали БД без перелогина</td>
+        </tr>
+      </table>
+    </div>
+
+    <h2>Полезные команды</h2>
+<pre>pm2 status
+pm2 logs pnk-mail
+pm2 restart pnk-mail pnk-id
+cd /var/www/pnk-mail && npx prisma studio
+cd /var/www/pnk-id && npx prisma studio</pre>
+
+    <p style="margin-top:36px;color:var(--dim);font-size:13px">
+      Дополнительно в репозитории: <code>docs/deploy-vps.md</code>, <code>docs/mail-dns.md</code>, <code>docs/security.md</code>.
+      Файл инструкции: <code>docs/install.html</code> — откройте в браузере.
+    </p>
+  </div>
+</body>
+</html>

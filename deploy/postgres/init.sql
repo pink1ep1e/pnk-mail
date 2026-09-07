@@ -1,0 +1,2 @@
+CREATE DATABASE pnk_id;
+CREATE DATABASE pnk_mail;

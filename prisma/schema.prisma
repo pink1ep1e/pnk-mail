@@ -1,0 +1,72 @@
+// pnk-mail — mailbox store (PostgreSQL in production / Docker)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Mailbox {
+  id          String       @id @default(cuid())
+  ownerUserId String
+  address     String       @unique
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  messages    Message[]
+  folders     MailFolder[]
+  labels      MailLabel[]
+
+  @@index([ownerUserId])
+}
+
+model Message {
+  id            String    @id @default(cuid())
+  mailboxId     String
+  mailbox       Mailbox   @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
+  folder        String
+  fromName      String
+  fromEmail     String
+  toAddresses   String
+  ccAddresses   String    @default("")
+  subject       String
+  preview       String
+  bodyHtml      String    @default("")
+  bodyText      String    @default("")
+  unread        Boolean   @default(true)
+  hasAttachment Boolean   @default(false)
+  /// JSON array of MailLabel ids
+  labelIds      String    @default("[]")
+  remindAt      DateTime?
+  threadId      String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([mailboxId, folder, createdAt])
+  @@index([mailboxId, unread])
+}
+
+model MailFolder {
+  id        String   @id @default(cuid())
+  mailboxId String
+  mailbox   Mailbox  @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
+  name      String
+  createdAt DateTime @default(now())
+
+  @@unique([mailboxId, name])
+  @@index([mailboxId])
+}
+
+model MailLabel {
+  id        String   @id @default(cuid())
+  mailboxId String
+  mailbox   Mailbox  @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
+  name      String
+  color     String   @default("#4d9fff")
+  createdAt DateTime @default(now())
+
+  @@unique([mailboxId, name])
+  @@index([mailboxId])
+}

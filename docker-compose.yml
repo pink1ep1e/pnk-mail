@@ -1,0 +1,79 @@
+# pnk stack: PostgreSQL + pnk-id + pnk-mail
+# Expects sibling checkout: ../pnk-id and this repo (pnk-mail)
+#
+#   cp deploy/.env.example .env   # or edit below
+#   docker compose up -d --build
+
+name: pnk
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-pnk}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: postgres
+    volumes:
+      - pnk_pg_data:/var/lib/postgresql/data
+      - ./deploy/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pnk}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  pnk-id:
+    build:
+      context: ../pnk-id
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-pnk}:${POSTGRES_PASSWORD}@postgres:5432/pnk_id?schema=public
+      APP_URL: ${APP_URL:-https://id.pnkmail.ru}
+      COOKIE_NAME: pnk_id_session
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET}
+      NEXT_PUBLIC_MAIL_URL: ${NEXT_PUBLIC_MAIL_URL:-https://pnkmail.ru}
+      PNK_ID_CLIENT_SECRET: ${PNK_ID_CLIENT_SECRET:?set PNK_ID_CLIENT_SECRET}
+      SEED_DEMO_PASSWORD: ${SEED_DEMO_PASSWORD:-}
+      PORT: "3100"
+    ports:
+      - "${ID_PORT:-3100}:3100"
+
+  pnk-mail:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      pnk-id:
+        condition: service_started
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-pnk}:${POSTGRES_PASSWORD}@postgres:5432/pnk_mail?schema=public
+      NEXT_PUBLIC_PNK_ID_URL: ${NEXT_PUBLIC_PNK_ID_URL:-https://id.pnkmail.ru}
+      NEXT_PUBLIC_MAIL_URL: ${NEXT_PUBLIC_MAIL_URL:-https://pnkmail.ru}
+      PNK_ID_CLIENT_SECRET: ${PNK_ID_CLIENT_SECRET:?set PNK_ID_CLIENT_SECRET}
+      MAIL_VAULT_SECRET: ${MAIL_VAULT_SECRET:?set MAIL_VAULT_SECRET}
+      MAIL_TRANSPORT: ${MAIL_TRANSPORT:-console}
+      MAIL_FROM_DOMAIN: ${MAIL_FROM_DOMAIN:-pnkmail.ru}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      SES_SMTP_HOST: ${SES_SMTP_HOST:-}
+      SES_SMTP_PORT: ${SES_SMTP_PORT:-587}
+      SES_SMTP_USER: ${SES_SMTP_USER:-}
+      SES_SMTP_PASS: ${SES_SMTP_PASS:-}
+      PORT: "3000"
+    ports:
+      - "${MAIL_PORT:-3000}:3000"
+
+volumes:
+  pnk_pg_data:

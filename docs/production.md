@@ -1,0 +1,208 @@
+# Production install — pnk-id + pnk-mail + PostgreSQL
+
+Один PostgreSQL, две БД: `pnk_id` и `pnk_mail`. Сервисы в Docker, снаружи — Nginx + HTTPS.
+
+## Что куда
+
+| Что | Где |
+|-----|-----|
+| Репозиторий **pnk-id** | `/opt/pnk/pnk-id` (или рядом с mail) |
+| Репозиторий **pnk-mail** | `/opt/pnk/pnk-mail` |
+| Compose | `pnk-mail/docker-compose.yml` (собирает оба, поднимает Postgres) |
+| Секреты | `pnk-mail/.env` (из `deploy/.env.example`) |
+| Init SQL | `pnk-mail/deploy/postgres/init.sql` → создаёт `pnk_id`, `pnk_mail` |
+| Домен ID | `id.pnkmail.ru` → контейнер `:3100` |
+| Домен почты | `pnkmail.ru` → контейнер `:3000` |
+| Данные Postgres | Docker volume `pnk_pg_data` |
+
+Структура на сервере:
+
+```text
+/opt/pnk/
+  pnk-id/          # git clone
+  pnk-mail/        # git clone + .env + docker compose
+```
+
+## 1. VPS
+
+```bash
+sudo apt update
+sudo apt install -y git docker.io docker-compose-v2 nginx certbot python3-certbot-nginx
+sudo usermod -aG docker $USER   # re-login
+```
+
+## 2. Клонирование
+
+```bash
+sudo mkdir -p /opt/pnk && sudo chown $USER:$USER /opt/pnk
+cd /opt/pnk
+git clone <URL-pnk-id> pnk-id
+git clone <URL-pnk-mail> pnk-mail
+```
+
+## 3. Секреты
+
+```bash
+cd /opt/pnk/pnk-mail
+cp deploy/.env.example .env
+nano .env
+```
+
+Обязательно смените:
+
+- `POSTGRES_PASSWORD`
+- `JWT_SECRET` / `SESSION_SECRET` / `PNK_ID_CLIENT_SECRET` / `MAIL_VAULT_SECRET`  
+  (`openssl rand -hex 32`)
+- `APP_URL`, `NEXT_PUBLIC_PNK_ID_URL`, `NEXT_PUBLIC_MAIL_URL` — ваши HTTPS URL
+
+`PNK_ID_CLIENT_SECRET` один и тот же в compose для id (seed) и mail (OAuth).
+
+## 4. Запуск
+
+```bash
+cd /opt/pnk/pnk-mail
+docker compose up -d --build
+docker compose ps
+docker compose logs -f pnk-id pnk-mail
+```
+
+При старте:
+
+1. Postgres поднимается, init создаёт `pnk_id` + `pnk_mail`
+2. **pnk-id**: `prisma db push` + seed OAuth-клиента `pnk-mail`
+3. **pnk-mail**: `prisma db push`
+
+Проверка:
+
+```bash
+curl -sI http://127.0.0.1:3100 | head -1
+curl -sI http://127.0.0.1:3000 | head -1
+```
+
+## 5. Nginx + HTTPS
+
+`/etc/nginx/sites-available/pnk`:
+
+```nginx
+server {
+  server_name id.pnkmail.ru;
+  location / {
+    proxy_pass http://127.0.0.1:3100;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+}
+
+server {
+  server_name pnkmail.ru www.pnkmail.ru;
+  location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+}
+```
+
+```bash
+sudo ln -s /etc/nginx/sites-available/pnk /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+sudo certbot --nginx -d id.pnkmail.ru -d pnkmail.ru -d www.pnkmail.ru
+```
+
+После смены доменов пересоберите seed (redirect URI):
+
+```bash
+cd /opt/pnk/pnk-mail
+docker compose exec pnk-id npx tsx prisma/seed.ts
+docker compose up -d --build
+```
+
+## 6. DNS и исходящая почта
+
+См. [mail-dns.md](./mail-dns.md). В `.env`:
+
+```env
+MAIL_TRANSPORT=resend   # или ses
+RESEND_API_KEY=re_...
+```
+
+Без SPF/DKIM/DMARC внешняя доставка почти всегда в спам.
+
+## 7. Локальная разработка (Postgres в Docker)
+
+```bash
+# только БД
+cd pnk-mail
+docker compose up -d postgres
+# в .env обоих проектов:
+# DATABASE_URL=postgresql://pnk:ВАШ_ПАРОЛЬ@localhost:5432/pnk_id?schema=public
+# DATABASE_URL=postgresql://pnk:ВАШ_ПАРОЛЬ@localhost:5432/pnk_mail?schema=public
+
+cd ../pnk-id && cp .env.example .env && npx prisma db push && npm run db:seed && npm run dev
+cd ../pnk-mail && cp .env.example .env.local && npx prisma db push && npm run dev
+```
+
+## 8. Тесты безопасности
+
+```bash
+cd pnk-id && npm i && npm test
+cd pnk-mail && npm i && npm test
+```
+
+Покрывают: rate-limit, open-redirect, HMAC vault, Origin CSRF, XSS sanitizer.
+
+## 9. Git — залить изменения
+
+В каждом репозитории (секреты и `.env` не коммитить):
+
+```bash
+# --- pnk-id ---
+cd /path/to/pnk-id
+git status
+git add -A
+git status   # убедись, что нет .env / *.db
+git commit -m "$(cat <<'EOF'
+Prepare production: PostgreSQL, Docker, rate limits, security tests.
+
+EOF
+)"
+git push -u origin HEAD
+
+# --- pnk-mail ---
+cd /path/to/pnk-mail
+git status
+git add -A
+git status
+git commit -m "$(cat <<'EOF'
+Prepare production: PostgreSQL, Docker Compose, OAuth state, vault HMAC, tests.
+
+EOF
+)"
+git push -u origin HEAD
+```
+
+Если remote ещё нет:
+
+```bash
+git remote add origin git@github.com:ORG/pnk-id.git
+git push -u origin main
+```
+
+## 10. Бэкапы Postgres
+
+```bash
+docker compose exec -T postgres pg_dump -U pnk pnk_id > backup-id-$(date +%F).sql
+docker compose exec -T postgres pg_dump -U pnk pnk_mail > backup-mail-$(date +%F).sql
+```
+
+## Чеклист после деплоя
+
+1. Регистрация на `id.…` → вход в почту через `/api/auth/start`
+2. Письмо `@pnkmail.ru` → `@pnkmail.ru`
+3. Внешнее письмо при `MAIL_TRANSPORT=resend|ses`
+4. `npm test` зелёный в CI/локально
+5. В БД ID клиент `pnk-mail` с redirect `https://pnkmail.ru/api/auth/callback/pnk-id`

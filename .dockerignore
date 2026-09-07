@@ -1,0 +1,17 @@
+.node_modules
+.next
+.git
+.gitignore
+*.md
+.env
+.env.*
+!.env.example
+Dockerfile*
+docker-compose*
+deploy
+docs
+coverage
+**/*.test.ts
+**/*.spec.ts
+prisma/*.db
+prisma/**/*.db

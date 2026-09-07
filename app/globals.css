@@ -1,26 +1,138 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #0a1a3a;
+  --foreground: #ffffff;
+  --card: #1a1c22;
+  --card-foreground: #ffffff;
+  --popover: #1a1c22;
+  --popover-foreground: #ffffff;
+  --primary: #0066ff;
+  --primary-foreground: #ffffff;
+  --secondary: #24262e;
+  --secondary-foreground: #4d9fff;
+  --muted: #24262e;
+  --muted-foreground: #8b8f9a;
+  --accent: #24262e;
+  --accent-foreground: #ffffff;
+  --destructive: #ef4444;
+  --destructive-foreground: #fafafa;
+  --border: transparent;
+  --input: #0f1115;
+  --ring: #0066ff;
+  --radius: 16px;
+
+  --blue-400: #4d9fff;
+  --blue-500: #0066ff;
+  --blue-600: #0052cc;
+  --blue-800: #003399;
+  --blue-900: #0a1a3a;
+  --surface: #0c0d10;
+  --surface-elevated: #1a1c22;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-blue-400: var(--blue-400);
+  --color-blue-500: var(--blue-500);
+  --color-blue-600: var(--blue-600);
+  --color-blue-800: var(--blue-800);
+  --color-blue-900: var(--blue-900);
+  --color-surface: var(--surface);
+  --color-surface-elevated: var(--surface-elevated);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --font-unbounded: var(--font-unbounded);
+  --font-manrope: var(--font-manrope);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+::-webkit-scrollbar {
+  display: none;
+}
+
+html {
+  scrollbar-width: none;
+  scroll-behavior: smooth;
+  color-scheme: dark;
+  overflow-x: hidden;
+  overscroll-behavior: none;
+  width: 100%;
+  height: 100%;
 }
 
 body {
+  -ms-overflow-style: none;
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-manrope), system-ui, sans-serif;
+  overflow-x: hidden;
+  overscroll-behavior: none;
+  width: 100%;
+  min-height: 100%;
+  min-height: 100dvh;
+  position: relative;
+  touch-action: pan-y;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mail-scroll {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+
+* {
+  border-color: var(--border);
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.5s ease-in-out forwards;
+}
+
+.fade-in-up {
+  animation: fadeInUp 0.5s ease-out forwards;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
