@@ -84,7 +84,11 @@ MAIL_VAULT_SECRET="сгенерируй_openssl_rand_hex_32"
 
 MAIL_TRANSPORT="console"
 MAIL_FROM_DOMAIN="pnkmail.ru"
-# позже: MAIL_TRANSPORT=resend + RESEND_API_KEY=re_...
+# для внешней доставки + входящих (Яндекс/Gmail):
+# MAIL_TRANSPORT=resend
+# RESEND_API_KEY=re_...
+# MAIL_INBOUND_SECRET=...   # webhook https://pnkmail.ru/api/mail/inbound
+# DNS MX/SPF/DKIM: docs/mail-dns.md
 ```
 
 Если уже заполнил `.env.local` — скопируй в `.env`:
