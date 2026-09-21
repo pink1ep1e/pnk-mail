@@ -23,6 +23,7 @@ ARG PNK_ID_CLIENT_SECRET=build-time-placeholder
 ARG MAIL_VAULT_SECRET=build-time-placeholder-min-32-characters!!
 ENV PNK_ID_CLIENT_SECRET=$PNK_ID_CLIENT_SECRET
 ENV MAIL_VAULT_SECRET=$MAIL_VAULT_SECRET
+ENV DOCKER=1
 RUN npx prisma generate && npx next build \
   && rm -rf /app/.next/cache
 

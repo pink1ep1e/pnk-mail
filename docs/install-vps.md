@@ -212,7 +212,21 @@ pm2 restart pnk-mail
 | `Unsupported engine` / Prisma `Unexpected token '?'` | Node слишком старый → поставь Node 20 (nodesource) |
 | `database "pnk_mail" does not exist` | Шаг 1 — создать БД |
 | OAuth / invalid client | Один `PNK_ID_CLIENT_SECRET` + `npm run db:seed` в ID |
+| После логина кабинет ID / в логах `standalone` + Server Action | Пересобери без Docker: `git pull && npm run build && pm2 restart` (см. ниже) |
 | `ERR_NAME_NOT_RESOLVED` | A-запись `pnkmail.ru` / `id` у регистратора |
 | Порт занят | `ss -tlnp \| grep 3000`, `pm2 ls` |
+
+Если в логах `next start does not work with output: standalone`:
+
+```bash
+cd ~/pnk-id && git pull && set -a && source .env && set +a
+npm run db:seed && npm run build && pm2 restart pnk-id
+
+cd ~/pnk-mail && git pull && set -a && source .env && set +a
+npm run build && pm2 restart pnk-mail
+```
+
+Исходящая почта (Resend/SES + SPF/DKIM): [mail-dns.md](./mail-dns.md).
+
 
 Исходящая почта (Resend/SES + SPF/DKIM): [mail-dns.md](./mail-dns.md).
