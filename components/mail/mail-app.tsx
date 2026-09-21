@@ -205,7 +205,7 @@ function MailBodyFrame({ html }: { html: string }) {
       const doc = iframe.contentDocument;
       if (!doc?.documentElement) return;
       const h = Math.max(
-        120,
+        48,
         doc.documentElement.scrollHeight,
         doc.body?.scrollHeight || 0,
       );
@@ -230,7 +230,7 @@ function MailBodyFrame({ html }: { html: string }) {
       sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
       srcDoc={srcDoc}
       className="w-full border-0 block bg-[#0c0d10] rounded-[12px]"
-      style={{ minHeight: 120 }}
+      style={{ minHeight: 48 }}
     />
   );
 }
@@ -656,9 +656,14 @@ export default function MailApp() {
 
   const targetIds = useMemo(() => {
     if (selected.size > 0) return [...selected];
-    if (openId) return [openId];
+    if (openId) {
+      if (thread.length > 1) {
+        return [...new Set(thread.map((m) => m.id))];
+      }
+      return [openId];
+    }
     return [] as string[];
-  }, [selected, openId]);
+  }, [selected, openId, thread]);
   const hasTargets = targetIds.length > 0;
   const allSelected =
     visible.length > 0 && visible.every((m) => selected.has(m.id));
@@ -1681,8 +1686,9 @@ export default function MailApp() {
         {/* Main — Yandex-style list pane */}
         <main className="flex-1 min-w-0 flex flex-col p-0">
           <div className="flex-1 min-h-0 bg-[#1a1c22] md:rounded-[20px] flex flex-col overflow-hidden">
-            {/* Toolbar */}
-            <div className="relative flex items-center gap-0.5 px-2 md:px-3 py-1.5 overflow-x-auto no-scrollbar">
+            {/* Toolbar — menus outside overflow-x so dropdowns aren't clipped */}
+            <div className="relative shrink-0">
+              <div className="flex items-center gap-0.5 px-2 md:px-3 py-1.5 overflow-x-auto no-scrollbar">
               <div className="h-9 w-9 flex items-center justify-center shrink-0">
                 <Checkbox
                   checked={allSelected && visible.length > 0}
@@ -1752,9 +1758,10 @@ export default function MailApp() {
                   onClick={() => moveSelected("restore")}
                 />
               ) : null}
+              </div>
 
               {toolbarMenu === "folder" && hasTargets && (
-                <div className="absolute left-24 top-11 z-40 min-w-[200px] rounded-[14px] bg-[#1a1c22] shadow-xl overflow-hidden py-1 border border-white/10">
+                <div className="absolute left-2 md:left-28 top-full mt-1 z-50 min-w-[220px] max-h-[280px] overflow-y-auto rounded-[14px] bg-[#1a1c22] shadow-xl py-1 border border-white/10">
                   {[
                     { id: "inbox", name: "Входящие" },
                     { id: "archive", name: "Архив" },
@@ -1766,21 +1773,29 @@ export default function MailApp() {
                       key={f.id}
                       type="button"
                       onClick={() => moveToFolder(f.id)}
-                      className="w-full px-3 py-2 text-left text-[13px] text-white/75 hover:bg-white/5"
+                      className="w-full px-3 py-2 text-left text-[13px] text-white/75 hover:bg-white/5 font-[family-name:var(--font-manrope)]"
                     >
                       {f.name}
                     </button>
                   ))}
+                  <div className="my-1 border-t border-white/8" />
+                  <button
+                    type="button"
+                    onClick={() => openNameModal("folder")}
+                    className="w-full px-3 py-2 text-left text-[13px] text-white/55 hover:bg-white/5 font-[family-name:var(--font-manrope)]"
+                  >
+                    Создать папку…
+                  </button>
                 </div>
               )}
 
               {toolbarMenu === "label" && hasTargets && (
-                <div className="absolute left-48 top-11 z-40 min-w-[200px] rounded-[14px] bg-[#1a1c22] shadow-xl overflow-hidden py-1 border border-white/10">
+                <div className="absolute left-2 md:left-52 top-full mt-1 z-50 min-w-[220px] max-h-[280px] overflow-y-auto rounded-[14px] bg-[#1a1c22] shadow-xl py-1 border border-white/10">
                   {mailLabels.length === 0 ? (
                     <button
                       type="button"
                       onClick={() => openNameModal("label")}
-                      className="w-full px-3 py-2 text-left text-[13px] text-white/55 hover:bg-white/5"
+                      className="w-full px-3 py-2 text-left text-[13px] text-white/55 hover:bg-white/5 font-[family-name:var(--font-manrope)]"
                     >
                       Создать метку…
                     </button>
@@ -1791,7 +1806,7 @@ export default function MailApp() {
                           key={l.id}
                           type="button"
                           onClick={() => applyLabel(l.id)}
-                          className="w-full px-3 py-2 text-left text-[13px] text-white/75 hover:bg-white/5 inline-flex items-center gap-2"
+                          className="w-full px-3 py-2 text-left text-[13px] text-white/75 hover:bg-white/5 inline-flex items-center gap-2 font-[family-name:var(--font-manrope)]"
                         >
                           <span
                             className="h-2.5 w-2.5 rounded-full"
@@ -1800,10 +1815,11 @@ export default function MailApp() {
                           {l.name}
                         </button>
                       ))}
+                      <div className="my-1 border-t border-white/8" />
                       <button
                         type="button"
                         onClick={() => openNameModal("label")}
-                        className="w-full px-3 py-2 text-left text-[13px] text-white/45 hover:bg-white/5 border-t border-white/8"
+                        className="w-full px-3 py-2 text-left text-[13px] text-white/55 hover:bg-white/5 font-[family-name:var(--font-manrope)]"
                       >
                         Создать метку…
                       </button>
@@ -2142,8 +2158,8 @@ export default function MailApp() {
 
                                       <div
                                         className={cn(
-                                          "mt-4 relative",
-                                          !isLast && "pb-5",
+                                          "mt-2.5 relative",
+                                          !isLast && "pb-4",
                                         )}
                                       >
                                         {detailLoading && isLast && (

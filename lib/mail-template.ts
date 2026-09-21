@@ -33,13 +33,13 @@ const READER_BASE_CSS = `
     margin: 0;
     padding: 0;
     background: #0c0d10 !important;
-    color: rgba(255,255,255,0.88);
+    color: rgba(255,255,255,0.90);
     font-family: Manrope, "Segoe UI", Helvetica, Arial, sans-serif;
     font-size: 15px;
-    line-height: 1.65;
+    line-height: 1.55;
     -webkit-font-smoothing: antialiased;
   }
-  body { padding: 4px 2px 20px; }
+  body { padding: 0 2px 8px; }
   a {
     color: #4d9fff !important;
     text-decoration: underline !important;
@@ -53,14 +53,38 @@ const READER_BASE_CSS = `
     cursor: default !important;
   }
   img, video { max-width: 100%; height: auto; }
-  p { margin: 0 0 0.85em; }
+  p { margin: 0 0 0.55em; }
+  p:last-child { margin-bottom: 0; }
   h1, h2, h3, h4 { color: #fff; line-height: 1.25; }
   ul, ol { padding-left: 1.25em; }
-  blockquote {
-    margin: 0.75em 0;
-    padding: 0.35em 0 0.35em 0.9em;
-    border-left: 3px solid rgba(255,255,255,0.18);
-    color: rgba(255,255,255,0.65);
+  blockquote,
+  .gmail_quote,
+  .gmail_quote blockquote,
+  .yahoo_quoted,
+  .protonmail_quote,
+  [class*="gmail_quote"] {
+    margin: 0.55em 0 0 !important;
+    padding: 0.2em 0 0.2em 0.85em !important;
+    border-left: 3px solid rgba(255,255,255,0.22) !important;
+    color: rgba(255,255,255,0.72) !important;
+  }
+  blockquote *,
+  .gmail_quote *,
+  .yahoo_quoted *,
+  .protonmail_quote *,
+  [class*="gmail_quote"] * {
+    color: rgba(255,255,255,0.72) !important;
+  }
+  .gmail_attr,
+  .gmail_attr * {
+    color: rgba(255,255,255,0.48) !important;
+    margin-bottom: 0.35em !important;
+  }
+  /* Collapse Gmail's empty spacer lines at the top of replies */
+  body > br:first-child,
+  body > div:empty:first-child,
+  body > p:empty:first-child {
+    display: none !important;
   }
   table { border-collapse: collapse; max-width: 100%; }
   pre, code {
@@ -74,6 +98,80 @@ const READER_BASE_CSS = `
     background: #1a1c22;
   }
 `;
+
+/** True if a CSS color is too dark for our dark reader canvas. */
+function isDarkCssColor(raw: string): boolean {
+  const c = raw.trim().toLowerCase();
+  if (!c || c === "transparent" || c === "inherit" || c === "currentcolor") {
+    return false;
+  }
+  if (
+    /^(black|#000|#000000|rgb\(\s*0\s*,\s*0\s*,\s*0\s*\)|#111|#111111|#222|#222222|#333|#333333|#444|#444444|#555|#555555)$/i.test(
+      c,
+    )
+  ) {
+    return true;
+  }
+  const hex = c.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (hex) {
+    let h = hex[1];
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    const r = parseInt(h.slice(0, 2), 16);
+    const g = parseInt(h.slice(2, 4), 16);
+    const b = parseInt(h.slice(4, 6), 16);
+    // relative luminance
+    return (0.2126 * r + 0.7152 * g + 0.0722 * b) < 90;
+  }
+  const rgb = c.match(
+    /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*[\d.]+)?\s*\)$/i,
+  );
+  if (rgb) {
+    const r = Number(rgb[1]);
+    const g = Number(rgb[2]);
+    const b = Number(rgb[3]);
+    return (0.2126 * r + 0.7152 * g + 0.0722 * b) < 90;
+  }
+  return /^(gray|grey|dimgray|dimgrey|darkgray|darkgrey|maroon|navy|purple|teal|olive|green|blue)$/i.test(
+    c,
+  );
+}
+
+/** Rewrite dark inline/font colors so quotes stay readable on dark canvas. */
+function lightenDarkTextColors(html: string): string {
+  let out = html.replace(/\bstyle\s*=\s*(["'])(.*?)\1/gi, (_m, q: string, style: string) => {
+    const next = style.replace(/(^|;)\s*color\s*:\s*([^;]+)/gi, (seg, pre: string, color: string) => {
+      if (isDarkCssColor(color)) {
+        return `${pre}color: rgba(255,255,255,0.78)`;
+      }
+      return seg;
+    });
+    return `style=${q}${next}${q}`;
+  });
+  out = out.replace(
+    /<font\b([^>]*?)\bcolor\s*=\s*(["']?)([^"'>\s]+)\2([^>]*)>/gi,
+    (_m, pre: string, _q: string, color: string, post: string) => {
+      if (isDarkCssColor(color)) {
+        return `<font${pre}color="#c8cdd6"${post}>`;
+      }
+      return `<font${pre}color="${color}"${post}>`;
+    },
+  );
+  return out;
+}
+
+/** Drop leading empty paragraphs / brs that push reply text down. */
+function trimLeadingEmptyMarkup(html: string): string {
+  let s = html.trim();
+  for (let i = 0; i < 12; i++) {
+    const next = s
+      .replace(/^(?:\s|&nbsp;|<br\s*\/?>)+/i, "")
+      .replace(/^<(p|div)(?:\s[^>]*)?>\s*(?:<br\s*\/?>|\s|&nbsp;)*<\/\1>/i, "")
+      .trim();
+    if (next === s) break;
+    s = next;
+  }
+  return s || html;
+}
 
 const URL_IN_TEXT_RE =
   /\b((?:https?:\/\/|www\.)[^\s<>"'`]+[^\s<>"'`.,;:!?\])}])/gi;
@@ -141,7 +239,16 @@ export function prepareMailReaderSrcDoc(html: string): string {
   const cleaned = isFullHtmlDocument(raw)
     ? sanitizeMailHtml(raw, true)
     : sanitizeMailHtml(raw, false);
-  const safe = ensureClickableLinks(linkifyBareUrls(cleaned));
+  const trimmed = isFullHtmlDocument(cleaned)
+    ? cleaned.replace(
+        /<body([^>]*)>([\s\S]*?)<\/body>/i,
+        (_m, attrs: string, body: string) =>
+          `<body${attrs}>${trimLeadingEmptyMarkup(body)}</body>`,
+      )
+    : trimLeadingEmptyMarkup(cleaned);
+  const safe = lightenDarkTextColors(
+    ensureClickableLinks(linkifyBareUrls(trimmed)),
+  );
 
   if (isFullHtmlDocument(safe)) {
     if (/<head[\s>]/i.test(safe)) {
