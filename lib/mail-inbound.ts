@@ -296,3 +296,46 @@ export async function deliverResendEmailById(
 
   return { emailId, from: from.email, to, ...result };
 }
+
+let lastAutoSyncAt = 0;
+let autoSyncInFlight: Promise<number> | null = null;
+
+/**
+ * Pull recent Resend Receiving mail into local DB.
+ * Throttled — safe to call on every inbox refresh (webhook fallback).
+ */
+export async function maybeSyncResendInbound(opts?: {
+  limit?: number;
+  minIntervalMs?: number;
+}): Promise<number> {
+  const key = process.env.RESEND_API_KEY?.trim();
+  if (!key) return 0;
+
+  const minInterval = opts?.minIntervalMs ?? 45_000;
+  const now = Date.now();
+  if (now - lastAutoSyncAt < minInterval) return 0;
+  if (autoSyncInFlight) return autoSyncInFlight;
+
+  autoSyncInFlight = (async () => {
+    lastAutoSyncAt = Date.now();
+    let delivered = 0;
+    try {
+      const list = await listResendReceivedEmails(opts?.limit ?? 15);
+      for (const item of list) {
+        if (!item?.id) continue;
+        const r = await deliverResendEmailById(item.id, item);
+        delivered += r.delivered.length;
+      }
+      if (delivered > 0) {
+        console.info("[inbound/auto-sync] delivered", delivered);
+      }
+    } catch (e) {
+      console.error("[inbound/auto-sync] failed", e);
+    } finally {
+      autoSyncInFlight = null;
+    }
+    return delivered;
+  })();
+
+  return autoSyncInFlight;
+}

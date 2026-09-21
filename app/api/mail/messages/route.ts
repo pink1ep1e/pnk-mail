@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireActiveMailbox } from "@/lib/mail-auth";
 import type { FolderId } from "@/lib/mail-data";
+import { maybeSyncResendInbound } from "@/lib/mail-inbound";
 import { toListDto } from "@/lib/mail-store";
 
 export async function GET(req: NextRequest) {
@@ -16,6 +17,15 @@ export async function GET(req: NextRequest) {
   const folder = (req.nextUrl.searchParams.get("folder") || "inbox") as FolderId;
   const q = (req.nextUrl.searchParams.get("q") || "").trim().toLowerCase();
   const labelId = (req.nextUrl.searchParams.get("label") || "").trim();
+
+  // Fallback when Resend webhook is missing/misconfigured: pull on inbox open
+  if (folder === "inbox" || folder === "all") {
+    try {
+      await maybeSyncResendInbound({ limit: 12, minIntervalMs: 45_000 });
+    } catch {
+      /* ignore — list still works */
+    }
+  }
 
   const whereBase = { mailboxId: auth.ctx.mailboxId };
 
