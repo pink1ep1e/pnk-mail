@@ -194,3 +194,105 @@ export async function fetchResendReceivedEmail(emailId: string): Promise<{
     attachments?: unknown[];
   };
 }
+
+export type ResendReceivedMeta = {
+  id: string;
+  from?: string;
+  to?: string[];
+  cc?: string[];
+  received_for?: string[];
+  subject?: string;
+  message_id?: string | null;
+  attachments?: unknown[];
+};
+
+/** List recent received emails from Resend. */
+export async function listResendReceivedEmails(
+  limit = 20,
+): Promise<ResendReceivedMeta[]> {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) return [];
+  const res = await fetch(
+    `https://api.resend.com/emails/receiving?limit=${Math.min(100, Math.max(1, limit))}`,
+    {
+      headers: { Authorization: `Bearer ${key}` },
+      cache: "no-store",
+    },
+  );
+  if (!res.ok) {
+    console.error(
+      "[inbound] list receiving failed",
+      res.status,
+      await res.text(),
+    );
+    return [];
+  }
+  const json = (await res.json()) as { data?: ResendReceivedMeta[] };
+  return Array.isArray(json.data) ? json.data : [];
+}
+
+/** Fetch + deliver one Resend received email into local mailboxes. */
+export async function deliverResendEmailById(
+  emailId: string,
+  meta?: ResendReceivedMeta,
+): Promise<InboundResult & { emailId: string; from?: string; to?: string[] }> {
+  const full = await fetchResendReceivedEmail(emailId);
+  const from = parseInboundFrom(
+    full?.from ||
+      (full?.headers && typeof full.headers.from === "string"
+        ? full.headers.from
+        : "") ||
+      meta?.from ||
+      "",
+  );
+  const to = normalizeInboundAddresses([
+    ...(full?.to?.length ? full.to : []),
+    ...(full?.received_for?.length ? full.received_for : []),
+    ...(meta?.to?.length ? meta.to : []),
+    ...(meta?.received_for?.length ? meta.received_for : []),
+  ]);
+  const cc = normalizeInboundAddresses(
+    full?.cc?.length ? full.cc : meta?.cc || [],
+  );
+
+  if (!from.email || !to.length) {
+    console.warn("[inbound] deliverById missing from/to", {
+      emailId,
+      from: from.email,
+      to,
+      fullTo: full?.to,
+      fullReceivedFor: full?.received_for,
+      metaTo: meta?.to,
+    });
+    return {
+      emailId,
+      from: from.email,
+      to,
+      delivered: [],
+      skipped: [],
+      unknown: to,
+    };
+  }
+
+  const result = await deliverInbound({
+    fromName: from.name,
+    fromEmail: from.email,
+    to,
+    cc,
+    subject: full?.subject || meta?.subject || "(без темы)",
+    bodyHtml: full?.html || undefined,
+    bodyText:
+      full?.text ||
+      (!full?.html
+        ? `(письмо из Resend)\nОт: ${from.email}\nТема: ${full?.subject || meta?.subject || ""}`
+        : undefined),
+    messageId: full?.message_id || meta?.message_id || `resend:${emailId}`,
+    hasAttachment: Array.isArray(full?.attachments)
+      ? full!.attachments!.length > 0
+      : Array.isArray(meta?.attachments)
+        ? meta!.attachments!.length > 0
+        : false,
+  });
+
+  return { emailId, from: from.email, to, ...result };
+}
