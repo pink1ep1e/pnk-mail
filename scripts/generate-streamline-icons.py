@@ -76,10 +76,10 @@ MAP: dict[str, str | None] = {
     "ImageIconIcon": "flex/solid/images-photography/landscape-2.svg",
     "Link2Icon": "flex/solid/interface-essential/link-chain.svg",
     "UnlinkIcon": "flex/solid/interface-essential/broken-link-1.svg",
-    "BoldIcon": "flex/solid/interface-essential/text-style.svg",
-    "ItalicIcon": "flex/solid/interface-essential/text-style.svg",
-    "UnderlineIcon": "flex/solid/interface-essential/text-style.svg",
-    "StrikethroughIcon": "flex/solid/interface-essential/text-style.svg",
+    "BoldIcon": None,
+    "ItalicIcon": None,
+    "UnderlineIcon": None,
+    "StrikethroughIcon": None,
     "AlignLeftIcon": "flex/solid/interface-essential/insert-center-left-1.svg",
     "AlignCenterIcon": "flex/solid/interface-essential/align-text-top.svg",
     "AlignRightIcon": "flex/solid/interface-essential/align-top-1.svg",
@@ -90,8 +90,8 @@ MAP: dict[str, str | None] = {
     "EraserIcon": "flex/solid/interface-essential/clean-broom-wipe.svg",
     "HighlighterIcon": "flex/solid/interface-essential/color-picker.svg",
     "BrushIcon": "flex/solid/interface-essential/paintbrush-2.svg",
-    "Undo2Icon": "flex/solid/interface-essential/rotate-left.svg",
-    "Redo2Icon": "flex/solid/interface-essential/rotate-right-circle.svg",
+    "Undo2Icon": None,
+    "Redo2Icon": None,
     "Maximize2Icon": "flex/solid/interface-essential/maximize-2.svg",
     "Minimize2Icon": "flex/solid/interface-essential/zoom-out.svg",
     "Wand2Icon": "flex/solid/interface-essential/magic-wand-2.svg",
@@ -138,6 +138,24 @@ FALLBACKS: dict[str, list[dict]] = {
     ],
     "KeyRoundIcon": [
         {"d": "M8.5 1.25a4.25 4.25 0 0 0-3.9 5.95L1.47 10.33a.75.75 0 0 0 0 1.06l1.14 1.14a.75.75 0 0 0 1.06 0l.47-.47.53.53a.75.75 0 0 0 1.06 0l1.5-1.5.01-.01 1.12-1.12A4.25 4.25 0 1 0 8.5 1.25Zm0 2.5a1.75 1.75 0 1 0 0 3.5 1.75 1.75 0 0 0 0-3.5Z", "fillRule": "evenodd"},
+    ],
+    "BoldIcon": [
+        {"d": "M3.5 1.75h4.05c1.85 0 3.2 1.15 3.2 2.85 0 1.15-.7 2.05-1.75 2.45 1.35.35 2.3 1.4 2.3 2.9 0 1.85-1.5 3.15-3.7 3.15H3.5V1.75Zm1.7 1.5v2.85h2.25c.95 0 1.5-.55 1.5-1.4s-.55-1.45-1.55-1.45H5.2Zm0 4.35v3.4h2.55c1.15 0 1.85-.65 1.85-1.7s-.7-1.7-1.9-1.7H5.2Z", "fillRule": "evenodd"},
+    ],
+    "ItalicIcon": [
+        {"d": "M8.35 1.75h3.4v1.5H10.2L7.15 10.75h1.95v1.5H3.25v-1.5h1.9L8.2 3.25H6.35v-1.5h2Z", "fillRule": "evenodd"},
+    ],
+    "UnderlineIcon": [
+        {"d": "M3.75 1.75h1.6v5.6c0 1.55 1.05 2.6 2.65 2.6s2.65-1.05 2.65-2.6v-5.6h1.6v5.6c0 2.4-1.75 4.1-4.25 4.1S3.75 9.75 3.75 7.35v-5.6ZM3.25 12.1h7.5v1.5h-7.5V12.1Z", "fillRule": "evenodd"},
+    ],
+    "StrikethroughIcon": [
+        {"d": "M7.85 3.05c.95 0 1.55.5 1.55 1.25 0 .35-.1.65-.35.9h1.75c.35-.5.55-1.1.55-1.75 0-1.5-1.2-2.45-3.2-2.45H4.2v1.55h2.95c.45 0 .7.2.7.5Zm-5.1 3.55h8.5v1.45h-8.5V6.6Zm2.55 2.35v1.7h1.85c.55 0 .9.25.9.7 0 .5-.4.8-1.05.8H4.2v1.55h2.85c1.95 0 3.15-.95 3.15-2.45 0-.55-.15-1-.45-1.35-.2-.2-.45-.35-.75-.45H5.3Z", "fillRule": "evenodd"},
+    ],
+    "Undo2Icon": [
+        {"d": "M5.47 2.22a.75.75 0 0 1 0 1.06L3.56 5.19H9.5a3.75 3.75 0 1 1 0 7.5H7a.75.75 0 0 1 0-1.5h2.5a2.25 2.25 0 1 0 0-4.5H3.56l1.91 1.91a.75.75 0 1 1-1.06 1.06l-3.25-3.25a.75.75 0 0 1 0-1.06l3.25-3.25a.75.75 0 0 1 1.06 0Z", "fillRule": "evenodd"},
+    ],
+    "Redo2Icon": [
+        {"d": "M8.53 2.22a.75.75 0 0 0 0 1.06l1.91 1.91H4.5a3.75 3.75 0 1 0 0 7.5H7a.75.75 0 0 0 0-1.5H4.5a2.25 2.25 0 1 1 0-4.5h5.94L8.53 8.1a.75.75 0 1 0 1.06 1.06l3.25-3.25a.75.75 0 0 0 0-1.06L9.59 2.22a.75.75 0 0 0-1.06 0Z", "fillRule": "evenodd"},
     ],
 }
 

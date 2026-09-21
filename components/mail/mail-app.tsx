@@ -163,7 +163,7 @@ function MailBodyFrame({ html }: { html: string }) {
     <iframe
       ref={ref}
       title="Письмо"
-      sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+      sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
       srcDoc={srcDoc}
       className="w-full border-0 block bg-[#0c0d10] rounded-[12px]"
       style={{ minHeight: 120 }}

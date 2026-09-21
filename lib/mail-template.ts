@@ -40,7 +40,18 @@ const READER_BASE_CSS = `
     -webkit-font-smoothing: antialiased;
   }
   body { padding: 4px 2px 20px; }
-  a { color: #4d9fff; }
+  a {
+    color: #4d9fff !important;
+    text-decoration: underline !important;
+    cursor: pointer !important;
+    pointer-events: auto !important;
+  }
+  a:hover { color: #7db8ff !important; }
+  a[href="#"], a:not([href]) {
+    color: inherit !important;
+    text-decoration: none !important;
+    cursor: default !important;
+  }
   img, video { max-width: 100%; height: auto; }
   p { margin: 0 0 0.85em; }
   h1, h2, h3, h4 { color: #fff; line-height: 1.25; }
@@ -64,15 +75,73 @@ const READER_BASE_CSS = `
   }
 `;
 
+const URL_IN_TEXT_RE =
+  /\b((?:https?:\/\/|www\.)[^\s<>"'`]+[^\s<>"'`.,;:!?\])}])/gi;
+
+function normalizeHref(href: string): string | null {
+  const raw = href.trim().replace(/^['"]|['"]$/g, "");
+  if (!raw || /^javascript:/i.test(raw) || /^data:/i.test(raw)) return null;
+  if (/^(https?:|mailto:|tel:)/i.test(raw)) return raw;
+  if (/^\/\//.test(raw)) return `https:${raw}`;
+  if (/^www\./i.test(raw)) return `https://${raw}`;
+  if (/^[a-z0-9.-]+\.[a-z]{2,}([/:?#].*)?$/i.test(raw)) return `https://${raw}`;
+  return raw;
+}
+
+/** Wrap bare http(s)/www URLs that are not already inside an <a>. */
+function linkifyBareUrls(html: string): string {
+  const parts = html.split(/(<a\b[^>]*>[\s\S]*?<\/a>|<[^>]+>)/gi);
+  return parts
+    .map((part) => {
+      if (!part || part.startsWith("<")) return part;
+      return part.replace(URL_IN_TEXT_RE, (url) => {
+        const href = normalizeHref(url);
+        if (!href) return url;
+        return `<a href="${escapeHtml(href)}">${url}</a>`;
+      });
+    })
+    .join("");
+}
+
+/** Force safe external navigation for every link in reader HTML. */
+function ensureClickableLinks(html: string): string {
+  return html.replace(/<a\b([^>]*)>/gi, (_m, attrs: string) => {
+    let next = attrs;
+    const hrefMatch = next.match(/\bhref\s*=\s*(["']?)([^"'>\s]*)\1/i);
+    if (!hrefMatch) return `<a${attrs}>`;
+    const normalized = normalizeHref(hrefMatch[2] || "");
+    if (!normalized) {
+      next = next.replace(/\bhref\s*=\s*(["']?)([^"'>\s]*)\1/i, 'href="#"');
+    } else {
+      next = next.replace(
+        /\bhref\s*=\s*(["']?)([^"'>\s]*)\1/i,
+        `href="${escapeHtml(normalized)}"`,
+      );
+    }
+    if (/\btarget\s*=/i.test(next)) {
+      next = next.replace(/\btarget\s*=\s*(["']).*?\1/i, 'target="_blank"');
+    } else {
+      next += ' target="_blank"';
+    }
+    if (/\brel\s*=/i.test(next)) {
+      next = next.replace(/\brel\s*=\s*(["']).*?\1/i, 'rel="noopener noreferrer"');
+    } else {
+      next += ' rel="noopener noreferrer"';
+    }
+    return `<a${next}>`;
+  });
+}
+
 /**
  * Build srcDoc for the in-app reader: real HTML support on a dark canvas.
  * Does not strip the author's markup — only adds a safe base stylesheet.
  */
 export function prepareMailReaderSrcDoc(html: string): string {
   const raw = (html || "").trim() || "<p></p>";
-  const safe = isFullHtmlDocument(raw)
+  const cleaned = isFullHtmlDocument(raw)
     ? sanitizeMailHtml(raw, true)
     : sanitizeMailHtml(raw, false);
+  const safe = ensureClickableLinks(linkifyBareUrls(cleaned));
 
   if (isFullHtmlDocument(safe)) {
     if (/<head[\s>]/i.test(safe)) {
