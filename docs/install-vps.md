@@ -59,12 +59,14 @@ cd /var/www/pnk-mail && git pull
 
 ---
 
-## 3. `.env.local`
+## 3. `.env` (не только `.env.local`)
+
+Prisma CLI читает **`.env`**. Next тоже его подхватит. Для PM2 удобнее один файл:
 
 ```bash
 cd /var/www/pnk-mail
-cp .env.example .env.local
-nano .env.local
+cp .env.example .env
+nano .env
 ```
 
 Минимум (подставь свои значения):
@@ -83,6 +85,12 @@ MAIL_VAULT_SECRET="сгенерируй_openssl_rand_hex_32"
 MAIL_TRANSPORT="console"
 MAIL_FROM_DOMAIN="pnkmail.ru"
 # позже: MAIL_TRANSPORT=resend + RESEND_API_KEY=re_...
+```
+
+Если уже заполнил `.env.local` — скопируй в `.env`:
+
+```bash
+cp .env.local .env
 ```
 
 Секреты:
