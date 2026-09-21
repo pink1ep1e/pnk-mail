@@ -102,12 +102,57 @@ function looksLikeEmail(s: string) {
 
 function contactInitial(name: string, email: string) {
   const base = (name || email.split("@")[0] || "?").trim();
-  return base
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((p) => p[0])
-    .join("")
-    .toUpperCase();
+  return (base[0] || "?").toUpperCase();
+}
+
+function ContactAvatar({
+  name,
+  email,
+  avatarUrl,
+  color,
+  size = 36,
+  rounded = "full",
+}: {
+  name: string;
+  email: string;
+  avatarUrl?: string | null;
+  color?: string;
+  size?: number;
+  rounded?: "full" | "lg";
+}) {
+  const [broken, setBroken] = useState(false);
+  useEffect(() => {
+    setBroken(false);
+  }, [avatarUrl]);
+  const showImg = Boolean(avatarUrl) && !broken;
+  const bg = color || "#7c3aed";
+
+  return (
+    <span
+      className={cn(
+        "overflow-hidden flex items-center justify-center text-white font-semibold shrink-0",
+        rounded === "full" ? "rounded-full" : "rounded-[10px]",
+      )}
+      style={{
+        width: size,
+        height: size,
+        backgroundColor: showImg ? undefined : bg,
+        fontSize: Math.round(size * 0.38),
+      }}
+    >
+      {showImg ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={avatarUrl!}
+          alt=""
+          className="h-full w-full object-cover"
+          onError={() => setBroken(true)}
+        />
+      ) : (
+        contactInitial(name, email)
+      )}
+    </span>
+  );
 }
 
 function toRecipient(
@@ -128,7 +173,7 @@ function toRecipient(
     email: normalized,
     name: hit?.name || normalized.split("@")[0],
     avatarUrl: hit?.avatarUrl,
-    color: hit?.color || "#4b5563",
+    color: hit?.color || "#7c3aed",
     internal,
   };
 }
@@ -1309,25 +1354,13 @@ export default function ComposeEditor({
                             key={r.email}
                             className="inline-flex items-center gap-1.5 h-7 pl-0.5 pr-1.5 rounded-full bg-[#2a2d36] text-white max-w-full"
                           >
-                            <span
-                              className="h-6 w-6 rounded-full overflow-hidden flex items-center justify-center text-[10px] font-semibold shrink-0"
-                              style={{
-                                backgroundColor: r.avatarUrl
-                                  ? undefined
-                                  : r.color,
-                              }}
-                            >
-                              {r.avatarUrl ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img
-                                  src={r.avatarUrl}
-                                  alt=""
-                                  className="h-full w-full object-cover"
-                                />
-                              ) : (
-                                contactInitial(r.name, r.email)
-                              )}
-                            </span>
+                            <ContactAvatar
+                              name={r.name}
+                              email={r.email}
+                              avatarUrl={r.avatarUrl}
+                              color={r.color}
+                              size={24}
+                            />
                             <span className="text-[13px] font-medium truncate max-w-[140px]">
                               {r.name}
                             </span>
@@ -1418,25 +1451,13 @@ export default function ComposeEditor({
                               onMouseDown={(e) => e.preventDefault()}
                               onClick={() => pickContact(c)}
                             >
-                              <span
-                                className="h-9 w-9 rounded-[10px] overflow-hidden flex items-center justify-center text-[12px] font-bold text-white shrink-0"
-                                style={{
-                                  backgroundColor: c.avatarUrl
-                                    ? undefined
-                                    : c.color || "#111",
-                                }}
-                              >
-                                {c.avatarUrl ? (
-                                  // eslint-disable-next-line @next/next/no-img-element
-                                  <img
-                                    src={c.avatarUrl}
-                                    alt=""
-                                    className="h-full w-full object-cover"
-                                  />
-                                ) : (
-                                  contactInitial(c.name, c.email)
-                                )}
-                              </span>
+                              <ContactAvatar
+                                name={c.name}
+                                email={c.email}
+                                avatarUrl={c.avatarUrl}
+                                color={c.color || "#7c3aed"}
+                                size={36}
+                              />
                               <span className="min-w-0">
                                 <span className="block text-[14px] font-semibold text-white">
                                   {self ? "Себе" : c.name}
