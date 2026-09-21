@@ -130,16 +130,47 @@ export async function POST(req: NextRequest) {
 
   let transportWarning: string | null = null;
   if (external.length) {
-    const result = await sendOutbound({
-      fromName,
-      fromEmail,
-      to: external.filter((a) => toList.includes(a)),
-      cc: external.filter((a) => ccList.includes(a)),
-      subject,
-      bodyHtml: outboundHtml,
-      bodyText,
-    });
-    if (!result.ok) transportWarning = result.error;
+    const externalTo = external.filter((a) => toList.includes(a));
+    const externalCc = external.filter((a) => ccList.includes(a));
+    // Resend/SES require at least one To — promote CC if needed
+    const toSend =
+      externalTo.length > 0
+        ? externalTo
+        : externalCc.length > 0
+          ? [externalCc[0]]
+          : [];
+    const ccSend =
+      externalTo.length > 0
+        ? externalCc
+        : externalCc.slice(1);
+
+    if (!toSend.length) {
+      transportWarning = "Нет внешнего адреса получателя";
+    } else {
+      const result = await sendOutbound({
+        fromName,
+        fromEmail,
+        to: toSend,
+        cc: ccSend.length ? ccSend : undefined,
+        subject,
+        bodyHtml: outboundHtml,
+        bodyText,
+      });
+      if (!result.ok) {
+        transportWarning = result.error;
+        console.error("[mail-send] outbound failed", {
+          to: toSend,
+          cc: ccSend,
+          error: result.error,
+          mode: process.env.MAIL_TRANSPORT || "console",
+        });
+      } else {
+        console.info("[mail-send] outbound ok", {
+          to: toSend,
+          providerId: result.providerId,
+        });
+      }
+    }
   }
 
   return NextResponse.json({

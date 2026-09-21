@@ -28,13 +28,20 @@ function transportMode(): "console" | "resend" | "ses" {
 }
 
 async function sendConsole(mail: OutboundMail): Promise<TransportResult> {
-  console.info("[mail-transport:console]", {
-    from: `${mail.fromName} <${mail.fromEmail}>`,
-    to: mail.to,
-    cc: mail.cc,
-    subject: mail.subject,
-  });
-  return { ok: true, providerId: `console-${Date.now()}` };
+  console.warn(
+    "[mail-transport:console] MAIL_TRANSPORT=console — внешняя почта НЕ отправляется. Установите MAIL_TRANSPORT=resend и RESEND_API_KEY.",
+    {
+      from: `${mail.fromName} <${mail.fromEmail}>`,
+      to: mail.to,
+      cc: mail.cc,
+      subject: mail.subject,
+    },
+  );
+  return {
+    ok: false,
+    error:
+      "Внешняя отправка выключена (MAIL_TRANSPORT=console). В .env укажите MAIL_TRANSPORT=resend и RESEND_API_KEY, затем pm2 restart.",
+  };
 }
 
 async function sendResend(mail: OutboundMail): Promise<TransportResult> {
@@ -112,15 +119,22 @@ async function sendSesSmtp(mail: OutboundMail): Promise<TransportResult> {
 export async function sendOutbound(
   mail: OutboundMail,
 ): Promise<TransportResult> {
-  if (!mail.to.length) return { ok: true };
+  const to = mail.to.filter(Boolean);
+  const cc = (mail.cc || []).filter(Boolean);
+  if (!to.length && !cc.length) return { ok: true };
+  const normalized: OutboundMail = {
+    ...mail,
+    to: to.length ? to : [cc[0]],
+    cc: to.length ? cc : cc.slice(1),
+  };
 
   switch (transportMode()) {
     case "resend":
-      return sendResend(mail);
+      return sendResend(normalized);
     case "ses":
-      return sendSesSmtp(mail);
+      return sendSesSmtp(normalized);
     default:
-      return sendConsole(mail);
+      return sendConsole(normalized);
   }
 }
 

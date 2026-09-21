@@ -76,6 +76,44 @@ type MessageDetail = MailMessage & {
   cc?: string;
 };
 
+function parseEmailsLoose(raw: string | undefined): string[] {
+  if (!raw?.trim()) return [];
+  return raw
+    .split(/[,;]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => {
+      const m = s.match(/<([^>]+)>/);
+      return (m ? m[1] : s).trim().toLowerCase();
+    })
+    .filter((s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s));
+}
+
+/** Who should receive a reply (handles Sent folder correctly). */
+function replyAddressFor(
+  m: MessageDetail,
+  myEmail: string,
+): { to: string; cc: string } {
+  const mine = myEmail.trim().toLowerCase();
+  const from = (m.fromEmail || "").trim().toLowerCase();
+  const toList = parseEmailsLoose(m.to);
+  const weSent =
+    m.folder === "sent" || (Boolean(mine) && from === mine);
+
+  if (weSent) {
+    const tos = toList.filter((a) => a !== mine);
+    return {
+      to: tos.join(", "),
+      cc: "",
+    };
+  }
+
+  // Incoming: reply to sender; if missing, fall back to To (rare)
+  if (from && from !== mine) return { to: from, cc: "" };
+  const fallback = toList.find((a) => a !== mine) || "";
+  return { to: fallback, cc: "" };
+}
+
 function withAccountAvatar(account: MailAccount): MailAccount {
   if (account.avatarUrl) return account;
   return {
@@ -756,12 +794,18 @@ export default function MailApp() {
     if (!json.ok || !json.data?.message) return;
     const m = json.data.message as MessageDetail;
     const when = m.time || "";
+    const myEmail = activeAccount?.email || "";
     if (mode === "reply") {
       const subj = m.subject || "";
+      const addr = replyAddressFor(m, myEmail);
+      if (!addr.to) {
+        showToast("Не найден адрес для ответа");
+        return;
+      }
       setComposeDraft({
         id: null,
-        to: m.fromEmail || "",
-        cc: "",
+        to: addr.to,
+        cc: addr.cc,
         subject: /^re:/i.test(subj) ? subj : `Re: ${subj}`,
         bodyHtml: `<p><br/></p><p><br/></p><blockquote style="margin:0;padding-left:12px;border-left:3px solid rgba(255,255,255,0.18);color:rgba(255,255,255,0.55);"><p>${when ? `${when}, ` : ""}<strong>${m.from || m.fromEmail || ""}</strong> &lt;${m.fromEmail || ""}&gt;:</p>${m.bodyHtml || `<p>${m.preview || ""}</p>`}</blockquote>`,
       });
@@ -2036,7 +2080,10 @@ export default function MailApp() {
             throw new Error("send failed");
           }
           if (json.data?.transportWarning) {
-            setSendError(json.data.transportWarning);
+            setSendError(
+              `Письмо не доставлено наружу: ${json.data.transportWarning}`,
+            );
+            throw new Error("transport failed");
           }
           setComposeDraft(null);
           setFolder("sent");
