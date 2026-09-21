@@ -156,6 +156,8 @@ export function toListDto(row: {
   createdAt: Date;
   deliveryStatus?: string | null;
   deliveryDetail?: string | null;
+  threadId?: string | null;
+  threadCount?: number;
 }): MailMessage {
   return {
     id: row.id,
@@ -170,7 +172,42 @@ export function toListDto(row: {
     avatarColor: avatarColor(row.fromEmail || row.fromName),
     deliveryStatus: row.deliveryStatus || null,
     deliveryDetail: row.deliveryDetail || null,
+    threadId: row.threadId || row.id,
+    threadCount: row.threadCount,
   };
+}
+
+/** Collapse flat messages into one row per conversation (latest on top). */
+export function groupMessagesIntoThreads<
+  T extends {
+    id: string;
+    threadId?: string | null;
+    unread: boolean;
+    createdAt: Date;
+    hasAttachment: boolean;
+  },
+>(rows: T[]): (T & { threadCount: number })[] {
+  const groups = new Map<string, T[]>();
+  for (const row of rows) {
+    const key = row.threadId || row.id;
+    const list = groups.get(key);
+    if (list) list.push(row);
+    else groups.set(key, [row]);
+  }
+
+  const out: (T & { threadCount: number })[] = [];
+  for (const list of groups.values()) {
+    list.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    const latest = list[0];
+    out.push({
+      ...latest,
+      unread: list.some((m) => m.unread),
+      hasAttachment: list.some((m) => m.hasAttachment),
+      threadCount: list.length,
+    });
+  }
+  out.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  return out;
 }
 
 export function isPnkMailAddress(email: string): boolean {

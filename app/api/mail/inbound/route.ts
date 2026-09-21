@@ -255,6 +255,22 @@ export async function POST(req: NextRequest) {
         messageId:
           full?.message_id ||
           (typeof data.message_id === "string" ? data.message_id : null),
+        inReplyTo:
+          (full?.headers &&
+            (typeof full.headers["in-reply-to"] === "string"
+              ? full.headers["in-reply-to"]
+              : typeof full.headers["In-Reply-To"] === "string"
+                ? full.headers["In-Reply-To"]
+                : null)) ||
+          (typeof data.in_reply_to === "string" ? data.in_reply_to : null),
+        references:
+          (full?.headers &&
+            (typeof full.headers.references === "string"
+              ? full.headers.references
+              : typeof full.headers.References === "string"
+                ? full.headers.References
+                : null)) ||
+          (typeof data.references === "string" ? data.references : null),
         hasAttachment: Array.isArray(full?.attachments)
           ? full!.attachments!.length > 0
           : Array.isArray(data.attachments)
@@ -321,6 +337,14 @@ export async function POST(req: NextRequest) {
           : typeof body.message_id === "string"
             ? body.message_id
             : null,
+      inReplyTo:
+        typeof body.inReplyTo === "string"
+          ? body.inReplyTo
+          : typeof body.in_reply_to === "string"
+            ? body.in_reply_to
+            : null,
+      references:
+        typeof body.references === "string" ? body.references : null,
       hasAttachment: Boolean(body.hasAttachment),
     });
 

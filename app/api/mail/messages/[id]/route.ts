@@ -36,18 +36,52 @@ export async function GET(req: NextRequest, { params }: Params) {
     row.unread = false;
   }
 
+  const threadKey = row.threadId || row.id;
+  const threadRows = await prisma.message.findMany({
+    where: {
+      mailboxId: auth.ctx.mailboxId,
+      OR: [{ threadId: threadKey }, { id: threadKey }],
+      NOT: { folder: { in: ["trash", "spam", "drafts"] } },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  // Always include the opened message even if filtered out
+  if (!threadRows.some((m) => m.id === row.id)) {
+    threadRows.push(row);
+    threadRows.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  }
+
+  // Mark other unread messages in the thread as read when opening
+  if (markRead) {
+    const unreadIds = threadRows
+      .filter((m) => m.unread && m.id !== row.id)
+      .map((m) => m.id);
+    if (unreadIds.length) {
+      await prisma.message.updateMany({
+        where: { id: { in: unreadIds }, mailboxId: auth.ctx.mailboxId },
+        data: { unread: false },
+      });
+      for (const m of threadRows) {
+        if (unreadIds.includes(m.id)) m.unread = false;
+      }
+    }
+  }
+
+  const toDetail = (m: (typeof row)) => ({
+    ...toListDto(m),
+    bodyHtml: m.bodyHtml,
+    bodyText: m.bodyText,
+    to: m.toAddresses,
+    cc: m.ccAddresses,
+    createdAt: m.createdAt.toISOString(),
+  });
+
   return NextResponse.json({
     ok: true,
     data: {
-      message: {
-        ...toListDto(row),
-        // Already sanitized on write — don't re-sanitize (it strips styles → white box)
-        bodyHtml: row.bodyHtml,
-        bodyText: row.bodyText,
-        to: row.toAddresses,
-        cc: row.ccAddresses,
-        createdAt: row.createdAt.toISOString(),
-      },
+      message: toDetail(row),
+      thread: threadRows.map(toDetail),
     },
   });
 }

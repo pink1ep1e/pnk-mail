@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { requireActiveMailbox } from "@/lib/mail-auth";
 import type { FolderId } from "@/lib/mail-data";
 import { maybeSyncResendInbound } from "@/lib/mail-inbound";
-import { toListDto } from "@/lib/mail-store";
+import { groupMessagesIntoThreads, toListDto } from "@/lib/mail-store";
 
 export async function GET(req: NextRequest) {
   const auth = await requireActiveMailbox();
@@ -126,10 +126,13 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  const threaded =
+    folder === "drafts" ? rows : groupMessagesIntoThreads(rows);
+
   return NextResponse.json({
     ok: true,
     data: {
-      messages: rows.map(toListDto),
+      messages: threaded.map(toListDto),
       counts,
       folders: customFolders.map((f) => ({ id: f.id, name: f.name })),
       labels: labels.map((l) => ({

@@ -17,6 +17,8 @@ export type OutboundMail = {
   bodyText: string;
   /** Resend tags for webhook correlation */
   tags?: Record<string, string>;
+  /** Extra SMTP/RFC headers (In-Reply-To, References, Message-ID, …) */
+  headers?: Record<string, string>;
 };
 
 export type TransportResult =
@@ -66,6 +68,9 @@ async function sendResend(mail: OutboundMail): Promise<TransportResult> {
       ...(mail.tags && Object.keys(mail.tags).length
         ? { tags: mail.tags }
         : {}),
+      ...(mail.headers && Object.keys(mail.headers).length
+        ? { headers: mail.headers }
+        : {}),
     }),
   });
 
@@ -109,6 +114,8 @@ async function sendSesSmtp(mail: OutboundMail): Promise<TransportResult> {
       subject: mail.subject,
       html: mail.bodyHtml,
       text: mail.bodyText,
+      headers: mail.headers,
+      messageId: mail.headers?.["Message-ID"]?.replace(/^<|>$/g, ""),
     });
 
     return { ok: true, providerId: info.messageId };

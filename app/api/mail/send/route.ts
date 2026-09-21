@@ -11,7 +11,11 @@ import {
   toListDto,
 } from "@/lib/mail-store";
 import { outboundMailHtml, sanitizeMailHtml } from "@/lib/mail-template";
-import { sendOutbound } from "@/lib/mail-transport";
+import {
+  formatRfcMessageId,
+  normalizeRfcMessageId,
+} from "@/lib/mail-thread";
+import { getMailFromDomain, sendOutbound } from "@/lib/mail-transport";
 
 export async function POST(req: NextRequest) {
   const origin = assertSameOrigin(req);
@@ -47,6 +51,7 @@ export async function POST(req: NextRequest) {
     cc?: string;
     subject?: string;
     bodyHtml?: string;
+    replyToId?: string;
   };
 
   const toList = parseAddressList(body.to || "");
@@ -62,7 +67,6 @@ export async function POST(req: NextRequest) {
   const bodyHtml = sanitizeMailHtml(rawHtml);
   const bodyText = htmlToText(bodyHtml);
   const preview = htmlToPreview(bodyHtml);
-  // Author content only — no logo / branded card for Gmail/Yandex.
   const outboundHtml = outboundMailHtml(bodyHtml);
 
   if (!toList.length) {
@@ -82,11 +86,57 @@ export async function POST(req: NextRequest) {
   const fromEmail = auth.ctx.email;
   const toJoined = toList.join(", ");
   const ccJoined = ccList.join(", ");
+  const domain = getMailFromDomain();
 
   const internal = [...new Set([...toList, ...ccList])].filter(isPnkMailAddress);
   const external = [...new Set([...toList, ...ccList])].filter(
     (a) => !isPnkMailAddress(a),
   );
+
+  let threadId: string | null = null;
+  let inReplyTo: string | null = null;
+  const refIds: string[] = [];
+  const replyToId = (body.replyToId || "").trim();
+
+  if (replyToId) {
+    const parent = await prisma.message.findFirst({
+      where: { id: replyToId, mailboxId: auth.ctx.mailboxId },
+    });
+    if (parent) {
+      threadId = parent.threadId || parent.id;
+      if (!parent.threadId) {
+        await prisma.message.update({
+          where: { id: parent.id },
+          data: { threadId: parent.id },
+        });
+        threadId = parent.id;
+      }
+
+      inReplyTo =
+        normalizeRfcMessageId(parent.rfcMessageId) ||
+        (parent.threadId?.startsWith("ext:")
+          ? normalizeRfcMessageId(parent.threadId.slice(4))
+          : null);
+
+      const threadMsgs = await prisma.message.findMany({
+        where: {
+          mailboxId: auth.ctx.mailboxId,
+          OR: [{ threadId }, { id: threadId }],
+        },
+        orderBy: { createdAt: "asc" },
+        select: { rfcMessageId: true, threadId: true },
+      });
+      for (const m of threadMsgs) {
+        const id =
+          normalizeRfcMessageId(m.rfcMessageId) ||
+          (m.threadId?.startsWith("ext:")
+            ? normalizeRfcMessageId(m.threadId.slice(4))
+            : null);
+        if (id && !refIds.includes(id)) refIds.push(id);
+      }
+      if (inReplyTo && !refIds.includes(inReplyTo)) refIds.push(inReplyTo);
+    }
+  }
 
   const sent = await prisma.message.create({
     data: {
@@ -104,8 +154,30 @@ export async function POST(req: NextRequest) {
       hasAttachment: false,
       deliveryStatus: external.length ? "queued" : "delivered",
       deliveryDetail: external.length ? "" : "internal",
+      threadId: threadId || undefined,
+      inReplyTo: inReplyTo || undefined,
     },
   });
+
+  const finalThreadId = threadId || sent.id;
+  const rfcMessageId = `${sent.id}.${Date.now()}@${domain}`;
+  await prisma.message.update({
+    where: { id: sent.id },
+    data: {
+      threadId: finalThreadId,
+      rfcMessageId,
+    },
+  });
+
+  const headers: Record<string, string> = {
+    "Message-ID": formatRfcMessageId(rfcMessageId),
+  };
+  if (inReplyTo) {
+    headers["In-Reply-To"] = formatRfcMessageId(inReplyTo);
+    headers.References = (refIds.length ? refIds : [inReplyTo])
+      .map((id) => formatRfcMessageId(id))
+      .join(" ");
+  }
 
   for (const address of internal) {
     if (address === fromEmail) continue;
@@ -126,6 +198,9 @@ export async function POST(req: NextRequest) {
         bodyText,
         unread: true,
         hasAttachment: false,
+        threadId: finalThreadId,
+        rfcMessageId,
+        inReplyTo: inReplyTo || undefined,
       },
     });
   }
@@ -134,7 +209,6 @@ export async function POST(req: NextRequest) {
   if (external.length) {
     const externalTo = external.filter((a) => toList.includes(a));
     const externalCc = external.filter((a) => ccList.includes(a));
-    // Resend/SES require at least one To — promote CC if needed
     const toSend =
       externalTo.length > 0
         ? externalTo
@@ -142,9 +216,7 @@ export async function POST(req: NextRequest) {
           ? [externalCc[0]]
           : [];
     const ccSend =
-      externalTo.length > 0
-        ? externalCc
-        : externalCc.slice(1);
+      externalTo.length > 0 ? externalCc : externalCc.slice(1);
 
     if (!toSend.length) {
       transportWarning = "Нет внешнего адреса получателя";
@@ -161,6 +233,7 @@ export async function POST(req: NextRequest) {
           pnk_msg: sent.id,
           pnk_mb: auth.ctx.mailboxId,
         },
+        headers,
       });
       if (!result.ok) {
         transportWarning = result.error;
@@ -173,9 +246,7 @@ export async function POST(req: NextRequest) {
         });
         console.error("[mail-send] outbound failed", {
           to: toSend,
-          cc: ccSend,
           error: result.error,
-          mode: process.env.MAIL_TRANSPORT || "console",
         });
       } else {
         await prisma.message.update({
@@ -189,15 +260,17 @@ export async function POST(req: NextRequest) {
         console.info("[mail-send] outbound ok", {
           to: toSend,
           providerId: result.providerId,
+          threadId: finalThreadId,
         });
       }
     }
   }
 
+  const fresh = await prisma.message.findUnique({ where: { id: sent.id } });
   return NextResponse.json({
     ok: true,
     data: {
-      message: toListDto(sent),
+      message: toListDto(fresh || sent),
       deliveredInternal: internal.length,
       deliveredExternal: external.length,
       transportWarning,

@@ -40,7 +40,12 @@ model Message {
   /// JSON array of MailLabel ids
   labelIds       String    @default("[]")
   remindAt       DateTime?
+  /// Conversation id — shared across replies in one thread
   threadId       String?
+  /// RFC Message-ID of this message (for dedup + In-Reply-To matching)
+  rfcMessageId   String?
+  /// RFC In-Reply-To header value (normalized, no brackets)
+  inReplyTo      String?
   /// Resend (or other) provider message id for outbound tracking
   providerId     String?
   /// queued | sent | delivered | delayed | bounced | failed | complained | suppressed
@@ -51,6 +56,8 @@ model Message {
 
   @@index([mailboxId, folder, createdAt])
   @@index([mailboxId, unread])
+  @@index([mailboxId, threadId, createdAt])
+  @@index([mailboxId, rfcMessageId])
   @@index([providerId])
 }
 

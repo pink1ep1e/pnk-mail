@@ -6,6 +6,12 @@ import {
   parseAddressList,
 } from "@/lib/mail-store";
 import { sanitizeMailHtml } from "@/lib/mail-template";
+import {
+  headerValue,
+  normalizeRfcMessageId,
+  normalizeSubject,
+  parseMessageIdList,
+} from "@/lib/mail-thread";
 import { getMailFromDomain } from "@/lib/mail-transport";
 
 export type InboundPayload = {
@@ -18,6 +24,8 @@ export type InboundPayload = {
   bodyText?: string;
   /** External Message-ID for dedup */
   messageId?: string | null;
+  inReplyTo?: string | null;
+  references?: string | null;
   hasAttachment?: boolean;
 };
 
@@ -94,9 +102,12 @@ export async function deliverInbound(
   const subject = (payload.subject || "(без темы)").slice(0, 500);
   const toJoined = (payload.to || []).join(", ");
   const ccJoined = (payload.cc || []).join(", ");
-  const externalKey = payload.messageId
-    ? `ext:${payload.messageId.slice(0, 200)}`
-    : null;
+  const rfcMessageId = normalizeRfcMessageId(payload.messageId);
+  const replyIds = [
+    ...parseMessageIdList(payload.inReplyTo),
+    ...parseMessageIdList(payload.references),
+  ];
+  const inReplyTo = replyIds[0] || null;
 
   for (const address of ours) {
     const mailbox = await prisma.mailbox.findUnique({ where: { address } });
@@ -105,9 +116,15 @@ export async function deliverInbound(
       continue;
     }
 
-    if (externalKey) {
+    if (rfcMessageId) {
       const dup = await prisma.message.findFirst({
-        where: { mailboxId: mailbox.id, threadId: externalKey },
+        where: {
+          mailboxId: mailbox.id,
+          OR: [
+            { rfcMessageId },
+            { threadId: `ext:${rfcMessageId.slice(0, 200)}` },
+          ],
+        },
         select: { id: true },
       });
       if (dup) {
@@ -116,7 +133,14 @@ export async function deliverInbound(
       }
     }
 
-    await prisma.message.create({
+    const threadId = await resolveInboundThreadId({
+      mailboxId: mailbox.id,
+      replyIds,
+      subject,
+      fromEmail: payload.fromEmail.toLowerCase(),
+    });
+
+    const created = await prisma.message.create({
       data: {
         mailboxId: mailbox.id,
         folder: "inbox",
@@ -130,13 +154,84 @@ export async function deliverInbound(
         bodyText,
         unread: true,
         hasAttachment: Boolean(payload.hasAttachment),
-        threadId: externalKey,
+        threadId: threadId || undefined,
+        rfcMessageId: rfcMessageId || undefined,
+        inReplyTo: inReplyTo || undefined,
       },
     });
+
+    if (!threadId) {
+      await prisma.message.update({
+        where: { id: created.id },
+        data: { threadId: created.id },
+      });
+    }
     delivered.push(address);
   }
 
   return { delivered, skipped, unknown };
+}
+
+async function resolveInboundThreadId(params: {
+  mailboxId: string;
+  replyIds: string[];
+  subject: string;
+  fromEmail: string;
+}): Promise<string | null> {
+  const { mailboxId, replyIds, subject, fromEmail } = params;
+
+  if (replyIds.length) {
+    const byRfc = await prisma.message.findFirst({
+      where: {
+        mailboxId,
+        OR: [
+          { rfcMessageId: { in: replyIds } },
+          { threadId: { in: replyIds.map((id) => `ext:${id.slice(0, 200)}`) } },
+        ],
+      },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, threadId: true, rfcMessageId: true },
+    });
+    if (byRfc) {
+      const key = byRfc.threadId || byRfc.id;
+      if (!byRfc.threadId) {
+        await prisma.message.update({
+          where: { id: byRfc.id },
+          data: { threadId: byRfc.id },
+        });
+      }
+      return key;
+    }
+  }
+
+  // Weak fallback: same normalized subject in last 60 days
+  const norm = normalizeSubject(subject);
+  if (norm.length >= 3) {
+    const recent = await prisma.message.findMany({
+      where: {
+        mailboxId,
+        createdAt: { gte: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000) },
+        NOT: { folder: { in: ["trash", "spam", "drafts"] } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 80,
+      select: {
+        id: true,
+        threadId: true,
+        subject: true,
+        fromEmail: true,
+        toAddresses: true,
+      },
+    });
+    const hit = recent.find((m) => {
+      if (normalizeSubject(m.subject) !== norm) return false;
+      const involved = `${m.fromEmail} ${m.toAddresses}`.toLowerCase();
+      return involved.includes(fromEmail) || m.fromEmail === fromEmail;
+    });
+    if (hit) return hit.threadId || hit.id;
+  }
+
+  return null;
 }
 
 function escapeHtml(s: string) {
@@ -287,6 +382,14 @@ export async function deliverResendEmailById(
         ? `(письмо из Resend)\nОт: ${from.email}\nТема: ${full?.subject || meta?.subject || ""}`
         : undefined),
     messageId: full?.message_id || meta?.message_id || `resend:${emailId}`,
+    inReplyTo:
+      headerValue(full?.headers, "in-reply-to") ||
+      headerValue(full?.headers, "In-Reply-To") ||
+      null,
+    references:
+      headerValue(full?.headers, "references") ||
+      headerValue(full?.headers, "References") ||
+      null,
     hasAttachment: Array.isArray(full?.attachments)
       ? full!.attachments!.length > 0
       : Array.isArray(meta?.attachments)

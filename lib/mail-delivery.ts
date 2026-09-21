@@ -135,12 +135,19 @@ export async function applyOutboundDeliveryEvent(params: {
   }
 
   const detail = detailFromEvent(params.type, data);
+  const rawMsgId =
+    typeof data.message_id === "string" ? data.message_id.trim() : "";
+  const rfcMessageId = rawMsgId
+    ? rawMsgId.replace(/^<|>$/g, "").slice(0, 500)
+    : null;
+
   await prisma.message.update({
     where: { id: row.id },
     data: {
       providerId: providerId || row.providerId,
       deliveryStatus: status,
       deliveryDetail: detail || row.deliveryDetail,
+      ...(rfcMessageId ? { rfcMessageId } : {}),
     },
   });
 

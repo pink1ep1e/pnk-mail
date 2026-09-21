@@ -74,6 +74,7 @@ type MessageDetail = MailMessage & {
   bodyText?: string;
   to?: string;
   cc?: string;
+  createdAt?: string;
 };
 
 function deliveryBadge(status?: string | null): {
@@ -314,9 +315,11 @@ export default function MailApp() {
     cc?: string;
     subject?: string;
     bodyHtml?: string;
+    replyToId?: string | null;
   } | null>(null);
-  const detailCache = useRef<Map<string, MessageDetail>>(new Map());
+  const detailCache = useRef<Map<string, { message: MessageDetail; thread: MessageDetail[] }>>(new Map());
   const openIdRef = useRef<string | null>(null);
+  const [thread, setThread] = useState<MessageDetail[]>([]);
 
   const loadMessages = async (
     folderId: string,
@@ -435,6 +438,7 @@ export default function MailApp() {
       setFolder("inbox");
       setOpenId(null);
       setDetail(null);
+      setThread([]);
       await loadMessages("inbox");
       setBootReady(true);
 
@@ -768,6 +772,7 @@ export default function MailApp() {
         setOpenId(null);
         openIdRef.current = null;
         setDetail(null);
+        setThread([]);
       }
     });
   };
@@ -788,6 +793,7 @@ export default function MailApp() {
         setOpenId(null);
         openIdRef.current = null;
         setDetail(null);
+        setThread([]);
       }
     });
   };
@@ -817,21 +823,28 @@ export default function MailApp() {
     const json = await res.json();
     if (!json.ok || !json.data?.message) return;
     const m = json.data.message as MessageDetail;
-    const when = m.time || "";
     const myEmail = activeAccount?.email || "";
     if (mode === "reply") {
-      const subj = m.subject || "";
-      const addr = replyAddressFor(m, myEmail);
+      const apiThread = Array.isArray(json.data.thread)
+        ? (json.data.thread as MessageDetail[])
+        : [];
+      const replySource =
+        (thread.length > 0 ? thread[thread.length - 1] : null) ||
+        (apiThread.length > 0 ? apiThread[apiThread.length - 1] : null) ||
+        m;
+      const addr = replyAddressFor(replySource, myEmail);
       if (!addr.to) {
         showToast("Не найден адрес для ответа");
         return;
       }
+      const subj = replySource.subject || m.subject || "";
       setComposeDraft({
         id: null,
         to: addr.to,
         cc: addr.cc,
         subject: /^re:/i.test(subj) ? subj : `Re: ${subj}`,
-        bodyHtml: `<p><br/></p><p><br/></p><blockquote style="margin:0;padding-left:12px;border-left:3px solid rgba(255,255,255,0.18);color:rgba(255,255,255,0.55);"><p>${when ? `${when}, ` : ""}<strong>${m.from || m.fromEmail || ""}</strong> &lt;${m.fromEmail || ""}&gt;:</p>${m.bodyHtml || `<p>${m.preview || ""}</p>`}</blockquote>`,
+        bodyHtml: `<p><br/></p>`,
+        replyToId: replySource.id || m.id,
       });
     } else {
       const subj = m.subject || "";
@@ -959,13 +972,22 @@ export default function MailApp() {
     setOpenId(id);
     setRecipientsOpen(false);
     setItems((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, unread: false } : m)),
+      prev.map((m) =>
+        m.id === id || (m.threadId && fromList?.threadId && m.threadId === fromList.threadId)
+          ? { ...m, unread: false }
+          : m,
+      ),
     );
 
-    if (cached?.bodyHtml) {
-      setDetail({ ...cached, unread: false });
+    if (cached?.message?.bodyHtml) {
+      setDetail({ ...cached.message, unread: false });
+      setThread(
+        (cached.thread?.length ? cached.thread : [cached.message]).map((m) => ({
+          ...m,
+          unread: false,
+        })),
+      );
       setDetailLoading(false);
-      // Still persist read on server (cache path used to skip the API)
       if (fromList?.unread !== false) {
         void patchMessages([id], "read");
       }
@@ -979,8 +1001,10 @@ export default function MailApp() {
         bodyHtml: undefined,
         to: activeAccount?.email,
       });
+      setThread([{ ...fromList, unread: false, bodyHtml: undefined }]);
     } else {
       setDetail(null);
+      setThread([]);
     }
     setDetailLoading(true);
 
@@ -993,8 +1017,15 @@ export default function MailApp() {
           ...(json.data.message as MessageDetail),
           unread: false,
         };
-        detailCache.current.set(id, msg);
+        const threadMsgs = Array.isArray(json.data.thread)
+          ? (json.data.thread as MessageDetail[]).map((m) => ({
+              ...m,
+              unread: false,
+            }))
+          : [msg];
+        detailCache.current.set(id, { message: msg, thread: threadMsgs });
         setDetail(msg);
+        setThread(threadMsgs);
       }
     } catch {
       /* ignore */
@@ -1009,7 +1040,11 @@ export default function MailApp() {
       .then((r) => r.json())
       .then((json) => {
         if (json.ok && json.data?.message) {
-          detailCache.current.set(id, json.data.message as MessageDetail);
+          const msg = json.data.message as MessageDetail;
+          const threadMsgs = Array.isArray(json.data.thread)
+            ? (json.data.thread as MessageDetail[])
+            : [msg];
+          detailCache.current.set(id, { message: msg, thread: threadMsgs });
         }
       })
       .catch(() => undefined);
@@ -1022,6 +1057,7 @@ export default function MailApp() {
     setOpenId(null);
     openIdRef.current = null;
     setDetail(null);
+    setThread([]);
     setDetailLoading(false);
     void loadMessages(id);
   };
@@ -1857,6 +1893,11 @@ export default function MailApp() {
                               >
                                 {m.subject}
                               </span>
+                              {(m.threadCount || 0) > 1 && (
+                                <span className="ml-1.5 text-[11px] text-white/35 font-medium">
+                                  {m.threadCount}
+                                </span>
+                              )}
                               <span className="text-white/30">
                                 {" "}
                                 — {m.preview}
@@ -1912,6 +1953,7 @@ export default function MailApp() {
                         onClick={() => {
                           setOpenId(null);
                           setDetail(null);
+                          setThread([]);
                           setRecipientsOpen(false);
                         }}
                         aria-label="Назад к списку"
@@ -1945,6 +1987,7 @@ export default function MailApp() {
                         onClick={() => {
                           setOpenId(null);
                           setDetail(null);
+                          setThread([]);
                           setRecipientsOpen(false);
                         }}
                         aria-label="Закрыть письмо"
@@ -1976,113 +2019,150 @@ export default function MailApp() {
                             <h2 className="text-[24px] md:text-[28px] font-bold tracking-[-0.035em] leading-[1.2] text-white font-[family-name:var(--font-unbounded)]">
                               {detail?.subject || "…"}
                             </h2>
+                            {thread.length > 1 && (
+                              <p className="mt-1.5 text-[13px] text-white/35 font-[family-name:var(--font-manrope)]">
+                                {thread.length} писем в переписке
+                              </p>
+                            )}
 
-                            <div className="mt-5 flex items-start gap-3.5">
-                              <div
-                                className="shrink-0 h-12 w-12 rounded-full flex items-center justify-center text-[15px] font-semibold text-white font-[family-name:var(--font-manrope)]"
-                                style={{
-                                  backgroundColor:
-                                    detail?.avatarColor || "#3b82f6",
-                                }}
-                              >
-                                {initials(detail?.from || "?")}
-                              </div>
-
-                              <div className="min-w-0 flex-1 pt-0.5">
-                                <div className="flex items-start justify-between gap-3">
-                                  <div className="min-w-0">
-                                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                      <span className="text-[15px] font-semibold text-white font-[family-name:var(--font-manrope)]">
-                                        {detail?.from || "—"}
-                                      </span>
-                                      <span className="text-[13px] text-white/40 font-[family-name:var(--font-manrope)]">
-                                        {detail?.fromEmail || ""}
-                                      </span>
-                                      <VerifiedBadge />
-                                    </div>
-
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        setRecipientsOpen((v) => !v)
-                                      }
-                                      className="mt-1.5 inline-flex items-center gap-1 text-[13px] text-white/35 hover:text-white/60 font-[family-name:var(--font-manrope)] transition-colors"
+                            <div className="mt-6 space-y-0">
+                              {(thread.length > 0 ? thread : detail ? [detail] : []).map(
+                                (msg, idx, list) => {
+                                  const isLast = idx === list.length - 1;
+                                  return (
+                                    <div
+                                      key={msg.id}
+                                      className={cn(
+                                        "pt-5",
+                                        idx > 0 && "border-t border-white/8",
+                                      )}
                                     >
-                                      {(() => {
-                                        const list = [
-                                          ...(detail?.to || "")
-                                            .split(/[,;]+/)
-                                            .map((s) => s.trim())
-                                            .filter(Boolean),
-                                          ...(detail?.cc || "")
-                                            .split(/[,;]+/)
-                                            .map((s) => s.trim())
-                                            .filter(Boolean),
-                                        ];
-                                        const n = list.length || 1;
-                                        return `${n} получател${n === 1 ? "ь" : n < 5 ? "я" : "ей"}`;
-                                      })()}
-                                      <span
+                                      <div className="flex items-start gap-3.5">
+                                        <div
+                                          className="shrink-0 h-11 w-11 rounded-full flex items-center justify-center text-[14px] font-semibold text-white font-[family-name:var(--font-manrope)]"
+                                          style={{
+                                            backgroundColor:
+                                              msg.avatarColor || "#3b82f6",
+                                          }}
+                                        >
+                                          {initials(msg.from || "?")}
+                                        </div>
+
+                                        <div className="min-w-0 flex-1 pt-0.5">
+                                          <div className="flex items-start justify-between gap-3">
+                                            <div className="min-w-0">
+                                              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                                <span className="text-[15px] font-semibold text-white font-[family-name:var(--font-manrope)]">
+                                                  {msg.from || "—"}
+                                                </span>
+                                                <span className="text-[13px] text-white/40 font-[family-name:var(--font-manrope)]">
+                                                  {msg.fromEmail || ""}
+                                                </span>
+                                                {msg.folder === "sent" ? (
+                                                  <span className="text-[11px] text-white/30 font-[family-name:var(--font-manrope)]">
+                                                    вы
+                                                  </span>
+                                                ) : (
+                                                  <VerifiedBadge />
+                                                )}
+                                              </div>
+
+                                              {isLast && (
+                                                <button
+                                                  type="button"
+                                                  onClick={() =>
+                                                    setRecipientsOpen((v) => !v)
+                                                  }
+                                                  className="mt-1.5 inline-flex items-center gap-1 text-[13px] text-white/35 hover:text-white/60 font-[family-name:var(--font-manrope)] transition-colors"
+                                                >
+                                                  {(() => {
+                                                    const nList = [
+                                                      ...(msg.to || "")
+                                                        .split(/[,;]+/)
+                                                        .map((s) => s.trim())
+                                                        .filter(Boolean),
+                                                      ...(msg.cc || "")
+                                                        .split(/[,;]+/)
+                                                        .map((s) => s.trim())
+                                                        .filter(Boolean),
+                                                    ];
+                                                    const n = nList.length || 1;
+                                                    return `${n} получател${n === 1 ? "ь" : n < 5 ? "я" : "ей"}`;
+                                                  })()}
+                                                  <span
+                                                    className={cn(
+                                                      "inline-block text-[10px] opacity-70 transition-transform",
+                                                      recipientsOpen &&
+                                                        "rotate-180",
+                                                    )}
+                                                  >
+                                                    ▾
+                                                  </span>
+                                                </button>
+                                              )}
+
+                                              {isLast && recipientsOpen && (
+                                                <div className="mt-2 rounded-[12px] bg-white/[0.04] px-3 py-2 space-y-1">
+                                                  {(
+                                                    (msg.to ||
+                                                      activeAccount.email)
+                                                      .split(/[,;]+/)
+                                                      .map((s) => s.trim())
+                                                      .filter(Boolean) || []
+                                                  ).map((addr) => (
+                                                    <p
+                                                      key={addr}
+                                                      className="text-[13px] text-white/70 font-[family-name:var(--font-manrope)]"
+                                                    >
+                                                      {addr}
+                                                    </p>
+                                                  ))}
+                                                  {msg.cc
+                                                    ?.split(/[,;]+/)
+                                                    .map((s) => s.trim())
+                                                    .filter(Boolean)
+                                                    .map((addr) => (
+                                                      <p
+                                                        key={`cc-${addr}`}
+                                                        className="text-[13px] text-white/40 font-[family-name:var(--font-manrope)]"
+                                                      >
+                                                        Копия: {addr}
+                                                      </p>
+                                                    ))}
+                                                </div>
+                                              )}
+                                            </div>
+
+                                            <span className="shrink-0 text-[13px] text-white/30 font-[family-name:var(--font-manrope)] tabular-nums pt-1">
+                                              {msg.time || ""}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      <div
                                         className={cn(
-                                          "inline-block text-[10px] opacity-70 transition-transform",
-                                          recipientsOpen && "rotate-180",
+                                          "mt-4 relative",
+                                          !isLast && "pb-5",
                                         )}
                                       >
-                                        ▾
-                                      </span>
-                                    </button>
-
-                                    {recipientsOpen && (
-                                      <div className="mt-2 rounded-[12px] bg-white/[0.04] px-3 py-2 space-y-1">
-                                        {(
-                                          (detail?.to || activeAccount.email)
-                                            .split(/[,;]+/)
-                                            .map((s) => s.trim())
-                                            .filter(Boolean) || []
-                                        ).map((addr) => (
-                                          <p
-                                            key={addr}
-                                            className="text-[13px] text-white/70 font-[family-name:var(--font-manrope)]"
-                                          >
-                                            {addr}
-                                          </p>
-                                        ))}
-                                        {detail?.cc
-                                          ?.split(/[,;]+/)
-                                          .map((s) => s.trim())
-                                          .filter(Boolean)
-                                          .map((addr) => (
-                                            <p
-                                              key={`cc-${addr}`}
-                                              className="text-[13px] text-white/40 font-[family-name:var(--font-manrope)]"
-                                            >
-                                              Копия: {addr}
-                                            </p>
-                                          ))}
+                                        {detailLoading && isLast && (
+                                          <div className="absolute inset-0 z-10 rounded-[12px] bg-[#0c0d10]/50 flex items-center justify-center">
+                                            <div className="h-8 w-8 rounded-full border-2 border-white/10 border-t-[#0066ff] animate-spin" />
+                                          </div>
+                                        )}
+                                        {msg.bodyHtml ? (
+                                          <MailBodyFrame html={msg.bodyHtml} />
+                                        ) : (
+                                          <div className="rounded-[12px] bg-white/[0.03] p-6 space-y-3 animate-pulse min-h-[80px]">
+                                            <div className="h-3 rounded-md bg-white/[0.06] w-[90%]" />
+                                            <div className="h-3 rounded-md bg-white/[0.05] w-[72%]" />
+                                          </div>
+                                        )}
                                       </div>
-                                    )}
-                                  </div>
-
-                                  <span className="shrink-0 text-[13px] text-white/30 font-[family-name:var(--font-manrope)] tabular-nums pt-1">
-                                    {detail?.time || ""}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="mt-6 relative">
-                              {detailLoading && (
-                                <div className="absolute inset-0 z-10 rounded-[12px] bg-[#0c0d10]/50 flex items-center justify-center">
-                                  <div className="h-8 w-8 rounded-full border-2 border-white/10 border-t-[#0066ff] animate-spin" />
-                                </div>
-                              )}
-                              {detail?.bodyHtml ? (
-                                <MailBodyFrame html={detail.bodyHtml} />
-                              ) : (
-                                <div className="rounded-[12px] bg-white/[0.03] p-6 space-y-3 animate-pulse min-h-[120px]">
-                                  <div className="h-3 rounded-md bg-white/[0.06] w-[90%]" />
-                                  <div className="h-3 rounded-md bg-white/[0.05] w-[72%]" />
-                                </div>
+                                    </div>
+                                  );
+                                },
                               )}
                             </div>
                           </>
@@ -2120,10 +2200,18 @@ export default function MailApp() {
         onSaveDraft={saveDraft}
         onSend={async ({ to, subject, bodyHtml, cc }) => {
           setSendError("");
+          const replyToId = composeDraft?.replyToId || undefined;
+          const openAfter = openId;
           const res = await fetch("/api/mail/send", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ to, cc, subject, bodyHtml }),
+            body: JSON.stringify({
+              to,
+              cc,
+              subject,
+              bodyHtml,
+              replyToId,
+            }),
           });
           const json = await res.json();
           if (!json.ok) {
@@ -2137,8 +2225,15 @@ export default function MailApp() {
             throw new Error("transport failed");
           }
           setComposeDraft(null);
-          setFolder("sent");
-          await loadMessages("sent");
+          detailCache.current.clear();
+          if (replyToId && openAfter) {
+            await loadMessages(folder);
+            openIdRef.current = null;
+            await openMessage(openAfter);
+          } else {
+            setFolder("sent");
+            await loadMessages("sent");
+          }
         }}
       />
 

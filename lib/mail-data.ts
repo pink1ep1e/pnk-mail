@@ -23,6 +23,8 @@ export type MailMessage = {
   avatarColor: string;
   deliveryStatus?: string | null;
   deliveryDetail?: string | null;
+  threadId?: string | null;
+  threadCount?: number;
 };
 
 export const folders: {
