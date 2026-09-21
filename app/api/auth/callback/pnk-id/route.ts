@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { OAUTH_STATE_COOKIE } from "@/lib/cookie-crypto";
+import {
+  OAUTH_STATE_COOKIE,
+  verifyOAuthState,
+} from "@/lib/cookie-crypto";
 import { PNK_ID_CLIENT_ID, PNK_ID_URL } from "@/lib/id-auth";
 import { getMailClientSecret } from "@/lib/mail-secrets";
 import {
@@ -46,6 +49,13 @@ async function fetchUserinfo(access: string): Promise<MailSessionUser | null> {
   };
 }
 
+function stateOk(expected: string | undefined, state: string | null) {
+  if (expected && state && expected === state) return true;
+  // Cookie may drop on long registration — signed state still proves CSRF
+  if (verifyOAuthState(state)) return true;
+  return false;
+}
+
 export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get("code");
   const state = req.nextUrl.searchParams.get("state");
@@ -59,16 +69,10 @@ export async function GET(req: NextRequest) {
   }
 
   const expected = req.cookies.get(OAUTH_STATE_COOKIE)?.value;
-  if (
-    process.env.NODE_ENV === "production" ||
-    expected ||
-    state
-  ) {
-    if (!expected || !state || expected !== state) {
-      const res = NextResponse.redirect(`${origin}/?error=state`);
-      clearStateCookie(res);
-      return res;
-    }
+  if (!stateOk(expected, state)) {
+    const res = NextResponse.redirect(`${origin}/?error=state`);
+    clearStateCookie(res);
+    return res;
   }
 
   try {

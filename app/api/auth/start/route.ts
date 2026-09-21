@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
 
   const res = NextResponse.redirect(u.toString(), 302);
   res.cookies.set(OAUTH_STATE_COOKIE, state, {
-    ...sessionCookieOptions(10 * 60),
+    ...sessionCookieOptions(2 * 60 * 60),
     sameSite: "lax",
   });
   return res;

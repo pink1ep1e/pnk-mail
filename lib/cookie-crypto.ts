@@ -37,10 +37,23 @@ export function verifySignedPayload(raw: string | undefined): string | null {
 }
 
 export function createOAuthState(): string {
-  return createHmac("sha256", vaultKey())
-    .update(`${Date.now()}:${Math.random()}`)
-    .digest("base64url")
-    .slice(0, 32);
+  const nonce = `${Date.now().toString(36)}.${Math.random().toString(36).slice(2, 12)}`;
+  return signPayload(nonce);
+}
+
+/** Accept state if HMAC-valid and not older than maxAgeMs (default 2h). */
+export function verifyOAuthState(
+  state: string | null | undefined,
+  maxAgeMs = 2 * 60 * 60 * 1000,
+): boolean {
+  if (!state) return false;
+  const payload = verifySignedPayload(state);
+  if (!payload) return false;
+  const tsPart = payload.split(".")[0];
+  const t = parseInt(tsPart, 36);
+  if (!Number.isFinite(t)) return false;
+  const age = Date.now() - t;
+  return age >= 0 && age <= maxAgeMs;
 }
 
 export const OAUTH_STATE_COOKIE = "pnk_mail_oauth_state";
