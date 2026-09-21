@@ -24,6 +24,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  Reply,
   Search,
   Settings,
   ShieldAlert,
@@ -242,6 +243,9 @@ export default function MailApp() {
   const [toolbarMenu, setToolbarMenu] = useState<"folder" | "label" | null>(
     null,
   );
+  const [nameModal, setNameModal] = useState<"folder" | "label" | null>(null);
+  const [nameModalValue, setNameModalValue] = useState("");
+  const [nameModalBusy, setNameModalBusy] = useState(false);
   const [composeDraft, setComposeDraft] = useState<{
     id?: string | null;
     to?: string;
@@ -430,6 +434,18 @@ export default function MailApp() {
     };
   }, [profileOpen]);
 
+  useEffect(() => {
+    if (!nameModal) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !nameModalBusy) {
+        setNameModal(null);
+        setNameModalValue("");
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [nameModal, nameModalBusy]);
+
   // Mobile: edge swipe opens menu without dragging the page
   useEffect(() => {
     const isMobile = () => window.matchMedia("(max-width: 767px)").matches;
@@ -540,7 +556,8 @@ export default function MailApp() {
         return sum + (v?.unread ?? 0);
       }, 0) || inbox + news + social;
     const totalAll = Object.entries(counts).reduce((sum, [key, v]) => {
-      if (key === "trash" || key === "attachments") return sum;
+      if (key === "trash" || key === "attachments" || key === "drafts")
+        return sum;
       return sum + (v?.total ?? 0);
     }, 0);
     base.all = { unread: totalUnread, total: totalAll };
@@ -571,7 +588,12 @@ export default function MailApp() {
     );
   }, [items, query]);
 
-  const hasSelection = selected.size > 0;
+  const targetIds = useMemo(() => {
+    if (selected.size > 0) return [...selected];
+    if (openId) return [openId];
+    return [] as string[];
+  }, [selected, openId]);
+  const hasTargets = targetIds.length > 0;
   const allSelected =
     visible.length > 0 && visible.every((m) => selected.has(m.id));
 
@@ -655,15 +677,15 @@ export default function MailApp() {
   };
 
   const markUnread = (unread: boolean) => {
-    if (!hasSelection) return;
-    void patchMessages([...selected], unread ? "unread" : "read").then(() =>
+    if (!hasTargets) return;
+    void patchMessages(targetIds, unread ? "unread" : "read").then(() =>
       clearSelection(),
     );
   };
 
   const moveSelected = (action: "trash" | "spam" | "archive" | "restore" | "delete") => {
-    if (!hasSelection) return;
-    const ids = [...selected];
+    if (!hasTargets) return;
+    const ids = [...targetIds];
     void patchMessages(ids, action).then((ok) => {
       clearSelection();
       setToolbarMenu(null);
@@ -694,8 +716,8 @@ export default function MailApp() {
   };
 
   const moveToFolder = (folderId: string) => {
-    if (!hasSelection) return;
-    const ids = [...selected];
+    if (!hasTargets) return;
+    const ids = [...targetIds];
     void patchMessages(ids, "move", { folder: folderId }).then((ok) => {
       clearSelection();
       setToolbarMenu(null);
@@ -709,8 +731,8 @@ export default function MailApp() {
   };
 
   const applyLabel = (labelId: string) => {
-    if (!hasSelection) return;
-    void patchMessages([...selected], "label", { labelId }).then((ok) => {
+    if (!hasTargets) return;
+    void patchMessages([...targetIds], "label", { labelId }).then((ok) => {
       clearSelection();
       setToolbarMenu(null);
       if (ok) showToast("Метка добавлена");
@@ -718,63 +740,97 @@ export default function MailApp() {
   };
 
   const remindSelected = () => {
-    if (!hasSelection) return;
-    void patchMessages([...selected], "remind").then((ok) => {
+    if (!hasTargets) return;
+    void patchMessages([...targetIds], "remind").then((ok) => {
       clearSelection();
       if (ok) showToast("Напоминание на завтра");
     });
   };
 
-  const forwardSelected = async () => {
-    if (!hasSelection) return;
-    const id = [...selected][0];
+  const openComposeFromMessage = async (
+    id: string,
+    mode: "reply" | "forward",
+  ) => {
     const res = await fetch(`/api/mail/messages/${id}`, { cache: "no-store" });
     const json = await res.json();
     if (!json.ok || !json.data?.message) return;
     const m = json.data.message as MessageDetail;
-    setComposeDraft({
-      id: null,
-      to: "",
-      cc: "",
-      subject: m.subject?.startsWith("Fwd:") ? m.subject : `Fwd: ${m.subject}`,
-      bodyHtml: `<p><br/></p><hr/><p><strong>Пересылаемое сообщение</strong></p><p>От: ${m.from} &lt;${m.fromEmail}&gt;</p>${m.bodyHtml || ""}`,
-    });
+    const when = m.time || "";
+    if (mode === "reply") {
+      const subj = m.subject || "";
+      setComposeDraft({
+        id: null,
+        to: m.fromEmail || "",
+        cc: "",
+        subject: /^re:/i.test(subj) ? subj : `Re: ${subj}`,
+        bodyHtml: `<p><br/></p><p><br/></p><blockquote style="margin:0;padding-left:12px;border-left:3px solid rgba(255,255,255,0.18);color:rgba(255,255,255,0.55);"><p>${when ? `${when}, ` : ""}<strong>${m.from || m.fromEmail || ""}</strong> &lt;${m.fromEmail || ""}&gt;:</p>${m.bodyHtml || `<p>${m.preview || ""}</p>`}</blockquote>`,
+      });
+    } else {
+      const subj = m.subject || "";
+      setComposeDraft({
+        id: null,
+        to: "",
+        cc: "",
+        subject: /^fwd:/i.test(subj) ? subj : `Fwd: ${subj}`,
+        bodyHtml: `<p><br/></p><hr/><p><strong>Пересылаемое сообщение</strong></p><p>От: ${m.from} &lt;${m.fromEmail}&gt;</p>${m.bodyHtml || ""}`,
+      });
+    }
     setComposeOpen(true);
     clearSelection();
+    setToolbarMenu(null);
   };
 
-  const addCustomFolder = async () => {
-    const name = window.prompt("Название папки");
-    if (!name?.trim()) return;
-    const res = await fetch("/api/mail/folders", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: name.trim() }),
-    });
-    const json = await res.json();
-    if (!json.ok) {
-      showToast(json.error?.message || "Не удалось создать папку");
-      return;
-    }
-    setCustomFolders((prev) => [...prev, json.data.folder as CustomFolder]);
-    showToast("Папка создана");
+  const replySelected = () => {
+    if (!hasTargets) return;
+    void openComposeFromMessage(targetIds[0], "reply");
   };
 
-  const addMailLabel = async () => {
-    const name = window.prompt("Название метки");
-    if (!name?.trim()) return;
-    const res = await fetch("/api/mail/labels", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: name.trim() }),
-    });
-    const json = await res.json();
-    if (!json.ok) {
-      showToast(json.error?.message || "Не удалось создать метку");
-      return;
+  const forwardSelected = () => {
+    if (!hasTargets) return;
+    void openComposeFromMessage(targetIds[0], "forward");
+  };
+
+  const openNameModal = (kind: "folder" | "label") => {
+    setNameModalValue("");
+    setNameModal(kind);
+    setToolbarMenu(null);
+    setSidebarOpen(false);
+  };
+
+  const submitNameModal = async () => {
+    const name = nameModalValue.trim();
+    if (!name || !nameModal || nameModalBusy) return;
+    setNameModalBusy(true);
+    try {
+      const endpoint =
+        nameModal === "folder" ? "/api/mail/folders" : "/api/mail/labels";
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const json = await res.json();
+      if (!json.ok) {
+        showToast(
+          json.error?.message ||
+            (nameModal === "folder"
+              ? "Не удалось создать папку"
+              : "Не удалось создать метку"),
+        );
+        return;
+      }
+      if (nameModal === "folder") {
+        setCustomFolders((prev) => [...prev, json.data.folder as CustomFolder]);
+        showToast("Папка создана");
+      } else {
+        setMailLabels((prev) => [...prev, json.data.label as MailLabelItem]);
+        showToast("Метка создана");
+      }
+      setNameModal(null);
+      setNameModalValue("");
+    } finally {
+      setNameModalBusy(false);
     }
-    setMailLabels((prev) => [...prev, json.data.label as MailLabelItem]);
-    showToast("Метка создана");
   };
 
   const saveDraft = async (payload: {
@@ -910,11 +966,11 @@ export default function MailApp() {
   }) => (
     <button
       type="button"
-      disabled={!hasSelection}
+      disabled={!hasTargets}
       onClick={onClick}
       className={cn(
         "h-9 px-2 rounded-[10px] inline-flex items-center gap-1.5 text-[13px] font-[family-name:var(--font-manrope)] shrink-0 transition-colors",
-        !hasSelection
+        !hasTargets
           ? "text-white/25 cursor-default"
           : danger
             ? "text-white/55 hover:bg-white/5 hover:text-red-400"
@@ -1067,7 +1123,7 @@ export default function MailApp() {
           <span>Мои папки</span>
           <button
             type="button"
-            onClick={() => void addCustomFolder()}
+            onClick={() => openNameModal("folder")}
             className="h-6 w-6 rounded-md hover:bg-white/5 flex items-center justify-center"
             aria-label="Добавить папку"
           >
@@ -1154,19 +1210,11 @@ export default function MailApp() {
         <div className="mt-4 px-1 space-y-0.5 pb-3">
           <button
             type="button"
-            onClick={() => void addMailLabel()}
+            onClick={() => openNameModal("label")}
             className="w-full h-9 rounded-[10px] px-3 text-left text-[13px] text-white/40 font-[family-name:var(--font-manrope)] hover:bg-white/5 hover:text-white/70 inline-flex items-center gap-2"
           >
             <Plus size={14} />
             Добавить метку
-          </button>
-          <button
-            type="button"
-            onClick={addAccount}
-            className="w-full h-9 rounded-[10px] px-3 text-left text-[13px] text-white/40 font-[family-name:var(--font-manrope)] hover:bg-white/5 hover:text-white/70 inline-flex items-center gap-2"
-          >
-            <Plus size={14} />
-            Добавить ящик
           </button>
         </div>
       </nav>
@@ -1531,6 +1579,11 @@ export default function MailApp() {
                 />
               </div>
               <ToolbarBtn
+                icon={Reply}
+                label="Ответить"
+                onClick={() => void replySelected()}
+              />
+              <ToolbarBtn
                 icon={Forward}
                 label="Переслать"
                 onClick={() => void forwardSelected()}
@@ -1588,8 +1641,8 @@ export default function MailApp() {
                 />
               ) : null}
 
-              {toolbarMenu === "folder" && hasSelection && (
-                <div className="absolute left-24 top-11 z-40 min-w-[200px] rounded-[14px] bg-[#1a1c22] shadow-xl overflow-hidden py-1">
+              {toolbarMenu === "folder" && hasTargets && (
+                <div className="absolute left-24 top-11 z-40 min-w-[200px] rounded-[14px] bg-[#1a1c22] shadow-xl overflow-hidden py-1 border border-white/10">
                   {[
                     { id: "inbox", name: "Входящие" },
                     { id: "archive", name: "Архив" },
@@ -1609,31 +1662,40 @@ export default function MailApp() {
                 </div>
               )}
 
-              {toolbarMenu === "label" && hasSelection && (
-                <div className="absolute left-48 top-11 z-40 min-w-[200px] rounded-[14px] bg-[#1a1c22] shadow-xl overflow-hidden py-1">
+              {toolbarMenu === "label" && hasTargets && (
+                <div className="absolute left-48 top-11 z-40 min-w-[200px] rounded-[14px] bg-[#1a1c22] shadow-xl overflow-hidden py-1 border border-white/10">
                   {mailLabels.length === 0 ? (
                     <button
                       type="button"
-                      onClick={() => void addMailLabel()}
+                      onClick={() => openNameModal("label")}
                       className="w-full px-3 py-2 text-left text-[13px] text-white/55 hover:bg-white/5"
                     >
                       Создать метку…
                     </button>
                   ) : (
-                    mailLabels.map((l) => (
+                    <>
+                      {mailLabels.map((l) => (
+                        <button
+                          key={l.id}
+                          type="button"
+                          onClick={() => applyLabel(l.id)}
+                          className="w-full px-3 py-2 text-left text-[13px] text-white/75 hover:bg-white/5 inline-flex items-center gap-2"
+                        >
+                          <span
+                            className="h-2.5 w-2.5 rounded-full"
+                            style={{ backgroundColor: l.color }}
+                          />
+                          {l.name}
+                        </button>
+                      ))}
                       <button
-                        key={l.id}
                         type="button"
-                        onClick={() => applyLabel(l.id)}
-                        className="w-full px-3 py-2 text-left text-[13px] text-white/75 hover:bg-white/5 inline-flex items-center gap-2"
+                        onClick={() => openNameModal("label")}
+                        className="w-full px-3 py-2 text-left text-[13px] text-white/45 hover:bg-white/5 border-t border-white/8"
                       >
-                        <span
-                          className="h-2.5 w-2.5 rounded-full"
-                          style={{ backgroundColor: l.color }}
-                        />
-                        {l.name}
+                        Создать метку…
                       </button>
-                    ))
+                    </>
                   )}
                 </div>
               )}
@@ -1764,6 +1826,24 @@ export default function MailApp() {
                       <span className="flex-1 text-[13px] text-white/30 font-[family-name:var(--font-manrope)] truncate px-1">
                         {detail?.subject || ""}
                       </span>
+                      <button
+                        type="button"
+                        className="h-8 px-2.5 rounded-full inline-flex items-center gap-1.5 text-[13px] text-white/50 hover:bg-white/5 hover:text-white font-[family-name:var(--font-manrope)]"
+                        onClick={() => void replySelected()}
+                        aria-label="Ответить"
+                      >
+                        <Reply size={15} />
+                        <span className="hidden sm:inline">Ответить</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="h-8 px-2.5 rounded-full inline-flex items-center gap-1.5 text-[13px] text-white/50 hover:bg-white/5 hover:text-white font-[family-name:var(--font-manrope)]"
+                        onClick={() => void forwardSelected()}
+                        aria-label="Переслать"
+                      >
+                        <Forward size={15} />
+                        <span className="hidden sm:inline">Переслать</span>
+                      </button>
                       <button
                         type="button"
                         className="h-8 w-8 rounded-full flex items-center justify-center text-white/40 hover:bg-white/5 hover:text-white"
@@ -1963,6 +2043,79 @@ export default function MailApp() {
           await loadMessages("sent");
         }}
       />
+
+      {nameModal && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center px-4 bg-black/65 backdrop-blur-sm"
+          onClick={() => {
+            if (!nameModalBusy) {
+              setNameModal(null);
+              setNameModalValue("");
+            }
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal
+            aria-labelledby="name-modal-title"
+            className="w-full max-w-[400px] rounded-[20px] bg-[#1a1c22] border border-white/10 shadow-[0_24px_80px_rgba(0,0,0,0.55)] p-5"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              if (e.key === "Escape" && !nameModalBusy) {
+                setNameModal(null);
+                setNameModalValue("");
+              }
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void submitNameModal();
+              }
+            }}
+          >
+            <h3
+              id="name-modal-title"
+              className="text-[17px] font-semibold text-white font-[family-name:var(--font-manrope)]"
+            >
+              {nameModal === "folder" ? "Новая папка" : "Новая метка"}
+            </h3>
+            <p className="mt-1 text-[13px] text-white/40 font-[family-name:var(--font-manrope)]">
+              {nameModal === "folder"
+                ? "Введите название папки"
+                : "Введите название метки"}
+            </p>
+            <input
+              autoFocus
+              value={nameModalValue}
+              onChange={(e) => setNameModalValue(e.target.value)}
+              placeholder={
+                nameModal === "folder" ? "Название папки" : "Название метки"
+              }
+              disabled={nameModalBusy}
+              className="mt-4 w-full h-12 rounded-[12px] bg-[#0f1115] border border-white/10 px-3.5 text-[15px] text-white font-[family-name:var(--font-manrope)] outline-none focus:border-[#0066ff]/60 focus:shadow-[0_0_0_3px_rgba(0,102,255,0.18)] placeholder:text-white/30"
+            />
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                disabled={nameModalBusy}
+                onClick={() => {
+                  setNameModal(null);
+                  setNameModalValue("");
+                }}
+                className="h-10 px-4 rounded-full text-[14px] text-white/55 hover:bg-white/5 hover:text-white font-[family-name:var(--font-manrope)] transition-colors"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                disabled={nameModalBusy || !nameModalValue.trim()}
+                onClick={() => void submitNameModal()}
+                className="h-10 px-5 rounded-full bg-[#0066ff] text-white text-[14px] font-semibold font-[family-name:var(--font-manrope)] hover:bg-[#0052cc] disabled:opacity-40 disabled:cursor-default transition-colors"
+              >
+                {nameModalBusy ? "Создание…" : "Создать"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {(sendError || toast) && (
         <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 max-w-[min(90vw,420px)] rounded-[14px] bg-[#2a2d36] px-4 py-3 text-[13px] text-white/80 shadow-lg font-[family-name:var(--font-manrope)]">

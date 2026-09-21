@@ -168,56 +168,31 @@ export function prepareMailReaderSrcDoc(html: string): string {
 }
 
 /**
- * Light-neutral shell for external clients (Gmail/Yandex).
- * In-app we store author HTML separately and render with prepareMailReaderSrcDoc.
+ * Minimal HTML document for external clients (no branding shell).
+ * Prefer sending author HTML as-is via sanitize + this only when a full doc is needed.
  */
-export function wrapMailHtml(params: {
-  bodyHtml: string;
-  preheader?: string;
-  title?: string;
-}): string {
-  const preheader = escapeHtml(params.preheader || "");
-  const title = escapeHtml(params.title || "pnk почта");
-  const body = sanitizeMailHtml(params.bodyHtml);
-  const base = process.env.NEXT_PUBLIC_MAIL_URL?.replace(/\/$/, "");
-  const logoSrc = `${base || ""}/logo-blue-text.svg`;
-
+export function outboundMailHtml(bodyHtml: string): string {
+  const body = sanitizeMailHtml(bodyHtml);
+  if (isFullHtmlDocument(body)) return body;
   return `<!DOCTYPE html>
 <html lang="ru">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${title}</title>
 </head>
-<body style="margin:0;padding:0;background:#0c0d10;font-family:Manrope,Segoe UI,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
-  <div style="display:none;max-height:0;overflow:hidden;opacity:0;">${preheader}</div>
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0c0d10;padding:28px 16px;">
-    <tr>
-      <td align="center">
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;">
-          <tr>
-            <td align="center" style="padding-bottom:18px;">
-              <img src="${escapeHtml(logoSrc)}" alt="pnk почта" width="132" height="70" style="display:block;margin:0 auto;border:0;width:132px;height:auto;" />
-            </td>
-          </tr>
-          <tr>
-            <td style="background:#1a1c22;border-radius:18px;padding:24px 22px;">
-              <div style="color:rgba(255,255,255,0.9);font-size:15px;line-height:1.65;">
-                ${body}
-              </div>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:16px 8px 0;color:rgba(255,255,255,0.28);font-size:12px;text-align:center;">
-              Отправлено через pnk почту · pnkmail.ru
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
+<body style="margin:0;padding:0;font-family:Segoe UI,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5;color:#222;">
+${body}
 </body>
 </html>`;
+}
+
+/** @deprecated Branding wrap removed — use outboundMailHtml / author HTML as-is. */
+export function wrapMailHtml(params: {
+  bodyHtml: string;
+  preheader?: string;
+  title?: string;
+}): string {
+  return outboundMailHtml(params.bodyHtml);
 }
 
 /** Welcome letter — short dark greeting with mail logo. */

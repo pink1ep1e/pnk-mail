@@ -10,7 +10,7 @@ import {
   parseAddressList,
   toListDto,
 } from "@/lib/mail-store";
-import { sanitizeMailHtml, wrapMailHtml } from "@/lib/mail-template";
+import { outboundMailHtml, sanitizeMailHtml } from "@/lib/mail-template";
 import { sendOutbound } from "@/lib/mail-transport";
 
 export async function POST(req: NextRequest) {
@@ -62,12 +62,8 @@ export async function POST(req: NextRequest) {
   const bodyHtml = sanitizeMailHtml(rawHtml);
   const bodyText = htmlToText(bodyHtml);
   const preview = htmlToPreview(bodyHtml);
-  // Branding wrap only for external SMTP; in-app stores author HTML as-is
-  const outboundHtml = wrapMailHtml({
-    bodyHtml,
-    title: subject,
-    preheader: preview,
-  });
+  // Author content only — no logo / branded card for Gmail/Yandex.
+  const outboundHtml = outboundMailHtml(bodyHtml);
 
   if (!toList.length) {
     return NextResponse.json(

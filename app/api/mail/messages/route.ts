@@ -21,11 +21,11 @@ export async function GET(req: NextRequest) {
 
   let folderWhere: Record<string, unknown> = {};
   if (folder === "all") {
-    folderWhere = { NOT: { folder: { in: ["trash", "spam"] } } };
+    folderWhere = { NOT: { folder: { in: ["trash", "spam", "drafts"] } } };
   } else if (folder === "attachments") {
     folderWhere = {
       hasAttachment: true,
-      NOT: { folder: { in: ["trash", "spam"] } },
+      NOT: { folder: { in: ["trash", "spam", "drafts"] } },
     };
   } else {
     folderWhere = { folder };
@@ -71,7 +71,7 @@ export async function GET(req: NextRequest) {
     where: {
       mailboxId: auth.ctx.mailboxId,
       hasAttachment: true,
-      NOT: { folder: { in: ["trash", "spam"] } },
+      NOT: { folder: { in: ["trash", "spam", "drafts"] } },
     },
   });
   const withAttachUnread = await prisma.message.count({
@@ -79,7 +79,7 @@ export async function GET(req: NextRequest) {
       mailboxId: auth.ctx.mailboxId,
       hasAttachment: true,
       unread: true,
-      NOT: { folder: { in: ["trash", "spam"] } },
+      NOT: { folder: { in: ["trash", "spam", "drafts"] } },
     },
   });
   counts.attachments = { total: withAttach, unread: withAttachUnread };
