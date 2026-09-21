@@ -21,6 +21,8 @@ export type MailMessage = {
   unread: boolean;
   hasAttachment?: boolean;
   avatarColor: string;
+  deliveryStatus?: string | null;
+  deliveryDetail?: string | null;
 };
 
 export const folders: {

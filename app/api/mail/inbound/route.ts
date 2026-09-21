@@ -1,6 +1,10 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import {
+  applyOutboundDeliveryEvent,
+  RESEND_OUTBOUND_EVENTS,
+} from "@/lib/mail-delivery";
+import {
   deliverInbound,
   fetchResendReceivedEmail,
   normalizeInboundAddresses,
@@ -144,8 +148,29 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    const eventType = typeof body.type === "string" ? body.type : "";
+
+    // --- Outbound delivery: sent / delivered / bounced / failed / … ---
+    if (RESEND_OUTBOUND_EVENTS.includes(eventType)) {
+      const data = (body.data || {}) as Record<string, unknown>;
+      console.info("[inbound] delivery event", {
+        type: eventType,
+        emailId: data.email_id,
+        to: data.to,
+        subject: data.subject,
+      });
+      const result = await applyOutboundDeliveryEvent({
+        type: eventType,
+        data,
+      });
+      return NextResponse.json({
+        ok: true,
+        data: { provider: "resend", event: eventType, ...result },
+      });
+    }
+
     // --- Resend email.received ---
-    if (body.type === "email.received") {
+    if (eventType === "email.received") {
       const data = (body.data || {}) as Record<string, unknown>;
       const emailId = String(data.email_id || data.id || "");
       console.info("[inbound] email.received", {
@@ -244,10 +269,10 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Ignore other Resend event types quietly (email.sent, etc.)
-    if (typeof body.type === "string" && body.type.startsWith("email.")) {
-      console.info("[inbound] ignore event", body.type);
-      return NextResponse.json({ ok: true, data: { ignored: body.type } });
+    // Ignore other Resend event types quietly (opened/clicked/scheduled…)
+    if (eventType.startsWith("email.")) {
+      console.info("[inbound] ignore event", eventType);
+      return NextResponse.json({ ok: true, data: { ignored: eventType } });
     }
 
     // --- Generic JSON ---
@@ -329,7 +354,7 @@ export async function GET() {
           : "НЕ ЗАДАНО — входящие не примутся",
       webhookUrlHint:
         "https://pnkmail.ru/api/mail/inbound?secret=ВАШ_MAIL_INBOUND_SECRET",
-      events: ["email.received (Resend)", "generic JSON"],
+      events: ["email.received", ...RESEND_OUTBOUND_EVENTS],
     },
   });
 }

@@ -23,29 +23,35 @@ model Mailbox {
 }
 
 model Message {
-  id            String    @id @default(cuid())
-  mailboxId     String
-  mailbox       Mailbox   @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
-  folder        String
-  fromName      String
-  fromEmail     String
-  toAddresses   String
-  ccAddresses   String    @default("")
-  subject       String
-  preview       String
-  bodyHtml      String    @default("")
-  bodyText      String    @default("")
-  unread        Boolean   @default(true)
-  hasAttachment Boolean   @default(false)
+  id             String    @id @default(cuid())
+  mailboxId      String
+  mailbox        Mailbox   @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
+  folder         String
+  fromName       String
+  fromEmail      String
+  toAddresses    String
+  ccAddresses    String    @default("")
+  subject        String
+  preview        String
+  bodyHtml       String    @default("")
+  bodyText       String    @default("")
+  unread         Boolean   @default(true)
+  hasAttachment  Boolean   @default(false)
   /// JSON array of MailLabel ids
-  labelIds      String    @default("[]")
-  remindAt      DateTime?
-  threadId      String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  labelIds       String    @default("[]")
+  remindAt       DateTime?
+  threadId       String?
+  /// Resend (or other) provider message id for outbound tracking
+  providerId     String?
+  /// queued | sent | delivered | delayed | bounced | failed | complained | suppressed
+  deliveryStatus String?
+  deliveryDetail String    @default("")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   @@index([mailboxId, folder, createdAt])
   @@index([mailboxId, unread])
+  @@index([providerId])
 }
 
 model MailFolder {

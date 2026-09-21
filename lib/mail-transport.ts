@@ -15,6 +15,8 @@ export type OutboundMail = {
   subject: string;
   bodyHtml: string;
   bodyText: string;
+  /** Resend tags for webhook correlation */
+  tags?: Record<string, string>;
 };
 
 export type TransportResult =
@@ -61,6 +63,9 @@ async function sendResend(mail: OutboundMail): Promise<TransportResult> {
       subject: mail.subject,
       html: mail.bodyHtml,
       text: mail.bodyText,
+      ...(mail.tags && Object.keys(mail.tags).length
+        ? { tags: mail.tags }
+        : {}),
     }),
   });
 

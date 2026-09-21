@@ -76,6 +76,30 @@ type MessageDetail = MailMessage & {
   cc?: string;
 };
 
+function deliveryBadge(status?: string | null): {
+  text: string;
+  className: string;
+} | null {
+  if (!status) return null;
+  switch (status) {
+    case "delivered":
+      return { text: "доставлено", className: "text-emerald-400/90" };
+    case "sent":
+    case "queued":
+      return { text: "отправл.", className: "text-white/35" };
+    case "delayed":
+      return { text: "задержка", className: "text-amber-400/90" };
+    case "bounced":
+    case "failed":
+    case "suppressed":
+      return { text: "не доставлено", className: "text-red-400/90" };
+    case "complained":
+      return { text: "спам", className: "text-orange-400/90" };
+    default:
+      return null;
+  }
+}
+
 function parseEmailsLoose(raw: string | undefined): string[] {
   if (!raw?.trim()) return [];
   return raw
@@ -1839,6 +1863,25 @@ export default function MailApp() {
                                 className="text-white/30 hidden sm:block"
                               />
                             )}
+                            {(() => {
+                              const badge = deliveryBadge(m.deliveryStatus);
+                              if (
+                                !badge ||
+                                (folder !== "sent" && m.folder !== "sent")
+                              )
+                                return null;
+                              return (
+                                <span
+                                  className={cn(
+                                    "hidden sm:inline text-[11px] font-[family-name:var(--font-manrope)]",
+                                    badge.className,
+                                  )}
+                                  title={m.deliveryDetail || undefined}
+                                >
+                                  {badge.text}
+                                </span>
+                              );
+                            })()}
                             <span className="w-[48px] md:w-[56px] text-right text-[12px] md:text-[13px] text-white/35 font-[family-name:var(--font-manrope)] tabular-nums">
                               {m.time}
                             </span>

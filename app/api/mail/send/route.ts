@@ -83,6 +83,11 @@ export async function POST(req: NextRequest) {
   const toJoined = toList.join(", ");
   const ccJoined = ccList.join(", ");
 
+  const internal = [...new Set([...toList, ...ccList])].filter(isPnkMailAddress);
+  const external = [...new Set([...toList, ...ccList])].filter(
+    (a) => !isPnkMailAddress(a),
+  );
+
   const sent = await prisma.message.create({
     data: {
       mailboxId: auth.ctx.mailboxId,
@@ -97,13 +102,10 @@ export async function POST(req: NextRequest) {
       bodyText,
       unread: false,
       hasAttachment: false,
+      deliveryStatus: external.length ? "queued" : "delivered",
+      deliveryDetail: external.length ? "" : "internal",
     },
   });
-
-  const internal = [...new Set([...toList, ...ccList])].filter(isPnkMailAddress);
-  const external = [...new Set([...toList, ...ccList])].filter(
-    (a) => !isPnkMailAddress(a),
-  );
 
   for (const address of internal) {
     if (address === fromEmail) continue;
@@ -155,9 +157,20 @@ export async function POST(req: NextRequest) {
         subject,
         bodyHtml: outboundHtml,
         bodyText,
+        tags: {
+          pnk_msg: sent.id,
+          pnk_mb: auth.ctx.mailboxId,
+        },
       });
       if (!result.ok) {
         transportWarning = result.error;
+        await prisma.message.update({
+          where: { id: sent.id },
+          data: {
+            deliveryStatus: "failed",
+            deliveryDetail: result.error.slice(0, 1000),
+          },
+        });
         console.error("[mail-send] outbound failed", {
           to: toSend,
           cc: ccSend,
@@ -165,6 +178,14 @@ export async function POST(req: NextRequest) {
           mode: process.env.MAIL_TRANSPORT || "console",
         });
       } else {
+        await prisma.message.update({
+          where: { id: sent.id },
+          data: {
+            providerId: result.providerId || null,
+            deliveryStatus: "sent",
+            deliveryDetail: "",
+          },
+        });
         console.info("[mail-send] outbound ok", {
           to: toSend,
           providerId: result.providerId,

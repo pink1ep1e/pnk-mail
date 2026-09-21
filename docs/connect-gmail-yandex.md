@@ -143,21 +143,32 @@ pm2 logs pnk-mail --lines 80
    MAIL_INBOUND_SECRET=$(openssl rand -hex 32)
    RESEND_API_KEY=re_...
    ```
-4. Webhook в Resend: событие **`email.received`** → URL **с секретом в query**:
+4. Webhook в Resend → URL **с секретом**:
 
 ```text
 https://pnkmail.ru/api/mail/inbound?secret=ТВОЙ_MAIL_INBOUND_SECRET
 ```
 
-> Без `?secret=...` Resend стучится → 401, в `pm2 logs` раньше было пусто. Теперь будет `[inbound] auth failed`.
+Включи **все** нужные события:
+
+| Событие | Зачем |
+|---------|--------|
+| `email.received` | Входящие с Gmail/Яндекс → ящик |
+| `email.sent` | Отправка принята Resend |
+| `email.delivered` | Доставлено на сервер получателя |
+| `email.delivery_delayed` | Временная задержка |
+| `email.bounced` | Отклонено (неверный адрес и т.п.) |
+| `email.failed` | Ошибка отправки |
+| `email.complained` | Получатель нажал «Спам» |
+| `email.suppressed` | Адрес в suppression list |
+
+При bounce/failed во «Входящие» придёт служебное письмо «Не доставлено…».
 
 5. Проверка:
    ```bash
    curl -s https://pnkmail.ru/api/mail/inbound
-   # authConfigured: true
    pm2 logs pnk-mail --lines 50
    ```
-6. Отправь тест с Gmail → в логах должно быть `[inbound] hit` → `[inbound] delivered`
 
 Подробно: [mail-dns.md](./mail-dns.md)
 

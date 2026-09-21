@@ -154,6 +154,8 @@ export function toListDto(row: {
   unread: boolean;
   hasAttachment: boolean;
   createdAt: Date;
+  deliveryStatus?: string | null;
+  deliveryDetail?: string | null;
 }): MailMessage {
   return {
     id: row.id,
@@ -166,6 +168,8 @@ export function toListDto(row: {
     unread: row.unread,
     hasAttachment: row.hasAttachment || undefined,
     avatarColor: avatarColor(row.fromEmail || row.fromName),
+    deliveryStatus: row.deliveryStatus || null,
+    deliveryDetail: row.deliveryDetail || null,
   };
 }
 
