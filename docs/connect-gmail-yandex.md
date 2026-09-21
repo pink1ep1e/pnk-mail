@@ -138,14 +138,26 @@ pm2 logs pnk-mail --lines 80
 
 1. В Resend для домена включи **Receiving**  
 2. Поставь **MX** записи из Resend (замени старые MX, если были)  
-3. В `.env`: `MAIL_INBOUND_SECRET=...` (`openssl rand -hex 32`)  
-4. Webhook в Resend: событие `email.received` →  
+3. В `.env`:
+   ```env
+   MAIL_INBOUND_SECRET=$(openssl rand -hex 32)
+   RESEND_API_KEY=re_...
+   ```
+4. Webhook в Resend: событие **`email.received`** → URL **с секретом в query**:
 
 ```text
 https://pnkmail.ru/api/mail/inbound?secret=ТВОЙ_MAIL_INBOUND_SECRET
 ```
 
-5. `git pull` + `npm run build` + `pm2 restart` (если ещё не с кодом inbound)
+> Без `?secret=...` Resend стучится → 401, в `pm2 logs` раньше было пусто. Теперь будет `[inbound] auth failed`.
+
+5. Проверка:
+   ```bash
+   curl -s https://pnkmail.ru/api/mail/inbound
+   # authConfigured: true
+   pm2 logs pnk-mail --lines 50
+   ```
+6. Отправь тест с Gmail → в логах должно быть `[inbound] hit` → `[inbound] delivered`
 
 Подробно: [mail-dns.md](./mail-dns.md)
 
@@ -169,3 +181,6 @@ https://pnkmail.ru/api/mail/inbound?secret=ТВОЙ_MAIL_INBOUND_SECRET
 | Resend error domain not verified | DNS не готов / не те записи |
 | Только в спаме | Нет DKIM/DMARC или новый домен |
 | From запрещён | From должен быть `@pnkmail.ru` на verified домене |
+| В Resend письмо есть, в почте нет, логи пустые | Webhook без `?secret=` или нет `MAIL_INBOUND_SECRET` в `.env` |
+| `[inbound] auth failed` | Секрет в URL ≠ секрет в `.env` — поправь webhook URL |
+| `[inbound] no matching @domain recipients` | Письмо пришло не на существующий ящик `@pnkmail.ru` |

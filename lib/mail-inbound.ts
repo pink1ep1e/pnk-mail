@@ -75,6 +75,12 @@ export async function deliverInbound(
   const ours = recipients.filter(
     (a) => a.endsWith(`@${domain}`) || isPnkMailAddress(a),
   );
+  if (!ours.length) {
+    console.warn("[inbound] no matching @domain recipients", {
+      domain,
+      recipients,
+    });
+  }
   const unknown: string[] = [];
   const delivered: string[] = [];
   const skipped: string[] = [];
@@ -146,14 +152,19 @@ export async function fetchResendReceivedEmail(emailId: string): Promise<{
   from: string;
   to: string[];
   cc: string[];
+  received_for?: string[];
   subject: string;
   html: string | null;
   text: string | null;
   message_id?: string | null;
+  headers?: Record<string, string>;
   attachments?: unknown[];
 } | null> {
   const key = process.env.RESEND_API_KEY;
-  if (!key) return null;
+  if (!key) {
+    console.error("[inbound] RESEND_API_KEY не задан — нельзя скачать тело письма");
+    return null;
+  }
 
   const res = await fetch(
     `https://api.resend.com/emails/receiving/${encodeURIComponent(emailId)}`,
@@ -163,17 +174,23 @@ export async function fetchResendReceivedEmail(emailId: string): Promise<{
     },
   );
   if (!res.ok) {
-    console.error("resend receiving get failed", res.status, await res.text());
+    console.error(
+      "[inbound] resend receiving get failed",
+      res.status,
+      await res.text(),
+    );
     return null;
   }
   return (await res.json()) as {
     from: string;
     to: string[];
     cc: string[];
+    received_for?: string[];
     subject: string;
     html: string | null;
     text: string | null;
     message_id?: string | null;
+    headers?: Record<string, string>;
     attachments?: unknown[];
   };
 }

@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import {
   deliverInbound,
@@ -10,30 +11,109 @@ import { clientIp, rateLimit } from "@/lib/rate-limit";
 /**
  * Inbound webhook for external mail (Yandex/Gmail/…).
  *
- * Auth: Authorization: Bearer <MAIL_INBOUND_SECRET>
- *    or ?secret=<MAIL_INBOUND_SECRET>
+ * Auth (any one):
+ *  - ?secret=<MAIL_INBOUND_SECRET>
+ *  - Authorization: Bearer <MAIL_INBOUND_SECRET>
+ *  - Svix headers + RESEND_WEBHOOK_SECRET (whsec_… from Resend webhook)
  *
  * Formats:
- * 1) Resend `email.received` webhook (fetches body via Receiving API)
- * 2) Generic JSON: { from, to, subject, html?, text?, cc?, messageId? }
+ *  1) Resend `email.received` (body fetched via Receiving API)
+ *  2) Generic JSON: { from, to, subject, html?, text?, cc?, messageId? }
  */
-export async function POST(req: NextRequest) {
-  const secret = process.env.MAIL_INBOUND_SECRET?.trim();
-  if (!secret) {
-    return NextResponse.json(
-      { ok: false, error: { message: "MAIL_INBOUND_SECRET не задан" } },
-      { status: 503 },
-    );
+function authorizeInbound(
+  req: NextRequest,
+  rawBody: string,
+): { ok: true } | { ok: false; reason: string } {
+  const inboundSecret = process.env.MAIL_INBOUND_SECRET?.trim();
+  const webhookSecret = process.env.RESEND_WEBHOOK_SECRET?.trim();
+
+  if (!inboundSecret && !webhookSecret) {
+    return { ok: false, reason: "MAIL_INBOUND_SECRET / RESEND_WEBHOOK_SECRET не заданы" };
   }
 
-  const auth =
-    req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ||
-    req.nextUrl.searchParams.get("secret") ||
-    "";
-  if (auth !== secret) {
+  const bearer =
+    req.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim() || "";
+  const querySecret = (req.nextUrl.searchParams.get("secret") || "").trim();
+  const headerSecret = (
+    req.headers.get("x-mail-inbound-secret") ||
+    req.headers.get("x-webhook-secret") ||
+    ""
+  ).trim();
+
+  if (
+    inboundSecret &&
+    (bearer === inboundSecret ||
+      querySecret === inboundSecret ||
+      headerSecret === inboundSecret)
+  ) {
+    return { ok: true };
+  }
+
+  if (webhookSecret) {
+    const svixId = req.headers.get("svix-id");
+    const svixTs = req.headers.get("svix-timestamp");
+    const svixSig = req.headers.get("svix-signature");
+    if (svixId && svixTs && svixSig && verifySvix(webhookSecret, svixId, svixTs, svixSig, rawBody)) {
+      return { ok: true };
+    }
+  }
+
+  return {
+    ok: false,
+    reason:
+      "Unauthorized — в URL webhook добавьте ?secret=MAIL_INBOUND_SECRET или задайте RESEND_WEBHOOK_SECRET (whsec_…)",
+  };
+}
+
+function verifySvix(
+  secret: string,
+  id: string,
+  timestamp: string,
+  signatureHeader: string,
+  body: string,
+): boolean {
+  try {
+    const key = secret.startsWith("whsec_")
+      ? Buffer.from(secret.slice("whsec_".length), "base64")
+      : Buffer.from(secret, "base64");
+    const signed = `${id}.${timestamp}.${body}`;
+    const expected = createHmac("sha256", key).update(signed).digest("base64");
+    const expBuf = Buffer.from(expected);
+    const candidates = signatureHeader.split(/\s+/).flatMap((part) => {
+      const [ver, sig] = part.split(",");
+      if (ver === "v1" && sig) return [sig];
+      return [];
+    });
+    return candidates.some((sig) => {
+      try {
+        const got = Buffer.from(sig);
+        return got.length === expBuf.length && timingSafeEqual(got, expBuf);
+      } catch {
+        return false;
+      }
+    });
+  } catch (e) {
+    console.error("[inbound] svix verify error", e);
+    return false;
+  }
+}
+
+export async function POST(req: NextRequest) {
+  const rawBody = await req.text();
+  console.info("[inbound] hit", {
+    ip: clientIp(req),
+    hasAuthHeader: Boolean(req.headers.get("authorization")),
+    hasQuerySecret: Boolean(req.nextUrl.searchParams.get("secret")),
+    hasSvix: Boolean(req.headers.get("svix-signature")),
+    contentLength: rawBody.length,
+  });
+
+  const auth = authorizeInbound(req, rawBody);
+  if (!auth.ok) {
+    console.warn("[inbound] auth failed:", auth.reason);
     return NextResponse.json(
-      { ok: false, error: { message: "Unauthorized" } },
-      { status: 401 },
+      { ok: false, error: { message: auth.reason } },
+      { status: auth.reason.includes("не заданы") ? 503 : 401 },
     );
   }
 
@@ -49,11 +129,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const body = (await req.json().catch(() => null)) as Record<
-    string,
-    unknown
-  > | null;
+  let body: Record<string, unknown> | null = null;
+  try {
+    body = JSON.parse(rawBody) as Record<string, unknown>;
+  } catch {
+    body = null;
+  }
   if (!body) {
+    console.warn("[inbound] invalid JSON");
     return NextResponse.json(
       { ok: false, error: { message: "Invalid JSON" } },
       { status: 400 },
@@ -64,7 +147,15 @@ export async function POST(req: NextRequest) {
     // --- Resend email.received ---
     if (body.type === "email.received") {
       const data = (body.data || {}) as Record<string, unknown>;
-      const emailId = String(data.email_id || "");
+      const emailId = String(data.email_id || data.id || "");
+      console.info("[inbound] email.received", {
+        emailId,
+        from: data.from,
+        to: data.to,
+        received_for: data.received_for,
+        subject: data.subject,
+      });
+
       if (!emailId) {
         return NextResponse.json(
           { ok: false, error: { message: "email_id missing" } },
@@ -74,36 +165,89 @@ export async function POST(req: NextRequest) {
 
       const full = await fetchResendReceivedEmail(emailId);
       if (!full) {
+        console.warn(
+          "[inbound] receiving API failed — delivering from webhook metadata only",
+          emailId,
+        );
+      } else {
+        console.info("[inbound] receiving API ok", {
+          emailId,
+          from: full.from,
+          to: full.to,
+          received_for: full.received_for,
+          hasHtml: Boolean(full.html),
+          hasText: Boolean(full.text),
+        });
+      }
+
+      const from = parseInboundFrom(
+        full?.from ||
+          (full?.headers && typeof full.headers.from === "string"
+            ? full.headers.from
+            : "") ||
+          String(data.from || ""),
+      );
+
+      // Merge to + received_for — Resend often puts the real mailbox in received_for
+      const to = normalizeInboundAddresses([
+        ...(full?.to?.length ? full.to : []),
+        ...(full?.received_for?.length ? full.received_for : []),
+        ...(Array.isArray(data.to) ? data.to : []),
+        ...(Array.isArray(data.received_for) ? data.received_for : []),
+      ]);
+      const cc = normalizeInboundAddresses(
+        full?.cc?.length ? full.cc : data.cc,
+      );
+
+      if (!to.length) {
+        console.error("[inbound] no recipients after normalize", {
+          emailId,
+          dataTo: data.to,
+          dataReceivedFor: data.received_for,
+          fullTo: full?.to,
+          fullReceivedFor: full?.received_for,
+        });
         return NextResponse.json(
-          { ok: false, error: { message: "Не удалось загрузить письмо из Resend" } },
-          { status: 502 },
+          { ok: false, error: { message: "no recipients" } },
+          { status: 422 },
         );
       }
 
-      const from = parseInboundFrom(full.from || String(data.from || ""));
-      const to = normalizeInboundAddresses(
-        full.to?.length ? full.to : data.to || data.received_for,
-      );
-      const cc = normalizeInboundAddresses(full.cc?.length ? full.cc : data.cc);
       const result = await deliverInbound({
         fromName: from.name,
         fromEmail: from.email,
         to,
         cc,
-        subject: full.subject || String(data.subject || "(без темы)"),
-        bodyHtml: full.html || undefined,
-        bodyText: full.text || undefined,
+        subject:
+          full?.subject ||
+          String(data.subject || "(без темы)"),
+        bodyHtml: full?.html || undefined,
+        bodyText:
+          full?.text ||
+          (!full?.html
+            ? `(письмо получено, тело недоступно)\nОт: ${from.email}\nТема: ${String(data.subject || "")}`
+            : undefined),
         messageId:
-          full.message_id ||
+          full?.message_id ||
           (typeof data.message_id === "string" ? data.message_id : null),
-        hasAttachment: Array.isArray(full.attachments)
-          ? full.attachments.length > 0
+        hasAttachment: Array.isArray(full?.attachments)
+          ? full!.attachments!.length > 0
           : Array.isArray(data.attachments)
             ? data.attachments.length > 0
             : false,
       });
 
-      return NextResponse.json({ ok: true, data: { provider: "resend", ...result } });
+      console.info("[inbound] delivered", result);
+      return NextResponse.json({
+        ok: true,
+        data: { provider: "resend", emailId, ...result },
+      });
+    }
+
+    // Ignore other Resend event types quietly (email.sent, etc.)
+    if (typeof body.type === "string" && body.type.startsWith("email.")) {
+      console.info("[inbound] ignore event", body.type);
+      return NextResponse.json({ ok: true, data: { ignored: body.type } });
     }
 
     // --- Generic JSON ---
@@ -115,7 +259,9 @@ export async function POST(req: NextRequest) {
       );
     }
     const from = parseInboundFrom(fromRaw);
-    const to = normalizeInboundAddresses(body.to || body.recipients);
+    const to = normalizeInboundAddresses(
+      body.to || body.recipients || body.received_for,
+    );
     if (!to.length) {
       return NextResponse.json(
         { ok: false, error: { message: "to required" } },
@@ -153,9 +299,13 @@ export async function POST(req: NextRequest) {
       hasAttachment: Boolean(body.hasAttachment),
     });
 
-    return NextResponse.json({ ok: true, data: { provider: "generic", ...result } });
+    console.info("[inbound] generic delivered", result);
+    return NextResponse.json({
+      ok: true,
+      data: { provider: "generic", ...result },
+    });
   } catch (e) {
-    console.error("inbound webhook error", e);
+    console.error("[inbound] webhook error", e);
     return NextResponse.json(
       { ok: false, error: { message: "Inbound processing failed" } },
       { status: 500 },
@@ -165,11 +315,20 @@ export async function POST(req: NextRequest) {
 
 /** Health / docs hint */
 export async function GET() {
+  const hasSecret = Boolean(process.env.MAIL_INBOUND_SECRET?.trim());
+  const hasWebhookSecret = Boolean(process.env.RESEND_WEBHOOK_SECRET?.trim());
   return NextResponse.json({
     ok: true,
     data: {
       endpoint: "/api/mail/inbound",
-      auth: "Bearer MAIL_INBOUND_SECRET",
+      authConfigured: hasSecret || hasWebhookSecret,
+      auth: hasSecret
+        ? "Bearer / ?secret=MAIL_INBOUND_SECRET"
+        : hasWebhookSecret
+          ? "Svix RESEND_WEBHOOK_SECRET"
+          : "НЕ ЗАДАНО — входящие не примутся",
+      webhookUrlHint:
+        "https://pnkmail.ru/api/mail/inbound?secret=ВАШ_MAIL_INBOUND_SECRET",
       events: ["email.received (Resend)", "generic JSON"],
     },
   });
