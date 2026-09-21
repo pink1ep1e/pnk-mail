@@ -963,14 +963,19 @@ export default function MailApp() {
     );
 
     if (cached?.bodyHtml) {
-      setDetail(cached);
+      setDetail({ ...cached, unread: false });
       setDetailLoading(false);
+      // Still persist read on server (cache path used to skip the API)
+      if (fromList?.unread !== false) {
+        void patchMessages([id], "read");
+      }
       return;
     }
 
     if (fromList) {
       setDetail({
         ...fromList,
+        unread: false,
         bodyHtml: undefined,
         to: activeAccount?.email,
       });
@@ -984,7 +989,10 @@ export default function MailApp() {
       const json = await res.json();
       if (openIdRef.current !== id) return;
       if (json.ok && json.data?.message) {
-        const msg = json.data.message as MessageDetail;
+        const msg = {
+          ...(json.data.message as MessageDetail),
+          unread: false,
+        };
         detailCache.current.set(id, msg);
         setDetail(msg);
       }
@@ -997,7 +1005,7 @@ export default function MailApp() {
 
   const prefetchMessage = (id: string) => {
     if (detailCache.current.has(id)) return;
-    void fetch(`/api/mail/messages/${id}`, { cache: "no-store" })
+    void fetch(`/api/mail/messages/${id}?read=0`, { cache: "no-store" })
       .then((r) => r.json())
       .then((json) => {
         if (json.ok && json.data?.message) {

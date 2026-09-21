@@ -5,7 +5,7 @@ import { toListDto } from "@/lib/mail-store";
 
 type Params = { params: Promise<{ id: string }> };
 
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, { params }: Params) {
   const auth = await requireActiveMailbox();
   if (!auth.ok) {
     return NextResponse.json(
@@ -26,12 +26,14 @@ export async function GET(_req: NextRequest, { params }: Params) {
     );
   }
 
-  if (row.unread) {
-    row.unread = false;
-    void prisma.message.update({
+  // Prefetch uses ?read=0 so hover doesn't clear "новое"
+  const markRead = req.nextUrl.searchParams.get("read") !== "0";
+  if (markRead && row.unread) {
+    await prisma.message.update({
       where: { id: row.id },
       data: { unread: false },
     });
+    row.unread = false;
   }
 
   return NextResponse.json({
