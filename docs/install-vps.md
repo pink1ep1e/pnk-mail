@@ -1,189 +1,154 @@
-# Установка pnk-mail + pnk-id на VPS (по шагам)
+# Установка pnk-mail на VPS (PM2, без Docker)
 
-Репозитории:
-- Mail: https://github.com/pink1ep1e/pnk-mail
-- ID: https://github.com/pink1ep1e/pnk-id
+**Условие:** [pnk-id](https://github.com/pink1ep1e/pnk-id) уже работает под PM2 (порт **3100**).  
+Ставим только почту на порт **3000**.
 
-Стек: Docker (Postgres + id `:3100` + mail `:3000`) → Nginx + HTTPS.
-
-Минимум: **≥20 GB** диска (на 10 GB сборка двух Next часто падает).
+Репозиторий: https://github.com/pink1ep1e/pnk-mail
 
 ---
 
-## 0. DNS (сделай до certbot)
+## 0. Что должно быть готово
 
-У регистратора (reg.ru и т.п.), NS зоны `pnkmail.ru`:
+| Что | Проверка |
+|-----|----------|
+| Node **≥ 20** | `node -v` |
+| PM2 | `pm2 ls` — есть `pnk-id` |
+| PostgreSQL | та же БД, что у ID (или тот же сервер) |
+| DNS | `pnkmail.ru` → IP VPS; `id.pnkmail.ru` уже ок |
+| Nginx | `id.pnkmail.ru` → `127.0.0.1:3100` |
 
-| Тип | Имя | Значение |
-|-----|-----|----------|
-| A | `@` | IP VPS |
-| A | `www` | IP VPS |
-| A | `id` | IP VPS |
-
-Проверка с ПК:
-
-```powershell
-nslookup pnkmail.ru 8.8.8.8
-nslookup id.pnkmail.ru 8.8.8.8
-```
-
-Оба должны вернуть IP VPS. Без записи `id` OAuth не откроется.
-
----
-
-## 1. Пакеты на сервере
+Узнать пароль/юзера Postgres из `.env` ID:
 
 ```bash
-sudo apt update
-sudo apt install -y git docker.io docker-compose-v2 nginx certbot python3-certbot-nginx
-sudo systemctl enable --now docker
-sudo ufw allow OpenSSH
-sudo ufw allow 80/tcp
-sudo ufw allow 443/tcp
-sudo ufw enable
+# путь подставь свой, например /var/www/pnk-id или /opt/pnk/pnk-id
+grep DATABASE_URL /var/www/pnk-id/.env
+# пример: postgresql://pnk:SECRET@localhost:5432/pnk_id?schema=public
+```
+
+Нужна **вторая** БД `pnk_mail` на том же Postgres.
+
+---
+
+## 1. База `pnk_mail`
+
+```bash
+sudo -u postgres psql -c "CREATE DATABASE pnk_mail OWNER pnk;"
+# если юзер не pnk — замени на своего из DATABASE_URL ID
+# если БД уже есть — ошибка «already exists» нормальна
+```
+
+Или через `psql` с твоим пользователем:
+
+```bash
+psql "postgresql://pnk:ТВОЙ_ПАРОЛЬ@localhost:5432/postgres" -c "CREATE DATABASE pnk_mail;"
 ```
 
 ---
 
-## 2. Клонирование
+## 2. Клон / обновление кода
 
 ```bash
-sudo mkdir -p /opt/pnk && sudo chown $USER:$USER /opt/pnk
-cd /opt/pnk
-git clone https://github.com/pink1ep1e/pnk-id.git pnk-id
-git clone https://github.com/pink1ep1e/pnk-mail.git pnk-mail
-```
+# рядом с pnk-id, например:
+cd /var/www   # или /opt/pnk
+sudo git clone https://github.com/pink1ep1e/pnk-mail.git pnk-mail
+sudo chown -R $USER:$USER pnk-mail
 
-Структура:
-
-```text
-/opt/pnk/
-  pnk-id/
-  pnk-mail/   ← здесь .env и docker compose
+# если уже клонировали:
+cd /var/www/pnk-mail && git pull
 ```
 
 ---
 
-## 3. Секреты
+## 3. `.env.local`
 
 ```bash
-cd /opt/pnk/pnk-mail
-cp deploy/.env.example .env
-nano .env
+cd /var/www/pnk-mail
+cp .env.example .env.local
+nano .env.local
 ```
 
-Заполни (секреты: `openssl rand -hex 32`):
+Минимум (подставь свои значения):
 
 ```env
-POSTGRES_USER=pnk
-POSTGRES_PASSWORD=...          # без @ : # / ?
-JWT_SECRET=...
-SESSION_SECRET=...
-PNK_ID_CLIENT_SECRET=...       # один и тот же для id и mail
-MAIL_VAULT_SECRET=...
-APP_URL=https://id.pnkmail.ru
-NEXT_PUBLIC_PNK_ID_URL=https://id.pnkmail.ru
-NEXT_PUBLIC_MAIL_URL=https://pnkmail.ru
-MAIL_TRANSPORT=console
-MAIL_FROM_DOMAIN=pnkmail.ru
+DATABASE_URL="postgresql://pnk:ТВОЙ_ПАРОЛЬ@localhost:5432/pnk_mail?schema=public"
+
+NEXT_PUBLIC_PNK_ID_URL="https://id.pnkmail.ru"
+NEXT_PUBLIC_MAIL_URL="https://pnkmail.ru"
+
+# Тот же секрет, что у OAuth-клиента pnk-mail в БД ID (из seed / .env ID)
+PNK_ID_CLIENT_SECRET="..."
+
+MAIL_VAULT_SECRET="сгенерируй_openssl_rand_hex_32"
+
+MAIL_TRANSPORT="console"
+MAIL_FROM_DOMAIN="pnkmail.ru"
+# позже: MAIL_TRANSPORT=resend + RESEND_API_KEY=re_...
 ```
+
+Секреты:
+
+```bash
+openssl rand -hex 32
+```
+
+`PNK_ID_CLIENT_SECRET` должен совпадать с тем, что захеширован в ID при seed. Если не помнишь — посмотри в `.env` ID или пересейви клиент (шаг 5).
 
 ---
 
-## 4. Сборка и запуск (по одному — экономия места)
+## 4. Установка, схема, сборка, PM2
 
 ```bash
-cd /opt/pnk/pnk-mail
-df -h
-docker compose build pnk-id
-docker builder prune -af
-docker compose build pnk-mail
-docker compose up -d
-docker compose ps
-curl -sI http://127.0.0.1:3100 | head -3
+cd /var/www/pnk-mail
+
+# Node 20+ обязателен
+node -v
+
+npm ci
+npx prisma generate
+npx prisma db push
+npm run build
+
+# если mail уже был в pm2 — сначала удали старый
+pm2 delete pnk-mail 2>/dev/null || true
+
+pm2 start npm --name pnk-mail -- start -- -p 3000
+pm2 save
+pm2 startup   # один раз: выполни команду, которую выведет pm2
+
+pm2 ls
 curl -sI http://127.0.0.1:3000 | head -3
 ```
 
-Ожидание: оба `Up`, HTTP `200`.
-
-Если `No space left`:
-
-```bash
-docker compose stop pnk-id pnk-mail || true
-docker builder prune -af
-docker system prune -af
-rm -rf /opt/pnk/pnk-id/node_modules /opt/pnk/pnk-mail/node_modules
-df -h
-```
+Ожидание: процесс `pnk-mail` **online**, HTTP `200`.
 
 ---
 
-## 5. Схема БД + OAuth seed (один раз)
+## 5. OAuth-клиент в ID (если ещё не сидили)
 
-Схема **не** создаётся при старте контейнера. Нужен Node 20 в Docker (системный Node на VPS часто слишком старый).
-
-### 5.1 ID (таблицы + клиент `pnk-mail`)
+Если вход с почты падает на «unknown client» — в каталоге **pnk-id**:
 
 ```bash
-cd /opt/pnk/pnk-mail
-set -a && source .env && set +a
-NET=$(docker network ls --format '{{.Name}}' | grep -E 'pnk.*default' | head -1)
+cd /var/www/pnk-id
+# в .env должны быть:
+# NEXT_PUBLIC_MAIL_URL=https://pnkmail.ru
+# PNK_ID_CLIENT_SECRET=тот_же_что_в_mail_.env.local
 
-docker run --rm --network "$NET" \
-  -v /opt/pnk/pnk-id:/app -w /app \
-  -e NEXT_PUBLIC_MAIL_URL \
-  -e PNK_ID_CLIENT_SECRET \
-  -e SEED_DEMO_PASSWORD \
-  -e DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/pnk_id?schema=public" \
-  node:20-bookworm-slim \
-  bash -c "apt-get update -qq && apt-get install -y -qq openssl >/dev/null \
-    && npm ci && npx prisma generate \
-    && npx prisma db push --skip-generate \
-    && npx tsx prisma/seed.ts"
-
-rm -rf /opt/pnk/pnk-id/node_modules
+npm run db:seed
+# или: npx tsx prisma/seed.ts
 ```
 
-Ожидание: `Seed OK`.
-
-### 5.2 Mail (таблицы)
-
-```bash
-cd /opt/pnk/pnk-mail
-set -a && source .env && set +a
-NET=$(docker network ls --format '{{.Name}}' | grep -E 'pnk.*default' | head -1)
-
-docker run --rm --network "$NET" \
-  -v /opt/pnk/pnk-mail:/app -w /app \
-  -e DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/pnk_mail?schema=public" \
-  node:20-bookworm-slim \
-  bash -c "apt-get update -qq && apt-get install -y -qq openssl >/dev/null \
-    && npm ci && npx prisma generate && npx prisma db push --skip-generate"
-
-rm -rf /opt/pnk/pnk-mail/node_modules
-```
+Ожидание: `Seed OK` и redirect `https://pnkmail.ru/api/auth/callback/pnk-id`.
 
 ---
 
-## 6. Nginx + HTTPS
+## 6. Nginx для почты
 
-```bash
-sudo tee /etc/nginx/sites-available/pnk >/dev/null <<'EOF'
-server {
-  listen 80;
-  server_name id.pnkmail.ru;
-  location / {
-    proxy_pass http://127.0.0.1:3100;
-    proxy_http_version 1.1;
-    proxy_set_header Host $host;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-  }
-}
+Если в `/etc/nginx/sites-available/pnk` ещё нет блока mail — добавь `server` для `pnkmail.ru` (ID-блок не трогай):
 
+```nginx
 server {
-  listen 80;
   server_name pnkmail.ru www.pnkmail.ru;
+  client_max_body_size 20m;
   location / {
     proxy_pass http://127.0.0.1:3000;
     proxy_http_version 1.1;
@@ -192,49 +157,54 @@ server {
     proxy_set_header X-Forwarded-Proto $scheme;
   }
 }
-EOF
+```
 
-sudo ln -sf /etc/nginx/sites-available/pnk /etc/nginx/sites-enabled/pnk
-sudo rm -f /etc/nginx/sites-enabled/default
+```bash
 sudo nginx -t && sudo systemctl reload nginx
-
-# DNS id + @ уже должны указывать на этот IP
-sudo certbot --nginx -d id.pnkmail.ru -d pnkmail.ru -d www.pnkmail.ru
+# сертификат (если ещё не выпускал для mail):
+sudo certbot --nginx -d pnkmail.ru -d www.pnkmail.ru
+# или вместе с id:
+# sudo certbot --nginx -d id.pnkmail.ru -d pnkmail.ru -d www.pnkmail.ru
 ```
 
 ---
 
 ## 7. Проверка
 
-1. https://id.pnkmail.ru — кабинет ID  
-2. https://pnkmail.ru — почта → «Войти» → OAuth на ID → обратно в почту  
+1. https://pnkmail.ru — лендинг почты  
+2. «Войти» → https://id.pnkmail.ru → обратно в ящик  
+
+Логи:
+
+```bash
+pm2 logs pnk-mail --lines 50
+pm2 logs pnk-id --lines 50
+```
 
 ---
 
-## Обновление кода с GitHub
+## Обновление mail с GitHub
 
 ```bash
-cd /opt/pnk/pnk-id && git pull
-cd /opt/pnk/pnk-mail && git pull
-
-cd /opt/pnk/pnk-mail
-docker compose build pnk-id
-docker builder prune -af
-docker compose build pnk-mail
-docker compose up -d
-docker compose ps
+cd /var/www/pnk-mail
+git pull
+npm ci
+npx prisma generate
+npx prisma db push
+npm run build
+pm2 restart pnk-mail
 ```
 
 ---
 
 ## Частые проблемы
 
-| Симптом | Причина |
-|---------|---------|
-| `ERR_NAME_NOT_RESOLVED` на id | Нет A-записи `id` в DNS |
-| Certbot Timeout | Закрыты 80/443 (ufw / панель хостера) |
-| Чужой сайт на домене | Другой nginx site / старый хостинг |
-| `No space left` | Мало диска; prune + build по одному |
-| OAuth ошибка клиента | Не сделан seed или другой `PNK_ID_CLIENT_SECRET` |
+| Симптом | Что сделать |
+|---------|-------------|
+| `Unsupported engine` / Prisma `Unexpected token '?'` | Node слишком старый → поставь Node 20 (nodesource) |
+| `database "pnk_mail" does not exist` | Шаг 1 — создать БД |
+| OAuth / invalid client | Один `PNK_ID_CLIENT_SECRET` + `npm run db:seed` в ID |
+| `ERR_NAME_NOT_RESOLVED` | A-запись `pnkmail.ru` / `id` у регистратора |
+| Порт занят | `ss -tlnp \| grep 3000`, `pm2 ls` |
 
-Подробнее: [production.md](./production.md), исходящая почта: [mail-dns.md](./mail-dns.md).
+Исходящая почта (Resend/SES + SPF/DKIM): [mail-dns.md](./mail-dns.md).

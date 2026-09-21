@@ -2,7 +2,7 @@
 
 Почтовый веб-клиент (Next.js) + OAuth через [pnk-id](https://github.com/pink1ep1e/pnk-id).
 
-Иконки — **Streamline Flex Solid** (тот же набор, что в pnk-id): `import { Mail } from "@/lib/icons"`.
+Иконки — **Streamline Flex Solid** (как в pnk-id): `import { Mail } from "@/lib/icons"`.
 
 ## Локально
 
@@ -13,19 +13,20 @@ npx prisma db push
 npm run dev
 ```
 
-## Production (VPS + Docker)
+## Production на VPS (PM2)
 
-Пошагово: **[docs/install-vps.md](./docs/install-vps.md)**  
-Детали: [docs/production.md](./docs/production.md)
+pnk-id уже стоит → ставим только mail:
+
+**[docs/install-vps.md](./docs/install-vps.md)** — пошагово (Postgres `pnk_mail`, build, `pm2`, Nginx).
 
 ```bash
 git clone https://github.com/pink1ep1e/pnk-mail.git
-git clone https://github.com/pink1ep1e/pnk-id.git
-# см. install-vps.md
+# далее по install-vps.md
+pm2 start npm --name pnk-mail -- start -- -p 3000
 ```
 
 ## Иконки
 
 ```bash
-npm run icons:generate   # пересобрать lib/generated/solid-icons.ts
+npm run icons:generate
 ```
