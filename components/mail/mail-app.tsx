@@ -1169,12 +1169,12 @@ export default function MailApp() {
           transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
         >
           <Image
-            src="/logo-blue-bg.svg"
+            src="/logo-big-mail.svg"
             alt="pnk почта"
             width={200}
             height={200}
             priority
-            className="w-[160px] md:w-[200px] h-auto"
+            className="w-[160px] md:w-[200px] h-auto rounded-[36px]"
           />
         </motion.div>
 

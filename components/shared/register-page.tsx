@@ -57,11 +57,11 @@ export default function RegisterPage() {
     <div className="min-h-screen bg-[#0c0d10] text-white flex flex-col">
       <header className="pt-8 md:pt-10 pb-6 flex justify-center px-4">
         <Logo
-          variant="bg"
+          variant="mark"
           priority
           width={180}
-          height={96}
-          className="w-[140px] md:w-[180px]"
+          height={180}
+          className="w-[140px] md:w-[180px] rounded-[32px]"
         />
       </header>
 

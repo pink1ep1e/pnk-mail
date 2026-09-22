@@ -32,14 +32,14 @@ function InstallContent() {
   const [os, setOs] = useState<OS>(initial);
 
   return (
-    <div className="min-h-screen bg-[#0c0d10] text-white flex flex-col">
+    <div className="min-h-[100dvh] overflow-y-auto overscroll-y-contain bg-[#0c0d10] text-white flex flex-col">
       <header className="pt-8 md:pt-10 pb-8 flex flex-col items-center px-4">
         <Logo
-          variant="bg"
+          variant="mark"
           priority
           width={160}
-          height={86}
-          className="w-[120px] md:w-[150px]"
+          height={160}
+          className="w-[120px] md:w-[150px] rounded-[28px]"
         />
         <h1 className="mt-8 max-w-[640px] text-center font-[family-name:var(--font-unbounded)] font-bold text-[24px] md:text-[34px] leading-[1.2] tracking-[-0.02em]">
           Установите pnk почту на экран «Домой»
