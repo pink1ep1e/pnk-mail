@@ -35,6 +35,7 @@ import {
 } from "@/lib/icons";
 import ComposeEditor from "@/components/mail/compose-editor";
 import { PullToRefresh } from "@/components/mail/pull-to-refresh";
+import { SwipeMailRow } from "@/components/mail/swipe-mail-row";
 import { AppSplash } from "@/components/shared/app-splash";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { haptic } from "@/lib/haptic";
@@ -276,6 +277,7 @@ function SenderAvatar({
 
 function MailBodyFrame({ html }: { html: string }) {
   const ref = useRef<HTMLIFrameElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
   const branded = useMemo(() => isBrandedHtmlEmail(html || ""), [html]);
   const srcDoc = useMemo(() => prepareMailReaderSrcDoc(html), [html]);
 
@@ -283,34 +285,69 @@ function MailBodyFrame({ html }: { html: string }) {
     const iframe = ref.current;
     if (!iframe) return;
 
-    const resize = () => {
+    const fit = () => {
       const doc = iframe.contentDocument;
-      if (!doc?.documentElement) return;
-      const h = Math.max(
-        80,
-        doc.documentElement.scrollHeight,
-        doc.body?.scrollHeight || 0,
-      );
-      iframe.style.height = `${h}px`;
+      const body = doc?.body;
+      const root = doc?.documentElement;
+      if (!doc || !body || !root) return;
+
+      body.style.transform = "";
+      body.style.transformOrigin = "";
+      body.style.width = "";
+      root.style.overflowX = "visible";
+      body.style.overflowX = "visible";
+
+      const frameW =
+        iframe.clientWidth || wrapRef.current?.clientWidth || 0;
+      if (!frameW) return;
+
+      let contentW = Math.max(root.scrollWidth, body.scrollWidth);
+      body.querySelectorAll("table, img").forEach((el) => {
+        contentW = Math.max(contentW, (el as HTMLElement).scrollWidth || 0);
+      });
+
+      let scale = 1;
+      if (contentW > frameW + 2) {
+        scale = Math.max(0.5, Math.min(1, frameW / contentW));
+      }
+
+      if (scale < 1) {
+        body.style.transformOrigin = "top left";
+        body.style.transform = `scale(${scale})`;
+        body.style.width = `${100 / scale}%`;
+      }
+
+      root.style.overflowX = "hidden";
+      body.style.overflowX = "hidden";
+
+      const rawH = Math.max(root.scrollHeight, body.scrollHeight, 80);
+      iframe.style.height = `${Math.ceil(rawH * scale)}px`;
     };
 
-    iframe.addEventListener("load", resize);
-    resize();
-    const t1 = window.setTimeout(resize, 40);
-    const t2 = window.setTimeout(resize, 200);
-    const t3 = window.setTimeout(resize, 600);
+    iframe.addEventListener("load", fit);
+    fit();
+    const t1 = window.setTimeout(fit, 40);
+    const t2 = window.setTimeout(fit, 200);
+    const t3 = window.setTimeout(fit, 600);
+    const ro =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(() => fit())
+        : null;
+    if (wrapRef.current) ro?.observe(wrapRef.current);
     return () => {
-      iframe.removeEventListener("load", resize);
+      iframe.removeEventListener("load", fit);
       window.clearTimeout(t1);
       window.clearTimeout(t2);
       window.clearTimeout(t3);
+      ro?.disconnect();
     };
   }, [srcDoc]);
 
   return (
     <div
+      ref={wrapRef}
       className={cn(
-        "w-full overflow-hidden rounded-[16px] border",
+        "w-full overflow-hidden rounded-[16px] border mx-auto",
         branded
           ? "bg-white border-white/15 shadow-[0_0_0_1px_rgba(255,255,255,0.04)]"
           : "bg-[#0c0d10] border-white/8",
@@ -392,6 +429,7 @@ export default function MailApp() {
   const [counts, setCounts] = useState<FolderCounts>({});
   const [loadingMail, setLoadingMail] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [swipeOpenId, setSwipeOpenId] = useState<string | null>(null);
   const [detail, setDetail] = useState<MessageDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [sendError, setSendError] = useState("");
@@ -620,7 +658,7 @@ export default function MailApp() {
       if (!isMobile()) return;
       if (sidebarOpen || composeOpen || searchOpen) return;
       const t = e.touches[0];
-      if (!t || t.clientX > 24) {
+      if (!t || t.clientX > 48) {
         tracking = false;
         return;
       }
@@ -657,7 +695,7 @@ export default function MailApp() {
       const dy = t.clientY - startY;
       locked = null;
       if (dx > 56 && Math.abs(dy) < 50) {
-        haptic("light");
+        setSwipeOpenId(null);
         setSidebarOpen(true);
       }
     };
@@ -671,6 +709,10 @@ export default function MailApp() {
       document.removeEventListener("touchend", onTouchEnd);
     };
   }, [sidebarOpen, composeOpen, searchOpen]);
+
+  useEffect(() => {
+    if (sidebarOpen) setSwipeOpenId(null);
+  }, [sidebarOpen]);
 
   useEffect(() => {
     if (!sidebarOpen) return;
@@ -993,6 +1035,29 @@ export default function MailApp() {
     void openComposeFromMessage(targetIds[0], "reply");
   };
 
+  const replyMessage = (id: string) => {
+    setSwipeOpenId(null);
+    void openComposeFromMessage(id, "reply");
+  };
+
+  const trashMessage = (id: string) => {
+    setSwipeOpenId(null);
+    const action = folder === "trash" ? "delete" : "trash";
+    void patchMessages([id], action).then((ok) => {
+      if (ok) {
+        showToast(
+          action === "delete" ? "Удалено навсегда" : "Перемещено в удалённые",
+        );
+      }
+      if (openId === id) {
+        setOpenId(null);
+        openIdRef.current = null;
+        setDetail(null);
+        setThread([]);
+      }
+    });
+  };
+
   const forwardSelected = () => {
     if (!hasTargets) return;
     void openComposeFromMessage(targetIds[0], "forward");
@@ -1196,6 +1261,7 @@ export default function MailApp() {
     setFolder(id);
     clearSelection();
     setSidebarOpen(false);
+    setSwipeOpenId(null);
     setOpenId(null);
     openIdRef.current = null;
     setDetail(null);
@@ -1525,115 +1591,125 @@ export default function MailApp() {
 
               <AnimatePresence>
                 {profileOpen && (
-                  <motion.div
-                    key="account-menu"
-                    initial={{ opacity: 0, scale: 0.86, y: -8 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.9, y: -6 }}
-                    transition={{
-                      type: "spring",
-                      stiffness: 520,
-                      damping: 34,
-                      mass: 0.65,
-                    }}
-                    style={{ transformOrigin: "calc(100% - 20px) 0%" }}
-                    className="absolute right-0 top-[calc(100%+10px)] w-[min(calc(100vw-24px),340px)] rounded-[24px] bg-[#12141a] border border-white/16 shadow-[0_24px_80px_rgba(0,0,0,0.72)] p-3 z-50"
-                  >
-                  <div className="rounded-[16px] bg-[#1a1c22] border border-white/8 overflow-hidden mb-2">
-                    <div className="flex items-center gap-3 px-3 py-3">
-                      <AccountAvatar account={activeAccount} size={56} />
-                      <div className="min-w-0 flex-1">
-                        <p className="font-[family-name:var(--font-manrope)] font-semibold text-[15px] truncate">
-                          {activeAccount.name}
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => copyEmail("profile")}
-                          title="Скопировать адрес"
-                          className="relative text-[13px] text-white/45 font-[family-name:var(--font-manrope)] truncate hover:text-white/80 transition-colors text-left max-w-full"
-                        >
-                          <span className="truncate block">
-                            {activeAccount.email}
-                          </span>
-                          {copied === "profile" && (
-                            <span
-                              role="status"
-                              className="absolute left-0 top-[calc(100%+6px)] z-50 whitespace-nowrap rounded-[10px] bg-[#2a2d36] border border-white/10 px-2.5 py-1.5 text-[12px] text-white shadow-[0_8px_24px_rgba(0,0,0,0.45)] pointer-events-none"
-                            >
-                              Скопировано
-                            </span>
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="rounded-[16px] bg-[#1a1c22] border border-white/8 overflow-hidden mb-3">
-                    {accounts
-                      .filter((a) => !a.active)
-                      .map((a) => (
-                        <button
-                          key={a.id}
-                          type="button"
-                          onClick={() => void switchAccount(a.id)}
-                          className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/[0.04] transition-colors text-left"
-                        >
-                          <AccountAvatar account={a} size={36} />
-                          <div className="min-w-0">
-                            <p className="text-[14px] font-medium font-[family-name:var(--font-manrope)] truncate">
-                              {a.name}
-                            </p>
-                            <p className="text-[12px] text-white/40 font-[family-name:var(--font-manrope)] truncate">
-                              {a.email}
-                            </p>
-                          </div>
-                        </button>
-                      ))}
-                    <button
-                      type="button"
-                      onClick={addAccount}
-                      className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/[0.04] transition-colors text-left"
-                    >
-                      <div className="h-9 w-9 rounded-full bg-[#24262e] flex items-center justify-center text-white/70">
-                        <Plus size={16} />
-                      </div>
-                      <span className="text-[14px] font-[family-name:var(--font-manrope)]">
-                        Добавить аккаунт
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void logoutAll()}
-                      className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/[0.04] transition-colors text-left"
-                    >
-                      <div className="h-9 w-9 rounded-full bg-[#24262e] flex items-center justify-center text-white/70">
-                        <LogOut size={16} />
-                      </div>
-                      <span className="text-[14px] font-[family-name:var(--font-manrope)]">
-                        Выйти из всех аккаунтов
-                      </span>
-                    </button>
-                  </div>
-
-                  <button
+                  <motion.button
+                    key="account-menu-backdrop"
                     type="button"
-                    onClick={manageAccount}
-                    className="w-full h-11 rounded-full bg-[#1a1c22] border border-white/8 hover:bg-[#22252e] transition-colors px-4 inline-flex items-center gap-3 text-[14px] font-[family-name:var(--font-manrope)]"
-                  >
-                    <Settings size={16} className="text-white/55" />
-                    Управление аккаунтом
-                  </button>
+                    aria-label="Закрыть меню аккаунта"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.15 }}
+                    className="fixed inset-0 z-40 bg-black/55 backdrop-blur-[2px]"
+                    onClick={() => setProfileOpen(false)}
+                  />
+                )}
+              </AnimatePresence>
+              <AnimatePresence>
+                {profileOpen && (
+                    <motion.div
+                      key="account-menu"
+                      initial={{ opacity: 0, y: -4, scale: 0.97 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -3, scale: 0.98 }}
+                      transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+                      style={{ transformOrigin: "calc(100% - 16px) 0%" }}
+                      className="absolute right-0 top-[calc(100%+8px)] w-[min(calc(100vw-40px),268px)] rounded-[18px] bg-[#22252e] border border-white/22 shadow-[0_16px_48px_rgba(0,0,0,0.75),0_0_0_1px_rgba(255,255,255,0.06)] p-2 z-50"
+                    >
+                      <div className="rounded-[12px] bg-[#17191f] border border-white/10 overflow-hidden mb-1.5">
+                        <div className="flex items-center gap-2.5 px-2.5 py-2.5">
+                          <AccountAvatar account={activeAccount} size={40} />
+                          <div className="min-w-0 flex-1">
+                            <p className="font-[family-name:var(--font-manrope)] font-semibold text-[14px] truncate">
+                              {activeAccount.name}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => copyEmail("profile")}
+                              title="Скопировать адрес"
+                              className="relative text-[12px] text-white/50 font-[family-name:var(--font-manrope)] truncate hover:text-white/80 transition-colors text-left max-w-full"
+                            >
+                              <span className="truncate block">
+                                {activeAccount.email}
+                              </span>
+                              {copied === "profile" && (
+                                <span
+                                  role="status"
+                                  className="absolute left-0 top-[calc(100%+6px)] z-50 whitespace-nowrap rounded-[10px] bg-[#2a2d36] border border-white/10 px-2.5 py-1.5 text-[12px] text-white shadow-[0_8px_24px_rgba(0,0,0,0.45)] pointer-events-none"
+                                >
+                                  Скопировано
+                                </span>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
 
-                  <div className="mt-3 pt-2 flex items-center justify-center gap-2 text-[11px] text-white/30 font-[family-name:var(--font-manrope)]">
-                    <Link href="/help" className="hover:text-white/50">
-                      Справка
-                    </Link>
-                    <span>·</span>
-                    <Link href="/legal/terms" className="hover:text-white/50">
-                      Условия
-                    </Link>
-                  </div>
-                  </motion.div>
+                      <div className="rounded-[12px] bg-[#17191f] border border-white/10 overflow-hidden mb-2">
+                        {accounts
+                          .filter((a) => !a.active)
+                          .map((a) => (
+                            <button
+                              key={a.id}
+                              type="button"
+                              onClick={() => void switchAccount(a.id)}
+                              className="w-full flex items-center gap-2.5 px-2.5 py-2 hover:bg-white/[0.05] transition-colors text-left"
+                            >
+                              <AccountAvatar account={a} size={32} />
+                              <div className="min-w-0">
+                                <p className="text-[13px] font-medium font-[family-name:var(--font-manrope)] truncate">
+                                  {a.name}
+                                </p>
+                                <p className="text-[11px] text-white/40 font-[family-name:var(--font-manrope)] truncate">
+                                  {a.email}
+                                </p>
+                              </div>
+                            </button>
+                          ))}
+                        <button
+                          type="button"
+                          onClick={addAccount}
+                          className="w-full flex items-center gap-2.5 px-2.5 py-2 hover:bg-white/[0.05] transition-colors text-left"
+                        >
+                          <div className="h-8 w-8 rounded-full bg-[#2a2d36] flex items-center justify-center text-white/70">
+                            <Plus size={15} />
+                          </div>
+                          <span className="text-[13px] font-[family-name:var(--font-manrope)]">
+                            Добавить аккаунт
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void logoutAll()}
+                          className="w-full flex items-center gap-2.5 px-2.5 py-2 hover:bg-white/[0.05] transition-colors text-left"
+                        >
+                          <div className="h-8 w-8 rounded-full bg-[#2a2d36] flex items-center justify-center text-white/70">
+                            <LogOut size={15} />
+                          </div>
+                          <span className="text-[13px] font-[family-name:var(--font-manrope)]">
+                            Выйти из всех аккаунтов
+                          </span>
+                        </button>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={manageAccount}
+                        className="w-full h-10 rounded-full bg-[#17191f] border border-white/12 hover:bg-[#1c1f27] transition-colors px-3.5 inline-flex items-center gap-2.5 text-[13px] font-[family-name:var(--font-manrope)]"
+                      >
+                        <Settings size={15} className="text-white/55" />
+                        Управление аккаунтом
+                      </button>
+
+                      <div className="mt-2 pt-1.5 flex items-center justify-center gap-2 text-[11px] text-white/35 font-[family-name:var(--font-manrope)]">
+                        <Link href="/help" className="hover:text-white/55">
+                          Справка
+                        </Link>
+                        <span>·</span>
+                        <Link href="/legal/terms" className="hover:text-white/55">
+                          Условия
+                        </Link>
+                      </div>
+                    </motion.div>
                 )}
               </AnimatePresence>
             </div>
@@ -1983,104 +2059,116 @@ export default function MailApp() {
                             новое
                           </span>
                         )}
-                        <div
-                          className={cn(
-                            "flex items-center gap-2 md:gap-2.5 px-2 md:px-2.5 h-[44px] md:h-[46px] cursor-pointer rounded-[12px] transition-colors",
-                            isOpen
-                              ? "bg-[#0066ff]/25 outline outline-1 outline-[#0066ff]/40"
-                              : isSel
-                              ? "bg-[#0066ff]/30 outline outline-1 outline-[#0066ff]/50"
-                              : m.unread
-                                ? "bg-[#2a2d36] hover:bg-[#32363f]"
-                                : "bg-[#24262e] hover:bg-[#2a2d36]",
-                          )}
-                          onClick={() => void openMessage(m.id)}
-                          onMouseEnter={() => prefetchMessage(m.id)}
-                          onFocus={() => prefetchMessage(m.id)}
+                        <SwipeMailRow
+                          id={m.id}
+                          open={swipeOpenId === m.id}
+                          onOpenChange={setSwipeOpenId}
+                          onReply={() => replyMessage(m.id)}
+                          onDelete={() => trashMessage(m.id)}
                         >
-                          <Checkbox
-                            checked={isSel}
-                            onChange={() => toggleOne(m.id)}
-                            aria-label={`Выбрать ${m.from}`}
-                          />
-
-                          <SenderAvatar
-                            from={m.from}
-                            fromEmail={m.fromEmail}
-                            avatarColor={m.avatarColor}
-                            avatarUrl={avatarForSender(
-                              m.fromEmail,
-                              m.avatarUrl,
-                              accounts,
+                          <div
+                            data-pressable
+                            className={cn(
+                              "flex items-center gap-2 md:gap-2.5 px-2 md:px-2.5 h-[48px] md:h-[46px] cursor-pointer rounded-[12px] transition-colors",
+                              isOpen
+                                ? "bg-[#0066ff]/25 outline outline-1 outline-[#0066ff]/40"
+                                : isSel
+                                  ? "bg-[#0066ff]/30 outline outline-1 outline-[#0066ff]/50"
+                                  : m.unread
+                                    ? "bg-[#2a2d36] hover:bg-[#32363f]"
+                                    : "bg-[#24262e] hover:bg-[#2a2d36]",
                             )}
-                            size={28}
-                          />
+                            onClick={() => {
+                              setSwipeOpenId(null);
+                              void openMessage(m.id);
+                            }}
+                            onMouseEnter={() => prefetchMessage(m.id)}
+                            onFocus={() => prefetchMessage(m.id)}
+                          >
+                            <Checkbox
+                              checked={isSel}
+                              onChange={() => toggleOne(m.id)}
+                              aria-label={`Выбрать ${m.from}`}
+                            />
 
-                          <div className="min-w-0 flex-1 flex items-center gap-2 overflow-hidden">
-                            <span
-                              className={cn(
-                                "shrink-0 w-[100px] sm:w-[120px] md:w-[140px] truncate text-[13px] md:text-[14px] font-[family-name:var(--font-manrope)]",
-                                m.unread
-                                  ? "font-bold text-white"
-                                  : "font-medium text-white/70",
+                            <SenderAvatar
+                              from={m.from}
+                              fromEmail={m.fromEmail}
+                              avatarColor={m.avatarColor}
+                              avatarUrl={avatarForSender(
+                                m.fromEmail,
+                                m.avatarUrl,
+                                accounts,
                               )}
-                            >
-                              {m.from}
-                            </span>
+                              size={28}
+                            />
 
-                            <span className="min-w-0 flex-1 truncate text-[13px] md:text-[14px] font-[family-name:var(--font-manrope)]">
+                            <div className="min-w-0 flex-1 flex items-center gap-2 overflow-hidden">
                               <span
-                                className={
+                                className={cn(
+                                  "shrink-0 w-[100px] sm:w-[120px] md:w-[140px] truncate text-[13px] md:text-[14px] font-[family-name:var(--font-manrope)]",
                                   m.unread
-                                    ? "font-semibold text-white"
-                                    : "text-white/75"
-                                }
+                                    ? "font-bold text-white"
+                                    : "font-medium text-white/70",
+                                )}
                               >
-                                {m.subject}
+                                {m.from}
                               </span>
-                              {(m.threadCount || 0) > 1 && (
-                                <span className="ml-1.5 text-[11px] text-white/35 font-medium">
-                                  {m.threadCount}
-                                </span>
-                              )}
-                              <span className="text-white/30">
-                                {" "}
-                                — {m.preview}
-                              </span>
-                            </span>
-                          </div>
 
-                          <div className="shrink-0 flex items-center gap-2 pl-1">
-                            {m.hasAttachment && (
-                              <Paperclip
-                                size={13}
-                                className="text-white/30 hidden sm:block"
-                              />
-                            )}
-                            {(() => {
-                              const badge = deliveryBadge(m.deliveryStatus);
-                              if (
-                                !badge ||
-                                (folder !== "sent" && m.folder !== "sent")
-                              )
-                                return null;
-                              return (
+                              <span className="min-w-0 flex-1 truncate text-[13px] md:text-[14px] font-[family-name:var(--font-manrope)]">
                                 <span
-                                  className={cn(
-                                    "hidden sm:inline text-[11px] font-[family-name:var(--font-manrope)]",
-                                    badge.className,
-                                  )}
-                                  title={m.deliveryDetail || undefined}
+                                  className={
+                                    m.unread
+                                      ? "font-semibold text-white"
+                                      : "text-white/75"
+                                  }
                                 >
-                                  {badge.text}
+                                  {m.subject}
                                 </span>
-                              );
-                            })()}
-                            <span className="w-[48px] md:w-[56px] text-right text-[12px] md:text-[13px] text-white/35 font-[family-name:var(--font-manrope)] tabular-nums">
-                              {m.time}
-                            </span>
+                                {(m.threadCount || 0) > 1 && (
+                                  <span className="ml-1.5 text-[11px] text-white/35 font-medium">
+                                    {m.threadCount}
+                                  </span>
+                                )}
+                                <span className="text-white/30">
+                                  {" "}
+                                  — {m.preview}
+                                </span>
+                              </span>
+                            </div>
+
+                            <div className="shrink-0 flex items-center gap-2 pl-1">
+                              {m.hasAttachment && (
+                                <Paperclip
+                                  size={13}
+                                  className="text-white/30 hidden sm:block"
+                                />
+                              )}
+                              {(() => {
+                                const badge = deliveryBadge(m.deliveryStatus);
+                                if (
+                                  !badge ||
+                                  (folder !== "sent" && m.folder !== "sent")
+                                )
+                                  return null;
+                                return (
+                                  <span
+                                    className={cn(
+                                      "hidden sm:inline text-[11px] font-[family-name:var(--font-manrope)]",
+                                      badge.className,
+                                    )}
+                                    title={m.deliveryDetail || undefined}
+                                  >
+                                    {badge.text}
+                                  </span>
+                                );
+                              })()}
+                              <span className="w-[48px] md:w-[56px] text-right text-[12px] md:text-[13px] text-white/35 font-[family-name:var(--font-manrope)] tabular-nums">
+                                {m.time}
+                              </span>
+                            </div>
                           </div>
-                        </div>
+                        </SwipeMailRow>
                       </li>
                     );
                   })}
@@ -2090,8 +2178,8 @@ export default function MailApp() {
               </div>
 
               {openId && (
-                <div className="flex-1 min-h-0 flex flex-col md:min-w-0 pr-3 pb-3">
-                  <div className="flex-1 min-h-0 flex flex-col overflow-hidden rounded-[16px] bg-[#0c0d10] border border-white/10">
+                <div className="flex-1 min-h-0 flex flex-col md:min-w-0 px-2 pb-2 md:px-0 md:pr-3 md:pb-3">
+                  <div className="flex-1 min-h-0 flex flex-col overflow-hidden rounded-[16px] bg-[#0c0d10] border border-white/10 mx-auto w-full">
                     <div className="shrink-0 flex items-center gap-2 px-3 md:px-5 h-12">
                       <button
                         type="button"
@@ -2143,7 +2231,7 @@ export default function MailApp() {
                     </div>
 
                     <div className="flex-1 overflow-y-auto mail-scroll">
-                      <div className="mx-auto w-full max-w-[680px] px-4 sm:px-6 md:px-8 pt-4 md:pt-6 pb-10">
+                      <div className="mx-auto w-full max-w-[680px] px-3 sm:px-6 md:px-8 pt-4 md:pt-6 pb-10">
                         {detailLoading && !detail?.bodyHtml ? (
                           <div className="space-y-6">
                             <div className="h-8 w-[72%] rounded-xl bg-white/[0.06] animate-pulse" />
@@ -2496,7 +2584,7 @@ export default function MailApp() {
         <button
           type="button"
           onClick={() => setComposeOpen(true)}
-          className="md:hidden fixed right-4 z-30 h-14 w-14 rounded-full bg-[#0066ff] text-white inline-flex items-center justify-center hover:bg-[#0052cc] transition-colors"
+          className="md:hidden fixed right-4 z-30 h-14 w-14 rounded-full bg-[#0066ff] text-white inline-flex items-center justify-center hover:bg-[#0052cc] transition-colors active:scale-[0.94]"
           style={{ bottom: "calc(1rem + var(--safe-bottom))" }}
           aria-label="Написать"
         >

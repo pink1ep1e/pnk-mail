@@ -169,9 +169,13 @@ const READER_LIGHT_CSS = `
     font-size: 15px;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+    width: 100% !important;
+    box-sizing: border-box;
   }
+  *, *::before, *::after { box-sizing: border-box; }
   img, video {
-    max-width: 100%;
+    max-width: 100% !important;
   }
   /* Real content images may scale; keep 1px spacers intact */
   img[width]:not([width="1"]):not([width="0"]),
@@ -185,6 +189,7 @@ const READER_LIGHT_CSS = `
   }
   table {
     border-collapse: collapse;
+    max-width: 100% !important;
   }
   a {
     cursor: pointer;

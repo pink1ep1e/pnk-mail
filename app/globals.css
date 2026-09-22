@@ -155,6 +155,29 @@ a {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Touch press: slight shrink on press for interactive controls */
+@media (pointer: coarse) {
+  button:not(:disabled):not([data-no-press]),
+  a[href],
+  [role="button"]:not([data-no-press]),
+  [role="checkbox"],
+  [data-pressable] {
+    transition:
+      transform 0.1s ease-out,
+      background-color 0.15s ease,
+      color 0.15s ease,
+      opacity 0.15s ease;
+  }
+
+  button:not(:disabled):not([data-no-press]):active,
+  a[href]:active,
+  [role="button"]:not([data-no-press]):active,
+  [role="checkbox"]:active,
+  [data-pressable]:active {
+    transform: scale(0.96);
+  }
+}
+
 main button,
 main [role="button"],
 main a {
