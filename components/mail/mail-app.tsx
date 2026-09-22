@@ -34,6 +34,7 @@ import {
   X,
 } from "@/lib/icons";
 import ComposeEditor from "@/components/mail/compose-editor";
+import { PullToRefresh } from "@/components/mail/pull-to-refresh";
 import { AppSplash } from "@/components/shared/app-splash";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { haptic } from "@/lib/haptic";
@@ -1638,7 +1639,10 @@ export default function MailApp() {
 
       {/* Search overlay */}
       {searchOpen && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 md:pt-24 px-4 bg-black/60 backdrop-blur-sm">
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center px-4 bg-black/60 backdrop-blur-sm"
+          style={{ paddingTop: "calc(4rem + var(--safe-top))" }}
+        >
           <div
             className="w-full max-w-[640px] rounded-[16px] bg-[#1a1c22] border border-white/10 shadow-2xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
@@ -1778,8 +1782,13 @@ export default function MailApp() {
                 dragElastic={{ left: 0.15, right: 0.02 }}
                 dragDirectionLock
                 onDragEnd={onSidebarDragEnd}
-                className="md:hidden fixed inset-y-0 left-0 z-50 h-full p-3 touch-pan-y"
-                style={{ width: "min(100vw, 280px)" }}
+                className="md:hidden fixed left-0 z-50 h-full p-3 touch-pan-y"
+                style={{
+                  width: "min(100vw, 280px)",
+                  top: "var(--safe-top)",
+                  bottom: "var(--safe-bottom)",
+                  height: "auto",
+                }}
               >
                 <div className="h-full shadow-2xl">{Sidebar}</div>
               </motion.div>
@@ -1937,12 +1946,19 @@ export default function MailApp() {
             <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
               <div
                 className={cn(
-                  "flex-1 overflow-y-auto mail-scroll p-2 md:p-2.5 overscroll-y-contain",
-                  openId && "hidden md:block md:max-w-[50%] md:border-r md:border-white/8",
+                  "flex-1 min-h-0 flex flex-col",
+                  openId && "hidden md:flex md:max-w-[50%] md:border-r md:border-white/8",
                 )}
               >
+              <PullToRefresh
+                disabled={Boolean(openId)}
+                onRefresh={async () => {
+                  await loadMessages(folder);
+                  clearSelection();
+                }}
+              >
               {visible.length === 0 ? (
-                <div className="h-full min-h-[240px] flex flex-col items-center justify-center text-center px-6">
+                <div className="min-h-[240px] flex flex-col items-center justify-center text-center px-6">
                   <Mail size={36} className="text-white/20" />
                   <p className="mt-4 text-[15px] font-semibold font-[family-name:var(--font-manrope)]">
                     Нет писем
@@ -1952,7 +1968,7 @@ export default function MailApp() {
                   </p>
                 </div>
               ) : (
-                <ul className="space-y-1.5 pt-2">
+                <ul className="space-y-1.5 pt-2 pb-20 md:pb-2">
                   {visible.map((m) => {
                     const isSel = selected.has(m.id);
                     const isOpen = openId === m.id;
@@ -2066,6 +2082,7 @@ export default function MailApp() {
                   })}
                 </ul>
               )}
+              </PullToRefresh>
               </div>
 
               {openId && (
@@ -2454,7 +2471,10 @@ export default function MailApp() {
       </BottomSheet>
 
       {(sendError || toast) && (
-        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 max-w-[min(90vw,420px)] rounded-[14px] bg-[#2a2d36] px-4 py-3 text-[13px] text-white/80 shadow-lg font-[family-name:var(--font-manrope)]">
+        <div
+          className="fixed left-1/2 -translate-x-1/2 z-50 max-w-[min(90vw,420px)] rounded-[14px] bg-[#2a2d36] px-4 py-3 text-[13px] text-white/80 shadow-lg font-[family-name:var(--font-manrope)]"
+          style={{ bottom: "calc(5rem + var(--safe-bottom))" }}
+        >
           {sendError || toast}
           {sendError && (
             <button
@@ -2472,7 +2492,8 @@ export default function MailApp() {
         <button
           type="button"
           onClick={() => setComposeOpen(true)}
-          className="md:hidden fixed right-4 bottom-4 z-30 h-14 w-14 rounded-full bg-[#0066ff] text-white shadow-[0_12px_32px_rgba(0,102,255,0.45)] inline-flex items-center justify-center hover:bg-[#0052cc] transition-colors"
+          className="md:hidden fixed right-4 z-30 h-14 w-14 rounded-full bg-[#0066ff] text-white shadow-[0_12px_32px_rgba(0,102,255,0.45)] inline-flex items-center justify-center hover:bg-[#0052cc] transition-colors"
+          style={{ bottom: "calc(1rem + var(--safe-bottom))" }}
           aria-label="Написать"
         >
           <Pencil size={22} />
