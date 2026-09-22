@@ -1,5 +1,5 @@
 /* Fast offline fallback for pnk почта PWA */
-const CACHE = "pnk-mail-offline-v2";
+const CACHE = "pnk-mail-offline-v3";
 const OFFLINE_URL = "/offline.html";
 const NET_TIMEOUT_MS = 2000;
 
