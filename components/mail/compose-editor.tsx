@@ -280,6 +280,31 @@ type WinRect = { x: number; y: number; w: number; h: number };
 const MIN_W = 420;
 const MIN_H = 420;
 
+function isNarrowViewport() {
+  return typeof window !== "undefined" && window.innerWidth < 640;
+}
+
+function viewportBox() {
+  if (typeof window === "undefined") {
+    return { width: 720, height: 640, offsetTop: 0, offsetLeft: 0 };
+  }
+  const vv = window.visualViewport;
+  if (vv) {
+    return {
+      width: vv.width,
+      height: vv.height,
+      offsetTop: vv.offsetTop,
+      offsetLeft: vv.offsetLeft,
+    };
+  }
+  return {
+    width: window.innerWidth,
+    height: window.innerHeight,
+    offsetTop: 0,
+    offsetLeft: 0,
+  };
+}
+
 const FONTS = [
   { label: "Arial", value: "Arial" },
   { label: "Georgia", value: "Georgia" },
@@ -353,6 +378,15 @@ function defaultRect(): WinRect {
   if (typeof window === "undefined") {
     return { x: 40, y: 40, w: 720, h: 640 };
   }
+  if (isNarrowViewport()) {
+    const box = viewportBox();
+    return {
+      x: box.offsetLeft,
+      y: box.offsetTop,
+      w: Math.max(280, box.width),
+      h: Math.max(280, box.height),
+    };
+  }
   const w = Math.min(720, window.innerWidth - 24);
   const h = Math.min(640, window.innerHeight - 24);
   return {
@@ -365,12 +399,22 @@ function defaultRect(): WinRect {
 
 function clampRect(r: WinRect): WinRect {
   if (typeof window === "undefined") return r;
-  const maxW = Math.max(MIN_W, window.innerWidth - 16);
-  const maxH = Math.max(MIN_H, window.innerHeight - 16);
-  const w = Math.min(Math.max(r.w, MIN_W), maxW);
-  const h = Math.min(Math.max(r.h, MIN_H), maxH);
-  const x = Math.min(Math.max(0, r.x), window.innerWidth - w);
-  const y = Math.min(Math.max(0, r.y), window.innerHeight - h);
+  const box = viewportBox();
+  const pad = isNarrowViewport() ? 0 : 16;
+  const maxW = Math.max(280, box.width - pad);
+  const maxH = Math.max(280, box.height - pad);
+  const minW = Math.min(MIN_W, maxW);
+  const minH = Math.min(MIN_H, maxH);
+  const w = Math.min(Math.max(r.w, minW), maxW);
+  const h = Math.min(Math.max(r.h, minH), maxH);
+  const x = Math.min(
+    Math.max(box.offsetLeft, r.x),
+    box.offsetLeft + box.width - w,
+  );
+  const y = Math.min(
+    Math.max(box.offsetTop, r.y),
+    box.offsetTop + box.height - h,
+  );
   return { x, y, w, h };
 }
 
@@ -692,6 +736,9 @@ export default function ComposeEditor({
   const prefs0 = typeof window !== "undefined" ? loadComposePrefs() : null;
   const [minimized, setMinimized] = useState(false);
   const [maximized, setMaximized] = useState(false);
+  const [narrow, setNarrow] = useState(
+    () => typeof window !== "undefined" && window.innerWidth < 640,
+  );
   const [rect, setRect] = useState<WinRect>(() => loadComposeRect());
   const [restoreRect, setRestoreRect] = useState<WinRect | null>(null);
   const [showCopies, setShowCopies] = useState(false);
@@ -996,6 +1043,8 @@ export default function ComposeEditor({
   );
 
   const persistRect = useCallback((r: WinRect) => {
+    // Don't persist phone fullscreen geometry into desktop window prefs
+    if (isNarrowViewport()) return clampRect(r);
     const next = clampRect(r);
     saveComposeRect(next);
     return next;
@@ -1037,10 +1086,13 @@ export default function ComposeEditor({
   // Seed compose fields when opening (not on every contacts re-render)
   useEffect(() => {
     if (!open) return;
-    const saved = loadComposeRect();
+    const mobile = isNarrowViewport();
+    setNarrow(mobile);
+    const saved = mobile ? defaultRect() : loadComposeRect();
     setRect(saved);
     rectRef.current = saved;
-    setMaximized(false);
+    // Phones: always open as a full-screen sheet (fixes broken floating window)
+    setMaximized(mobile);
     setMinimized(false);
     setRestoreRect(null);
 
@@ -1264,7 +1316,7 @@ export default function ComposeEditor({
   }, [persistRect]);
 
   const startMove = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (maximized || minimized) return;
+    if (maximized || minimized || narrow) return;
     const target = e.target as HTMLElement;
     if (target.closest("button")) return;
     e.preventDefault();
@@ -1277,7 +1329,7 @@ export default function ComposeEditor({
   };
 
   const startResize = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (maximized || minimized) return;
+    if (maximized || minimized || narrow) return;
     e.preventDefault();
     e.stopPropagation();
     dragRef.current = {
@@ -1544,41 +1596,84 @@ export default function ComposeEditor({
     setPopover((cur) => (cur === id ? null : id));
   };
 
-  const winStyle: CSSProperties = minimized
-    ? {
-        left: rect.x,
-        top: undefined,
-        bottom: 12,
-        width: Math.min(360, rect.w),
-        height: 56,
-      }
-    : {
-        left: rect.x,
-        top: rect.y,
-        width: rect.w,
-        height: rect.h,
-      };
+  // Keep mobile compose fitted to visualViewport (keyboard / PWA safe area)
+  useEffect(() => {
+    if (!open) return;
+    const sync = () => {
+      const mobile = isNarrowViewport();
+      setNarrow(mobile);
+      if (!mobile || minimized) return;
+      const next = defaultRect();
+      rectRef.current = next;
+      setRect(next);
+      setMaximized(true);
+    };
+    sync();
+    window.addEventListener("resize", sync);
+    const vv = window.visualViewport;
+    vv?.addEventListener("resize", sync);
+    vv?.addEventListener("scroll", sync);
+    return () => {
+      window.removeEventListener("resize", sync);
+      vv?.removeEventListener("resize", sync);
+      vv?.removeEventListener("scroll", sync);
+    };
+  }, [open, minimized]);
+
+  const winStyle: CSSProperties = narrow
+    ? minimized
+      ? {
+          left: 12,
+          right: 12,
+          top: undefined,
+          bottom: "calc(12px + env(safe-area-inset-bottom, 0px))",
+          width: "auto",
+          height: 56,
+        }
+      : {
+          left: rect.x,
+          top: rect.y,
+          width: rect.w,
+          height: rect.h,
+          borderRadius: 0,
+        }
+    : minimized
+      ? {
+          left: rect.x,
+          top: undefined,
+          bottom: 12,
+          width: Math.min(360, rect.w),
+          height: 56,
+        }
+      : {
+          left: rect.x,
+          top: rect.y,
+          width: rect.w,
+          height: rect.h,
+        };
 
   return (
     <AnimatePresence>
       {open && (
         <motion.div
-          initial={{ opacity: 0, scale: 0.98 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.98 }}
+          initial={narrow ? { opacity: 0, y: 24 } : { opacity: 0, scale: 0.98 }}
+          animate={narrow ? { opacity: 1, y: 0 } : { opacity: 1, scale: 1 }}
+          exit={narrow ? { opacity: 0, y: 16 } : { opacity: 0, scale: 0.98 }}
           transition={{ duration: 0.18 }}
           className={cn(
-            "fixed z-50 flex flex-col bg-[#1a1c22] font-[family-name:var(--font-manrope)] shadow-[0_24px_80px_rgba(0,0,0,0.55)] rounded-[24px]",
+            "fixed z-50 flex flex-col bg-[#1a1c22] font-[family-name:var(--font-manrope)] shadow-[0_24px_80px_rgba(0,0,0,0.55)]",
+            narrow && !minimized ? "rounded-none" : "rounded-[24px]",
             minimized && "rounded-[20px]",
           )}
           style={winStyle}
         >
           <div
             className={cn(
-              "shrink-0 h-14 px-4 flex items-center gap-2 rounded-t-[24px]",
-              !maximized && !minimized && "cursor-grab active:cursor-grabbing",
+              "shrink-0 h-14 px-4 flex items-center gap-2",
+              narrow && !minimized ? "rounded-none" : "rounded-t-[24px]",
+              !maximized && !minimized && !narrow && "cursor-grab active:cursor-grabbing",
             )}
-            onPointerDown={startMove}
+            onPointerDown={narrow ? undefined : startMove}
           >
             <span className="flex-1 font-[family-name:var(--font-unbounded)] font-semibold text-[15px] text-white truncate px-1 select-none">
               {subject.trim() || "Новое письмо"}
@@ -1592,12 +1687,14 @@ export default function ComposeEditor({
             >
               <Minimize2 size={15} />
             </ToolBtn>
-            <ToolBtn
-              title={maximized ? "Восстановить" : "На весь экран"}
-              onClick={toggleMaximize}
-            >
-              <Maximize2 size={15} />
-            </ToolBtn>
+            {!narrow ? (
+              <ToolBtn
+                title={maximized ? "Восстановить" : "На весь экран"}
+                onClick={toggleMaximize}
+              >
+                <Maximize2 size={15} />
+              </ToolBtn>
+            ) : null}
             <ToolBtn
               title="Закрыть"
               onClick={() => void closeWithDraftSave()}
@@ -1607,7 +1704,12 @@ export default function ComposeEditor({
           </div>
 
           {!minimized && (
-            <div className="flex flex-col flex-1 min-h-0 overflow-hidden rounded-b-[24px]">
+            <div
+              className={cn(
+                "flex flex-col flex-1 min-h-0 overflow-hidden",
+                !narrow && "rounded-b-[24px]",
+              )}
+            >
               <div className="shrink-0 px-4 space-y-2.5">
                 <div className="flex items-center gap-2">
                   <div className="relative flex-1 min-w-0">
@@ -2523,7 +2625,7 @@ export default function ComposeEditor({
             </div>
           )}
 
-          {!maximized && !minimized && (
+          {!maximized && !minimized && !narrow && (
             <div
               onPointerDown={startResize}
               className="absolute right-1.5 bottom-1.5 h-4 w-4 cursor-se-resize rounded-sm opacity-40 hover:opacity-90"

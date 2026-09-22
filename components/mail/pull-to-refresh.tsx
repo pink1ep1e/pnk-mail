@@ -127,8 +127,8 @@ export function PullToRefresh({
       >
         <div
           className={cn(
-            "mt-2 h-9 w-9 rounded-full bg-[#24262e] border border-white/10 flex items-center justify-center shadow-[0_8px_24px_rgba(0,0,0,0.35)]",
-            armed ? "text-[#4d9fff]" : "text-white/40",
+            "mt-2 h-9 w-9 rounded-full bg-[#2a2d36] border border-white/15 flex items-center justify-center shadow-[0_8px_24px_rgba(0,0,0,0.35)]",
+            armed ? "text-white" : "text-white/55",
           )}
         >
           <span

@@ -1,7 +1,7 @@
 {
   "id": "/",
   "name": "pnk почта",
-  "short_name": "почта",
+  "short_name": "pnk почта",
   "description": "Быстрая и защищённая почта pnk",
   "start_url": "/mail",
   "scope": "/",
