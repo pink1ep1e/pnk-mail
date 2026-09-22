@@ -161,13 +161,15 @@ export function extractLogoFromHtml(html: string): string | null {
   // Only scan the first ~80KB — logos live in the header
   const slice = html.slice(0, 80_000);
   const tags = slice.match(/<img\b[^>]*>/gi) || [];
-  let best: { score: number; src: string } | null = null;
+  let bestScore = -1;
+  let bestSrc: string | null = null;
 
-  tags.forEach((tag, index) => {
+  for (let index = 0; index < tags.length; index++) {
+    const tag = tags[index];
     const rawSrc = attr(tag, "src");
-    if (!rawSrc) return;
+    if (!rawSrc) continue;
     const src = normalizeImageUrl(rawSrc);
-    if (!src || isTrackingOrSpacer(tag, src)) return;
+    if (!src || isTrackingOrSpacer(tag, src)) continue;
 
     const alt = (attr(tag, "alt") || "").toLowerCase();
     const cls = `${attr(tag, "class") || ""} ${attr(tag, "id") || ""}`.toLowerCase();
@@ -190,12 +192,15 @@ export function extractLogoFromHtml(html: string): string | null {
     // Prefer earlier images (header logos)
     score += Math.max(0, 5 - Math.floor(index / 2));
 
-    if (!best || score > best.score) best = { score, src };
-  });
+    if (score > bestScore) {
+      bestScore = score;
+      bestSrc = src;
+    }
+  }
 
   // Require at least a weak logo signal to avoid random photos
-  if (!best || best.score < 6) return null;
-  return best.src;
+  if (!bestSrc || bestScore < 6) return null;
+  return bestSrc;
 }
 
 /**
