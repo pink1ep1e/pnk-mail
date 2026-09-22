@@ -52,6 +52,8 @@ export async function POST(req: NextRequest) {
     subject?: string;
     bodyHtml?: string;
     replyToId?: string;
+    labelIds?: string[];
+    hasAttachment?: boolean;
   };
 
   const toList = parseAddressList(body.to || "");
@@ -138,6 +140,14 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  const labelIds = Array.isArray(body.labelIds)
+    ? body.labelIds.filter((id) => typeof id === "string" && id.length > 0).slice(0, 20)
+    : [];
+  const hasAttachment =
+    Boolean(body.hasAttachment) ||
+    /<img\b/i.test(bodyHtml) ||
+    /download=/i.test(bodyHtml);
+
   const sent = await prisma.message.create({
     data: {
       mailboxId: auth.ctx.mailboxId,
@@ -151,7 +161,8 @@ export async function POST(req: NextRequest) {
       bodyHtml,
       bodyText,
       unread: false,
-      hasAttachment: false,
+      hasAttachment,
+      labelIds: JSON.stringify(labelIds),
       deliveryStatus: external.length ? "queued" : "delivered",
       deliveryDetail: external.length ? "" : "internal",
       threadId: threadId || undefined,
@@ -197,7 +208,7 @@ export async function POST(req: NextRequest) {
         bodyHtml,
         bodyText,
         unread: true,
-        hasAttachment: false,
+        hasAttachment,
         threadId: finalThreadId,
         rfcMessageId,
         inReplyTo: inReplyTo || undefined,

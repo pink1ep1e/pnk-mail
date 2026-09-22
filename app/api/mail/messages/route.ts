@@ -176,18 +176,55 @@ export async function PATCH(req: NextRequest) {
     folder?: string;
     labelId?: string;
     remindAt?: string | null;
+    /** Apply action to whole conversations (default true for move/trash/read) */
+    expandThread?: boolean;
   };
 
-  const ids = Array.isArray(body.ids)
+  const seedIds = Array.isArray(body.ids)
     ? body.ids.filter((id) => typeof id === "string" && id.length > 0)
     : [];
   const action = body.action;
 
-  if (!ids.length || !action) {
+  if (!seedIds.length || !action) {
     return NextResponse.json(
       { ok: false, error: { message: "ids и action обязательны" } },
       { status: 400 },
     );
+  }
+
+  const expandDefault =
+    action === "trash" ||
+    action === "delete" ||
+    action === "spam" ||
+    action === "archive" ||
+    action === "restore" ||
+    action === "move" ||
+    action === "read" ||
+    action === "unread";
+  const expandThread = body.expandThread ?? expandDefault;
+
+  let ids = seedIds;
+  if (expandThread) {
+    const seeds = await prisma.message.findMany({
+      where: { id: { in: seedIds }, mailboxId: auth.ctx.mailboxId },
+      select: { id: true, threadId: true },
+    });
+    const threadKeys = [
+      ...new Set(seeds.map((s) => s.threadId || s.id).filter(Boolean)),
+    ];
+    if (threadKeys.length) {
+      const related = await prisma.message.findMany({
+        where: {
+          mailboxId: auth.ctx.mailboxId,
+          OR: [
+            { threadId: { in: threadKeys } },
+            { id: { in: threadKeys } },
+          ],
+        },
+        select: { id: true },
+      });
+      ids = [...new Set([...seedIds, ...related.map((r) => r.id)])];
+    }
   }
 
   const where = {

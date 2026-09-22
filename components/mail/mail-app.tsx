@@ -705,10 +705,22 @@ export default function MailApp() {
       | "delete",
     extra?: { folder?: string; labelId?: string },
   ) => {
+    const idSet = new Set(ids);
+    const threadKeys = new Set(
+      items
+        .filter((m) => idSet.has(m.id))
+        .map((m) => m.threadId || m.id)
+        .filter(Boolean),
+    );
+    const matchesTarget = (m: MailMessage) =>
+      idSet.has(m.id) ||
+      (m.threadId ? threadKeys.has(m.threadId) : false) ||
+      threadKeys.has(m.id);
+
     if (action === "read" || action === "unread") {
       const unread = action === "unread";
       setItems((prev) =>
-        prev.map((m) => (ids.includes(m.id) ? { ...m, unread } : m)),
+        prev.map((m) => (matchesTarget(m) ? { ...m, unread } : m)),
       );
     } else if (
       action === "trash" ||
@@ -718,14 +730,26 @@ export default function MailApp() {
       action === "restore" ||
       action === "delete"
     ) {
-      setItems((prev) => prev.filter((m) => !ids.includes(m.id)));
+      setItems((prev) => prev.filter((m) => !matchesTarget(m)));
       for (const id of ids) detailCache.current.delete(id);
+      const openGone =
+        openId &&
+        (idSet.has(openId) ||
+          (detail?.threadId
+            ? threadKeys.has(detail.threadId)
+            : threadKeys.has(openId)));
+      if (openGone) {
+        setOpenId(null);
+        openIdRef.current = null;
+        setDetail(null);
+        setThread([]);
+      }
     }
 
     const res = await fetch("/api/mail/messages", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids, action, ...extra }),
+      body: JSON.stringify({ ids, action, expandThread: true, ...extra }),
     });
     const json = await res.json();
     if (!json.ok) {
@@ -740,7 +764,9 @@ export default function MailApp() {
       action === "restore" ||
       action === "delete" ||
       action === "label" ||
-      action === "unlabel"
+      action === "unlabel" ||
+      action === "read" ||
+      action === "unread"
     ) {
       void loadMessages(folder);
     }
@@ -993,9 +1019,8 @@ export default function MailApp() {
         })),
       );
       setDetailLoading(false);
-      if (fromList?.unread !== false) {
-        void patchMessages([id], "read");
-      }
+      // Always persist read for the whole conversation (expandThread on API)
+      void patchMessages([id], "read");
       return;
     }
 
@@ -2208,13 +2233,23 @@ export default function MailApp() {
           avatarUrl: a.avatarUrl,
           color: a.color,
         }))}
+        labels={mailLabels}
         draftId={composeDraft?.id}
         initialTo={composeDraft?.to || ""}
         initialCc={composeDraft?.cc || ""}
         initialSubject={composeDraft?.subject || ""}
         initialBodyHtml={composeDraft?.bodyHtml || ""}
+        onToast={showToast}
         onSaveDraft={saveDraft}
-        onSend={async ({ to, subject, bodyHtml, cc }) => {
+        onSend={async ({
+          to,
+          subject,
+          bodyHtml,
+          cc,
+          labelIds,
+          remindNoReply,
+          notifyDelivery,
+        }) => {
           setSendError("");
           const replyToId = composeDraft?.replyToId || undefined;
           const openAfter = openId;
@@ -2227,6 +2262,8 @@ export default function MailApp() {
               subject,
               bodyHtml,
               replyToId,
+              labelIds,
+              notifyDelivery,
             }),
           });
           const json = await res.json();
@@ -2239,6 +2276,16 @@ export default function MailApp() {
               `Письмо не доставлено наружу: ${json.data.transportWarning}`,
             );
             throw new Error("transport failed");
+          }
+          const sentId = (json.data?.message?.id as string) || "";
+          if (sentId && remindNoReply) {
+            await patchMessages([sentId], "remind");
+          }
+          if (notifyDelivery) {
+            showToast("Следим за доставкой");
+          }
+          if (labelIds?.length) {
+            showToast("Метки добавлены");
           }
           setComposeDraft(null);
           detailCache.current.clear();

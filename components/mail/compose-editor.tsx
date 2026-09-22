@@ -58,22 +58,29 @@ export type ComposeContact = {
   color?: string;
 };
 
+type ComposeLabel = { id: string; name: string; color: string };
+
 type ComposeEditorProps = {
   open: boolean;
   onClose: () => void;
   fromEmail: string;
   fromName: string;
   contacts?: ComposeContact[];
+  labels?: ComposeLabel[];
   draftId?: string | null;
   initialTo?: string;
   initialCc?: string;
   initialSubject?: string;
   initialBodyHtml?: string;
+  onToast?: (msg: string) => void;
   onSend?: (payload: {
     to: string;
     cc: string;
     subject: string;
     bodyHtml: string;
+    labelIds?: string[];
+    remindNoReply?: boolean;
+    notifyDelivery?: boolean;
   }) => void | Promise<void>;
   onSaveDraft?: (payload: {
     id?: string | null;
@@ -83,6 +90,82 @@ type ComposeEditorProps = {
     bodyHtml: string;
   }) => void | Promise<string | null | undefined>;
 };
+
+const TEMPLATES_KEY = "pnk-mail-compose-templates-v1";
+const SIGNATURE_KEY = "pnk-mail-compose-signature-v1";
+const PREFS_KEY = "pnk-mail-compose-prefs-v1";
+
+type SavedTemplate = {
+  id: string;
+  name: string;
+  subject: string;
+  bodyHtml: string;
+};
+
+type AttachItem = {
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+  dataUrl: string;
+};
+
+function loadTemplates(): SavedTemplate[] {
+  try {
+    const raw = localStorage.getItem(TEMPLATES_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveTemplates(list: SavedTemplate[]) {
+  localStorage.setItem(TEMPLATES_KEY, JSON.stringify(list.slice(0, 30)));
+}
+
+function loadSignature(): string {
+  try {
+    return localStorage.getItem(SIGNATURE_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+function saveSignature(html: string) {
+  localStorage.setItem(SIGNATURE_KEY, html);
+}
+
+function loadComposePrefs(): {
+  autocomplete: boolean;
+  subjectHint: boolean;
+} {
+  try {
+    const raw = localStorage.getItem(PREFS_KEY);
+    if (!raw) return { autocomplete: true, subjectHint: false };
+    const p = JSON.parse(raw) as Partial<{
+      autocomplete: boolean;
+      subjectHint: boolean;
+    }>;
+    return {
+      autocomplete: p.autocomplete !== false,
+      subjectHint: Boolean(p.subjectHint),
+    };
+  } catch {
+    return { autocomplete: true, subjectHint: false };
+  }
+}
+
+function saveComposePrefs(p: { autocomplete: boolean; subjectHint: boolean }) {
+  localStorage.setItem(PREFS_KEY, JSON.stringify(p));
+}
+
+function formatBytes(n: number) {
+  if (n < 1024) return `${n} Б`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} КБ`;
+  return `${(n / (1024 * 1024)).toFixed(1)} МБ`;
+}
 
 type RecipientChip = {
   email: string;
@@ -183,6 +266,8 @@ type PopoverId =
   | "remind"
   | "template"
   | "more"
+  | "labels"
+  | "signature"
   | "emoji"
   | "font"
   | "size"
@@ -561,15 +646,20 @@ function scheduleLabels() {
   const now = new Date();
   const tomorrow = new Date(now);
   tomorrow.setDate(tomorrow.getDate() + 1);
-  tomorrow.setHours(12, 0, 0, 0);
+  tomorrow.setHours(9, 0, 0, 0);
   const week = new Date(now);
   week.setDate(week.getDate() + 7);
-  week.setHours(12, 0, 0, 0);
+  week.setHours(9, 0, 0, 0);
   const fmt = (d: Date) => {
     const days = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
     return `${days[d.getDay()]}, ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   };
-  return { tomorrow: fmt(tomorrow), week: fmt(week) };
+  return {
+    tomorrow,
+    week,
+    tomorrowLabel: fmt(tomorrow),
+    weekLabel: fmt(week),
+  };
 }
 
 function rgbToHex(color: string): string | null {
@@ -589,14 +679,17 @@ export default function ComposeEditor({
   fromEmail,
   fromName,
   contacts = [],
+  labels = [],
   draftId = null,
   initialTo = "",
   initialCc = "",
   initialSubject = "",
   initialBodyHtml = "",
+  onToast,
   onSend,
   onSaveDraft,
 }: ComposeEditorProps) {
+  const prefs0 = typeof window !== "undefined" ? loadComposePrefs() : null;
   const [minimized, setMinimized] = useState(false);
   const [maximized, setMaximized] = useState(false);
   const [rect, setRect] = useState<WinRect>(() => loadComposeRect());
@@ -617,13 +710,18 @@ export default function ComposeEditor({
   const [linkUrl, setLinkUrl] = useState("https://");
   const [remindNoReply, setRemindNoReply] = useState(false);
   const [notifyDelivery, setNotifyDelivery] = useState(false);
-  const [autocomplete, setAutocomplete] = useState(true);
-  const [subjectHint, setSubjectHint] = useState(false);
+  const [autocomplete, setAutocomplete] = useState(prefs0?.autocomplete ?? true);
+  const [subjectHint, setSubjectHint] = useState(prefs0?.subjectHint ?? false);
   const [subjectSuggestion, setSubjectSuggestion] = useState<string | null>(
     null,
   );
   const [sentFlash, setSentFlash] = useState(false);
-  const [templateSaved, setTemplateSaved] = useState(false);
+  const [statusFlash, setStatusFlash] = useState("");
+  const [templates, setTemplates] = useState<SavedTemplate[]>([]);
+  const [composeLabels, setComposeLabels] = useState<string[]>([]);
+  const [attachments, setAttachments] = useState<AttachItem[]>([]);
+  const [customSchedule, setCustomSchedule] = useState("");
+  const [signatureHtml, setSignatureHtml] = useState("");
   const [bodyEmpty, setBodyEmpty] = useState(true);
   const [fmt, setFmt] = useState({
     bold: false,
@@ -923,7 +1021,10 @@ export default function ComposeEditor({
     setRemindNoReply(false);
     setNotifyDelivery(false);
     setSubjectSuggestion(null);
-    setTemplateSaved(false);
+    setStatusFlash("");
+    setComposeLabels([]);
+    setAttachments([]);
+    setCustomSchedule("");
     setBodyEmpty(true);
     setFontLabel("Arial");
     setFontSizeLabel("16");
@@ -964,8 +1065,21 @@ export default function ComposeEditor({
         setBodyEmpty(!html.replace(/<[^>]+>/g, "").trim());
       }
     });
+    setTemplates(loadTemplates());
+    setSignatureHtml(loadSignature());
+    const prefs = loadComposePrefs();
+    setAutocomplete(prefs.autocomplete);
+    setSubjectHint(prefs.subjectHint);
+    setComposeLabels([]);
+    setAttachments([]);
+    setStatusFlash("");
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only reseeds when open/draft identity changes
   }, [open, draftId, initialTo, initialCc, initialSubject, initialBodyHtml]);
+
+  useEffect(() => {
+    if (!open) return;
+    saveComposePrefs({ autocomplete, subjectHint });
+  }, [open, autocomplete, subjectHint]);
 
   const collectDraftPayload = useCallback(() => {
     const draftChip = toRecipient(toDraft, contacts, fromEmail, fromName);
@@ -1069,6 +1183,7 @@ export default function ComposeEditor({
   }, [contacts, fromEmail, fromName]);
 
   const suggestions = useMemo(() => {
+    if (!autocomplete) return [] as ComposeContact[];
     const q = toDraft.trim().toLowerCase();
     const taken = new Set(recipients.map((r) => r.email.toLowerCase()));
     const list = allContacts.filter((c) => !taken.has(c.email.toLowerCase()));
@@ -1085,7 +1200,7 @@ export default function ComposeEditor({
             "себе".includes(q)),
       )
       .slice(0, 8);
-  }, [allContacts, toDraft, recipients, fromEmail]);
+  }, [autocomplete, allContacts, toDraft, recipients, fromEmail]);
 
   const commitRecipient = useCallback(
     (raw: string) => {
@@ -1197,7 +1312,7 @@ export default function ComposeEditor({
   };
 
   const handleSend = () => {
-    const bodyHtml = editorRef.current?.innerHTML?.trim() || "";
+    let bodyHtml = editorRef.current?.innerHTML?.trim() || "";
     const draftChip = toRecipient(toDraft, allContacts, fromEmail, fromName);
     const merged = [
       ...recipients,
@@ -1218,17 +1333,40 @@ export default function ComposeEditor({
       toInputRef.current?.focus();
       return;
     }
+
+    let finalSubject = subject.trim();
+    if (!finalSubject && subjectHint) {
+      const text = (editorRef.current?.innerText || "").trim().split("\n")[0] || "";
+      finalSubject = text.slice(0, 80) || "(без темы)";
+      setSubject(finalSubject);
+    }
+    if (!finalSubject) finalSubject = "(без темы)";
+
+    if (attachments.length) {
+      const list = attachments
+        .map(
+          (a) =>
+            `<li><a href="${a.dataUrl}" download="${a.name}" style="color:#4d9fff;">${a.name}</a> <span style="color:rgba(255,255,255,0.45);">(${formatBytes(a.size)})</span></li>`,
+        )
+        .join("");
+      bodyHtml += `<hr style="border:none;border-top:1px solid rgba(255,255,255,0.12);margin:16px 0;" /><p style="color:rgba(255,255,255,0.55);font-size:13px;">Вложения</p><ul>${list}</ul>`;
+    }
+
     const payload = {
       to: unique.join(", "),
       cc: cc.trim(),
-      subject: subject.trim() || "(без темы)",
+      subject: finalSubject,
       bodyHtml,
+      labelIds: composeLabels.length ? composeLabels : undefined,
+      remindNoReply,
+      notifyDelivery,
     };
     void (async () => {
       try {
         await onSend?.(payload);
         setSentFlash(true);
-        // Drop draft after successful send
+        if (notifyDelivery) onToast?.("Будем следить за доставкой");
+        if (remindNoReply) onToast?.("Напомним, если не будет ответа");
         if (activeDraftId) {
           try {
             await fetch("/api/mail/drafts", {
@@ -1258,13 +1396,148 @@ export default function ComposeEditor({
     })();
   };
 
-  const saveTemplate = () => {
-    setTemplateSaved(true);
-    setPopover("template");
-    window.setTimeout(() => {
-      setTemplateSaved(false);
-      setPopover(null);
-    }, 1400);
+  const scheduleSendAt = async (when: Date) => {
+    setPopover(null);
+    const payload = collectDraftPayload();
+    if (!payload.to && !payload.subject && !(payload.bodyHtml && payload.bodyHtml !== "<p></p>")) {
+      onToast?.("Нечего откладывать — заполните письмо");
+      return;
+    }
+    try {
+      const id = (await onSaveDraft?.(payload)) || activeDraftId;
+      if (id) {
+        setActiveDraftId(id);
+        await fetch("/api/mail/messages", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ids: [id],
+            action: "remind",
+            remindAt: when.toISOString(),
+          }),
+        });
+      }
+      const label = when.toLocaleString("ru-RU", {
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      setStatusFlash(`Отложено на ${label}`);
+      onToast?.(`Черновик отложен на ${label}`);
+      window.setTimeout(() => {
+        setStatusFlash("");
+        reset();
+        onClose();
+      }, 900);
+    } catch {
+      onToast?.("Не удалось отложить письмо");
+    }
+  };
+
+  const saveCurrentAsTemplate = () => {
+    const bodyHtml = editorRef.current?.innerHTML?.trim() || "";
+    const name =
+      subject.trim() ||
+      (editorRef.current?.innerText || "").trim().slice(0, 40) ||
+      "Без названия";
+    const next: SavedTemplate = {
+      id: `${Date.now()}`,
+      name,
+      subject: subject.trim(),
+      bodyHtml,
+    };
+    const list = [next, ...templates.filter((t) => t.name !== name)].slice(0, 30);
+    setTemplates(list);
+    saveTemplates(list);
+    setStatusFlash("Шаблон сохранён");
+    onToast?.("Шаблон сохранён");
+    window.setTimeout(() => setStatusFlash(""), 1400);
+    setPopover(null);
+  };
+
+  const applyTemplate = (t: SavedTemplate) => {
+    if (t.subject) setSubject(t.subject);
+    if (editorRef.current) {
+      editorRef.current.innerHTML = t.bodyHtml || "<p></p>";
+      syncEmpty();
+    }
+    setPopover(null);
+    onToast?.(`Шаблон «${t.name}» вставлен`);
+  };
+
+  const deleteTemplate = (id: string) => {
+    const list = templates.filter((t) => t.id !== id);
+    setTemplates(list);
+    saveTemplates(list);
+  };
+
+  const insertSignature = () => {
+    const html = signatureHtml || loadSignature();
+    if (!html.trim()) {
+      const def = `<p>—<br/>${fromName}<br/><span style="color:rgba(255,255,255,0.45);">${fromEmail}</span></p>`;
+      setSignatureHtml(def);
+      saveSignature(def);
+      restoreSelection();
+      document.execCommand("insertHTML", false, def);
+    } else {
+      restoreSelection();
+      document.execCommand("insertHTML", false, html);
+    }
+    saveSelection();
+    syncEmpty();
+    setPopover(null);
+    onToast?.("Подпись вставлена");
+  };
+
+  const saveCurrentSignature = () => {
+    const html = editorRef.current?.innerHTML?.trim() || "";
+    if (!html) {
+      onToast?.("Сначала напишите подпись в письме");
+      return;
+    }
+    setSignatureHtml(html);
+    saveSignature(html);
+    setPopover(null);
+    onToast?.("Подпись сохранена");
+  };
+
+  const toggleComposeLabel = (id: string) => {
+    setComposeLabels((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
+  const addFiles = (files: File[]) => {
+    for (const file of files) {
+      if (file.type.startsWith("image/") && file.size < 4_000_000) {
+        insertImageFile(file);
+        continue;
+      }
+      if (file.size > 8_000_000) {
+        onToast?.(`${file.name}: слишком большой файл (макс. 8 МБ)`);
+        continue;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        setAttachments((prev) => [
+          ...prev,
+          {
+            id: `${Date.now()}-${file.name}`,
+            name: file.name,
+            size: file.size,
+            type: file.type || "application/octet-stream",
+            dataUrl: String(reader.result || ""),
+          },
+        ]);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const openTemplateMenu = () => {
+    setTemplates(loadTemplates());
+    togglePopover("template");
   };
 
   const togglePopover = (id: PopoverId) => {
@@ -1883,6 +2156,65 @@ export default function ComposeEditor({
                 />
               </div>
 
+              {(attachments.length > 0 || statusFlash || composeLabels.length > 0) && (
+                <div className="shrink-0 px-4 pb-1 space-y-2">
+                  {statusFlash && (
+                    <p className="text-[12px] text-[#4d9fff] font-[family-name:var(--font-manrope)]">
+                      {statusFlash}
+                    </p>
+                  )}
+                  {composeLabels.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {composeLabels.map((id) => {
+                        const l = labels.find((x) => x.id === id);
+                        if (!l) return null;
+                        return (
+                          <button
+                            key={id}
+                            type="button"
+                            onClick={() => toggleComposeLabel(id)}
+                            className="h-6 px-2 rounded-full text-[11px] text-white/80 bg-white/8 inline-flex items-center gap-1.5"
+                          >
+                            <span
+                              className="h-2 w-2 rounded-full"
+                              style={{ backgroundColor: l.color }}
+                            />
+                            {l.name}
+                            <X size={11} className="opacity-50" />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {attachments.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {attachments.map((a) => (
+                        <span
+                          key={a.id}
+                          className="h-7 pl-2.5 pr-1 rounded-[8px] bg-white/6 text-[12px] text-white/75 inline-flex items-center gap-1.5"
+                        >
+                          <Paperclip size={12} className="opacity-50" />
+                          <span className="max-w-[140px] truncate">{a.name}</span>
+                          <span className="text-white/35">{formatBytes(a.size)}</span>
+                          <button
+                            type="button"
+                            className="h-5 w-5 rounded-[6px] hover:bg-white/10 inline-flex items-center justify-center"
+                            onClick={() =>
+                              setAttachments((prev) =>
+                                prev.filter((x) => x.id !== a.id),
+                              )
+                            }
+                            aria-label="Убрать вложение"
+                          >
+                            <X size={12} />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="shrink-0 px-4 pb-4 pt-1 flex items-center gap-1 overflow-x-auto no-scrollbar touch-pan-x overscroll-x-contain">
                 <button
                   type="button"
@@ -1906,37 +2238,51 @@ export default function ComposeEditor({
                   placement="top"
                   align="center"
                   onClose={closePopover}
-                  className="w-56"
+                  className="w-64"
                 >
                   <button
                     type="button"
                     className="w-full flex items-center justify-between px-3 py-2.5 text-[13px] hover:bg-white/5 rounded-[10px]"
-                    onClick={() => setPopover(null)}
+                    onClick={() => void scheduleSendAt(schedules.tomorrow)}
                   >
                     <span className="text-white/85">Завтра</span>
-                    <span className="text-white/35">{schedules.tomorrow}</span>
+                    <span className="text-white/35">{schedules.tomorrowLabel}</span>
                   </button>
                   <button
                     type="button"
                     className="w-full flex items-center justify-between px-3 py-2.5 text-[13px] hover:bg-white/5 rounded-[10px]"
-                    onClick={() => setPopover(null)}
+                    onClick={() => void scheduleSendAt(schedules.week)}
                   >
                     <span className="text-white/85">Через неделю</span>
-                    <span className="text-white/35">{schedules.week}</span>
+                    <span className="text-white/35">{schedules.weekLabel}</span>
                   </button>
-                  <button
-                    type="button"
-                    className="w-full px-3 py-2.5 text-left text-[13px] text-white/85 hover:bg-white/5 rounded-[10px]"
-                    onClick={() => setPopover(null)}
-                  >
-                    Выбрать дату и время
-                  </button>
+                  <div className="px-3 py-2 space-y-2">
+                    <p className="text-[12px] text-white/40">Своя дата и время</p>
+                    <input
+                      type="datetime-local"
+                      value={customSchedule}
+                      onChange={(e) => setCustomSchedule(e.target.value)}
+                      className="w-full h-9 rounded-[10px] bg-[#0f1115] border border-white/10 px-2.5 text-[13px] text-white/85 outline-none"
+                    />
+                    <button
+                      type="button"
+                      disabled={!customSchedule}
+                      className="w-full h-9 rounded-[10px] bg-[#0066ff]/90 text-white text-[13px] font-medium disabled:opacity-40"
+                      onClick={() => {
+                        const d = new Date(customSchedule);
+                        if (Number.isNaN(d.getTime())) return;
+                        void scheduleSendAt(d);
+                      }}
+                    >
+                      Отложить
+                    </button>
+                  </div>
                 </PortalMenu>
 
                 <ToolBtn
                   buttonRef={remindBtnRef}
                   title="Напоминания"
-                  pressed={popover === "remind"}
+                  pressed={popover === "remind" || remindNoReply || notifyDelivery}
                   onClick={() => togglePopover("remind")}
                 >
                   <Bell size={17} />
@@ -1975,7 +2321,7 @@ export default function ComposeEditor({
                   buttonRef={templateBtnRef}
                   title="Шаблон"
                   pressed={popover === "template"}
-                  onClick={saveTemplate}
+                  onClick={openTemplateMenu}
                 >
                   <FileText size={17} />
                 </ToolBtn>
@@ -1985,11 +2331,47 @@ export default function ComposeEditor({
                   placement="top"
                   align="center"
                   onClose={closePopover}
-                  className="px-3.5 py-2.5"
+                  className="w-72 max-h-[280px] overflow-y-auto"
                 >
-                  <span className="text-[13px] text-white/85 whitespace-nowrap">
-                    {templateSaved ? "Шаблон сохранён" : "Сохранить как шаблон"}
-                  </span>
+                  <button
+                    type="button"
+                    className="w-full px-3 py-2.5 text-left text-[13px] text-white/85 hover:bg-white/5 rounded-[10px]"
+                    onClick={saveCurrentAsTemplate}
+                  >
+                    Сохранить текущее как шаблон
+                  </button>
+                  {templates.length > 0 && (
+                    <div className="my-1 border-t border-white/8" />
+                  )}
+                  {templates.length === 0 ? (
+                    <p className="px-3 py-2 text-[12px] text-white/40">
+                      Пока нет сохранённых шаблонов
+                    </p>
+                  ) : (
+                    templates.map((t) => (
+                      <div
+                        key={t.id}
+                        className="flex items-center gap-1 px-1.5 py-0.5"
+                      >
+                        <button
+                          type="button"
+                          className="flex-1 px-2 py-2 text-left text-[13px] text-white/85 hover:bg-white/5 rounded-[10px] truncate"
+                          onClick={() => applyTemplate(t)}
+                          title={t.name}
+                        >
+                          {t.name}
+                        </button>
+                        <button
+                          type="button"
+                          className="h-8 w-8 rounded-[8px] text-white/35 hover:bg-white/5 hover:text-white/70 inline-flex items-center justify-center"
+                          onClick={() => deleteTemplate(t.id)}
+                          aria-label="Удалить шаблон"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ))
+                  )}
                 </PortalMenu>
 
                 <ToolBtn
@@ -2002,7 +2384,11 @@ export default function ComposeEditor({
                 <ToolBtn
                   buttonRef={moreBtnRef}
                   title="Ещё"
-                  pressed={popover === "more"}
+                  pressed={
+                    popover === "more" ||
+                    popover === "labels" ||
+                    popover === "signature"
+                  }
                   onClick={() => togglePopover("more")}
                 >
                   <MoreHorizontal size={17} />
@@ -2018,18 +2404,23 @@ export default function ComposeEditor({
                   <button
                     type="button"
                     className="w-full flex items-center gap-2.5 px-3 py-2.5 text-[13px] text-white/85 hover:bg-white/5 rounded-[10px]"
-                    onClick={() => setPopover(null)}
+                    onClick={() => setPopover("labels")}
                   >
                     <Tag size={15} className="text-white/40" />
                     Добавить метки
+                    {composeLabels.length > 0 && (
+                      <span className="ml-auto text-[11px] text-white/35">
+                        {composeLabels.length}
+                      </span>
+                    )}
                   </button>
                   <button
                     type="button"
                     className="w-full flex items-center gap-2.5 px-3 py-2.5 text-[13px] text-white/85 hover:bg-white/5 rounded-[10px]"
-                    onClick={() => setPopover(null)}
+                    onClick={() => setPopover("signature")}
                   >
                     <Pencil size={15} className="text-white/40" />
-                    Выбрать подпись
+                    Подпись
                   </button>
                   <div className="flex items-center gap-2.5 px-3 py-2.5">
                     <Wand2 size={15} className="text-white/40 shrink-0" />
@@ -2046,6 +2437,75 @@ export default function ComposeEditor({
                     <Toggle on={subjectHint} onChange={setSubjectHint} />
                   </div>
                 </PortalMenu>
+
+                <PortalMenu
+                  open={popover === "labels"}
+                  anchor={moreBtnRef.current}
+                  placement="top"
+                  align="right"
+                  onClose={closePopover}
+                  className="w-64 max-h-[260px] overflow-y-auto"
+                >
+                  <button
+                    type="button"
+                    className="w-full px-3 py-2 text-left text-[12px] text-white/40 hover:bg-white/5 rounded-[10px]"
+                    onClick={() => setPopover("more")}
+                  >
+                    ← Назад
+                  </button>
+                  {labels.length === 0 ? (
+                    <p className="px-3 py-2 text-[12px] text-white/40">
+                      Сначала создайте метку в тулбаре
+                    </p>
+                  ) : (
+                    labels.map((l) => (
+                      <button
+                        key={l.id}
+                        type="button"
+                        className="w-full flex items-center gap-2.5 px-3 py-2.5 text-[13px] text-white/85 hover:bg-white/5 rounded-[10px]"
+                        onClick={() => toggleComposeLabel(l.id)}
+                      >
+                        <SoftCheck checked={composeLabels.includes(l.id)} />
+                        <span
+                          className="h-2.5 w-2.5 rounded-full"
+                          style={{ backgroundColor: l.color }}
+                        />
+                        {l.name}
+                      </button>
+                    ))
+                  )}
+                </PortalMenu>
+
+                <PortalMenu
+                  open={popover === "signature"}
+                  anchor={moreBtnRef.current}
+                  placement="top"
+                  align="right"
+                  onClose={closePopover}
+                  className="w-64"
+                >
+                  <button
+                    type="button"
+                    className="w-full px-3 py-2 text-left text-[12px] text-white/40 hover:bg-white/5 rounded-[10px]"
+                    onClick={() => setPopover("more")}
+                  >
+                    ← Назад
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full px-3 py-2.5 text-left text-[13px] text-white/85 hover:bg-white/5 rounded-[10px]"
+                    onClick={insertSignature}
+                  >
+                    Вставить подпись
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full px-3 py-2.5 text-left text-[13px] text-white/85 hover:bg-white/5 rounded-[10px]"
+                    onClick={saveCurrentSignature}
+                  >
+                    Сохранить текст письма как подпись
+                  </button>
+                </PortalMenu>
               </div>
 
               <input
@@ -2056,9 +2516,7 @@ export default function ComposeEditor({
                 multiple
                 onChange={(e) => {
                   const files = Array.from(e.target.files || []);
-                  files
-                    .filter((f) => f.type.startsWith("image/"))
-                    .forEach(insertImageFile);
+                  if (files.length) addFiles(files);
                   e.target.value = "";
                 }}
               />

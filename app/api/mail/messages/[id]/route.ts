@@ -28,13 +28,6 @@ export async function GET(req: NextRequest, { params }: Params) {
 
   // Prefetch uses ?read=0 so hover doesn't clear "новое"
   const markRead = req.nextUrl.searchParams.get("read") !== "0";
-  if (markRead && row.unread) {
-    await prisma.message.update({
-      where: { id: row.id },
-      data: { unread: false },
-    });
-    row.unread = false;
-  }
 
   const threadKey = row.threadId || row.id;
   const threadRows = await prisma.message.findMany({
@@ -52,11 +45,9 @@ export async function GET(req: NextRequest, { params }: Params) {
     threadRows.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   }
 
-  // Mark other unread messages in the thread as read when opening
+  // Mark entire conversation read when opening
   if (markRead) {
-    const unreadIds = threadRows
-      .filter((m) => m.unread && m.id !== row.id)
-      .map((m) => m.id);
+    const unreadIds = threadRows.filter((m) => m.unread).map((m) => m.id);
     if (unreadIds.length) {
       await prisma.message.updateMany({
         where: { id: { in: unreadIds }, mailboxId: auth.ctx.mailboxId },
@@ -65,6 +56,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       for (const m of threadRows) {
         if (unreadIds.includes(m.id)) m.unread = false;
       }
+      row.unread = false;
     }
   }
 

@@ -25,9 +25,11 @@ export const Logo: React.FC<Props> = ({
       ? "/logo-bussines.svg"
       : variant === "id"
         ? "/logo-id.svg"
-        : variant === "bg" || variant === "mark"
-          ? "/logo-blue-bg.svg"
-          : "/logo-blue-text.svg";
+        : variant === "mark"
+          ? "/logo-big-mail.svg"
+          : variant === "bg"
+            ? "/logo-blue-bg.svg"
+            : "/logo-blue-text.svg";
 
   const defaultSize =
     variant === "business"
