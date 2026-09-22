@@ -1523,20 +1523,23 @@ export default function MailApp() {
                 <AccountAvatar account={activeAccount} size={40} />
               </button>
 
-              {profileOpen && (
-                <div className="absolute right-0 top-[calc(100%+10px)] w-[min(calc(100vw-24px),340px)] rounded-[24px] bg-[#1a1c22] border border-white/10 shadow-[0_20px_60px_rgba(0,0,0,0.55)] p-3 z-50">
-                  <div className="flex justify-end mb-1">
-                    <button
-                      type="button"
-                      className="h-8 w-8 rounded-full flex items-center justify-center text-white/40 hover:bg-white/5 hover:text-white"
-                      onClick={() => setProfileOpen(false)}
-                      aria-label="Закрыть"
-                    >
-                      <X size={16} />
-                    </button>
-                  </div>
-
-                  <div className="rounded-[16px] bg-[#0f1115] overflow-hidden mb-2">
+              <AnimatePresence>
+                {profileOpen && (
+                  <motion.div
+                    key="account-menu"
+                    initial={{ opacity: 0, scale: 0.86, y: -8 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.9, y: -6 }}
+                    transition={{
+                      type: "spring",
+                      stiffness: 520,
+                      damping: 34,
+                      mass: 0.65,
+                    }}
+                    style={{ transformOrigin: "calc(100% - 20px) 0%" }}
+                    className="absolute right-0 top-[calc(100%+10px)] w-[min(calc(100vw-24px),340px)] rounded-[24px] bg-[#12141a] border border-white/16 shadow-[0_24px_80px_rgba(0,0,0,0.72)] p-3 z-50"
+                  >
+                  <div className="rounded-[16px] bg-[#1a1c22] border border-white/8 overflow-hidden mb-2">
                     <div className="flex items-center gap-3 px-3 py-3">
                       <AccountAvatar account={activeAccount} size={56} />
                       <div className="min-w-0 flex-1">
@@ -1565,7 +1568,7 @@ export default function MailApp() {
                     </div>
                   </div>
 
-                  <div className="rounded-[16px] bg-[#0f1115] overflow-hidden mb-3">
+                  <div className="rounded-[16px] bg-[#1a1c22] border border-white/8 overflow-hidden mb-3">
                     {accounts
                       .filter((a) => !a.active)
                       .map((a) => (
@@ -1615,7 +1618,7 @@ export default function MailApp() {
                   <button
                     type="button"
                     onClick={manageAccount}
-                    className="w-full h-11 rounded-full bg-[#0f1115] hover:bg-[#16181e] transition-colors px-4 inline-flex items-center gap-3 text-[14px] font-[family-name:var(--font-manrope)]"
+                    className="w-full h-11 rounded-full bg-[#1a1c22] border border-white/8 hover:bg-[#22252e] transition-colors px-4 inline-flex items-center gap-3 text-[14px] font-[family-name:var(--font-manrope)]"
                   >
                     <Settings size={16} className="text-white/55" />
                     Управление аккаунтом
@@ -1630,8 +1633,9 @@ export default function MailApp() {
                       Условия
                     </Link>
                   </div>
-                </div>
-              )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
         </div>
@@ -1798,7 +1802,7 @@ export default function MailApp() {
 
         {/* Main — Yandex-style list pane */}
         <main className="flex-1 min-w-0 flex flex-col p-0">
-          <div className="flex-1 min-h-0 bg-[#1a1c22] md:rounded-[20px] flex flex-col overflow-hidden">
+          <div className="flex-1 min-h-0 bg-[#1a1c22] mail-main-pane md:rounded-[20px] flex flex-col overflow-hidden">
             {/* Toolbar — menus outside overflow-x so dropdowns aren't clipped */}
             <div className="relative shrink-0">
               <div className="flex items-center gap-0.5 px-2 md:px-3 py-1.5 overflow-x-auto no-scrollbar">
@@ -2492,7 +2496,7 @@ export default function MailApp() {
         <button
           type="button"
           onClick={() => setComposeOpen(true)}
-          className="md:hidden fixed right-4 z-30 h-14 w-14 rounded-full bg-[#0066ff] text-white shadow-[0_12px_32px_rgba(0,102,255,0.45)] inline-flex items-center justify-center hover:bg-[#0052cc] transition-colors"
+          className="md:hidden fixed right-4 z-30 h-14 w-14 rounded-full bg-[#0066ff] text-white inline-flex items-center justify-center hover:bg-[#0052cc] transition-colors"
           style={{ bottom: "calc(1rem + var(--safe-bottom))" }}
           aria-label="Написать"
         >

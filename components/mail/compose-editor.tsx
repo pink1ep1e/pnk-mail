@@ -280,6 +280,15 @@ type WinRect = { x: number; y: number; w: number; h: number };
 const MIN_W = 420;
 const MIN_H = 420;
 
+function readCssPx(varName: string): number {
+  if (typeof window === "undefined") return 0;
+  const raw = getComputedStyle(document.documentElement)
+    .getPropertyValue(varName)
+    .trim();
+  const n = parseFloat(raw);
+  return Number.isFinite(n) ? n : 0;
+}
+
 function isNarrowViewport() {
   return typeof window !== "undefined" && window.innerWidth < 640;
 }
@@ -380,11 +389,19 @@ function defaultRect(): WinRect {
   }
   if (isNarrowViewport()) {
     const box = viewportBox();
+    const safeTop = readCssPx("--safe-top");
+    const safeBottom = readCssPx("--safe-bottom");
+    // When the keyboard is open, visualViewport already shrinks — don't double-pad.
+    const keyboardOpen =
+      box.offsetTop > 1 ||
+      box.height < window.innerHeight - safeTop - safeBottom - 48;
+    const topPad = keyboardOpen ? 0 : safeTop;
+    const bottomPad = keyboardOpen ? 0 : safeBottom;
     return {
       x: box.offsetLeft,
-      y: box.offsetTop,
+      y: box.offsetTop + topPad,
       w: Math.max(280, box.width),
-      h: Math.max(280, box.height),
+      h: Math.max(280, box.height - topPad - bottomPad),
     };
   }
   const w = Math.min(720, window.innerWidth - 24);
@@ -2321,7 +2338,7 @@ export default function ComposeEditor({
                 <button
                   type="button"
                   onClick={handleSend}
-                  className="h-11 px-5 rounded-[12px] bg-[#0066ff] text-white font-semibold text-[15px] hover:bg-[#0052cc] transition-colors shrink-0"
+                  className="h-11 px-5 rounded-[12px] bg-[#0066ff] text-white font-semibold text-[15px] hover:bg-[#0052cc] transition-colors shrink-0 shadow-none"
                 >
                   {sentFlash ? "Отправлено" : "Отправить"}
                 </button>

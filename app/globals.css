@@ -135,11 +135,16 @@ html.standalone body {
   height: var(--app-height);
   max-height: var(--app-height);
   padding-top: var(--safe-top);
-  padding-bottom: var(--safe-bottom);
+  padding-bottom: 0;
   padding-left: var(--safe-left);
   padding-right: var(--safe-right);
   background: #0c0d10;
   box-sizing: border-box;
+}
+
+.mail-main-pane {
+  background: #1a1c22;
+  padding-bottom: var(--safe-bottom);
 }
 
 button,
