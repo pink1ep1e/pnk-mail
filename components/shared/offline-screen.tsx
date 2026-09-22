@@ -23,10 +23,10 @@ export function OfflineScreen({
         <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-[18px] bg-[#1a1c22]">
           <Cloud size={30} className="text-white/55" />
         </div>
-        <h1 className="text-[24px] font-semibold tracking-[-0.03em] font-[family-name:var(--font-unbounded)]">
+        <h1 className="text-[24px] font-semibold tracking-[-0.03em] font-[family-name:var(--font-unbounded),ui-sans-serif,system-ui,sans-serif]">
           Нет интернета
         </h1>
-        <p className="mt-3 text-[15px] leading-relaxed text-white/45 font-[family-name:var(--font-manrope)]">
+        <p className="mt-3 text-[15px] leading-relaxed text-white/45 font-[family-name:var(--font-manrope),ui-sans-serif,system-ui,sans-serif]">
           Проверьте подключение или выключите VPN и обновите страницу.
         </p>
         <button
@@ -35,7 +35,7 @@ export function OfflineScreen({
             if (onRetry) onRetry();
             else window.location.reload();
           }}
-          className="mt-8 inline-flex h-12 w-full items-center justify-center gap-2 rounded-[14px] bg-[#0066ff] text-[15px] font-semibold font-[family-name:var(--font-manrope)] hover:bg-[#0052cc] transition-colors"
+          className="mt-8 inline-flex h-12 w-full items-center justify-center gap-2 rounded-[14px] bg-[#0066ff] text-[15px] font-semibold font-[family-name:var(--font-manrope),ui-sans-serif,system-ui,sans-serif] hover:bg-[#0052cc] transition-colors"
         >
           <Reload size={18} />
           Обновить страницу

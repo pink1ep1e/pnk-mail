@@ -95,7 +95,7 @@ export default function RootLayout({
             background: "#0c0d10",
             color: "#fff",
             fontFamily:
-              "var(--font-manrope), system-ui, -apple-system, sans-serif",
+              'var(--font-manrope, -apple-system), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
           }}
         >
           <div style={{ width: "100%", maxWidth: 360, textAlign: "center" }}>
