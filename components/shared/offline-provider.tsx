@@ -7,7 +7,7 @@ function readOffline() {
   return typeof navigator !== "undefined" && navigator.onLine === false;
 }
 
-const CURRENT_CACHE = "pnk-mail-offline-v2";
+const CURRENT_CACHE = "pnk-mail-offline-v3";
 
 export function OfflineProvider({ children }: { children: React.ReactNode }) {
   const [offline, setOffline] = useState(readOffline);
