@@ -34,6 +34,7 @@ import {
   X,
 } from "@/lib/icons";
 import ComposeEditor from "@/components/mail/compose-editor";
+import { AppSplash } from "@/components/shared/app-splash";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { haptic } from "@/lib/haptic";
 import { prepareMailReaderSrcDoc, isBrandedHtmlEmail } from "@/lib/mail-template";
@@ -1270,48 +1271,7 @@ export default function MailApp() {
   };
 
   if (!showApp || !activeAccount) {
-    const pct = Math.round(progress);
-    return (
-      <div className="h-[100svh] w-full bg-[#0c0d10] flex flex-col items-center justify-center px-6 select-none">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.92, y: 8 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-        >
-          <Image
-            src="/logo-big-mail.svg"
-            alt="pnk почта"
-            width={200}
-            height={200}
-            priority
-            unoptimized
-            className="w-[148px] md:w-[180px] h-auto"
-          />
-        </motion.div>
-
-        <motion.div
-          className="mt-10 w-full max-w-[200px]"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.18, duration: 0.35 }}
-        >
-          <svg
-            viewBox="0 0 200 8"
-            className="block w-full h-[8px]"
-            aria-hidden
-          >
-            <rect width="200" height="8" rx="4" ry="4" fill="#2a2d36" />
-            <rect
-              width={Math.max(8, (pct / 100) * 200)}
-              height="8"
-              rx="4"
-              ry="4"
-              fill="#0066ff"
-            />
-          </svg>
-        </motion.div>
-      </div>
-    );
+    return <AppSplash progress={progress} />;
   }
 
   const Sidebar = (
@@ -1490,7 +1450,7 @@ export default function MailApp() {
   );
 
   return (
-    <div className="h-[100svh] max-h-[100dvh] w-full max-w-[100vw] bg-[#0c0d10] text-white flex flex-col overflow-hidden overscroll-none touch-pan-y">
+    <div className="mail-app-shell w-full max-w-[100vw] bg-[#0c0d10] text-white flex flex-col overflow-hidden overscroll-none touch-pan-y">
       {/* Site header strip — buttons from landing header */}
       <header className="shrink-0 z-30 border-b border-white/5 bg-[#0c0d10]">
         <div className="h-14 md:h-16 px-3 md:px-5 flex items-center gap-2 md:gap-4">

@@ -1,7 +1,9 @@
 "use client";
 
 import { Logo } from "@/components/shared/logo";
+import { useInstallPrompt } from "@/components/shared/install-prompt";
 import { cn } from "@/lib/utils";
+import { haptic } from "@/lib/haptic";
 import { ArrowRight, Globe, Info, Save } from "@/lib/icons";
 import Image from "next/image";
 import Link from "next/link";
@@ -30,6 +32,7 @@ function InstallContent() {
   const initial =
     searchParams.get("os") === "ios" ? "ios" : ("android" as OS);
   const [os, setOs] = useState<OS>(initial);
+  const { canPrompt, standalone, promptInstall } = useInstallPrompt();
 
   return (
     <div className="min-h-[100dvh] overflow-y-auto overscroll-y-contain bg-[#0c0d10] text-white flex flex-col">
@@ -42,12 +45,43 @@ function InstallContent() {
           className="w-[120px] md:w-[150px]"
         />
         <h1 className="mt-8 max-w-[640px] text-center font-[family-name:var(--font-unbounded)] font-bold text-[24px] md:text-[34px] leading-[1.2] tracking-[-0.02em]">
-          Установите pnk почту на экран «Домой»
+          {standalone
+            ? "pnk почта уже установлена"
+            : "Установите pnk почту на экран «Домой»"}
         </h1>
         <p className="mt-3 max-w-[520px] text-center text-[15px] md:text-[16px] text-white/50 font-[family-name:var(--font-manrope)] leading-relaxed">
-          Ярлык на телефоне работает как приложение — без магазинов и
-          скачивания файлов. Инструкция одинаковая для iPhone и Android.
+          {standalone
+            ? "Вы открыли приложение без адресной строки. Можно сразу перейти в почту."
+            : "Ярлык на телефоне работает как приложение — без магазинов и скачивания файлов. После установки адресная строка скрыта."}
         </p>
+        {(canPrompt || standalone) && (
+          <div className="mt-6 flex flex-col sm:flex-row items-center gap-3">
+            {canPrompt && (
+              <button
+                type="button"
+                onClick={() => {
+                  haptic("medium");
+                  void promptInstall().then((ok) => {
+                    if (ok) haptic("success");
+                  });
+                }}
+                className="inline-flex h-[52px] items-center justify-center gap-2 rounded-[14px] bg-[#0066ff] px-6 text-[16px] font-semibold font-[family-name:var(--font-manrope)] text-white hover:bg-[#0052cc] transition-colors"
+              >
+                Установить сейчас
+                <ArrowRight size={18} />
+              </button>
+            )}
+            {standalone && (
+              <Link
+                href="/mail"
+                className="inline-flex h-[52px] items-center justify-center gap-2 rounded-[14px] bg-[#0066ff] px-6 text-[16px] font-semibold font-[family-name:var(--font-manrope)] text-white hover:bg-[#0052cc] transition-colors"
+              >
+                Открыть почту
+                <ArrowRight size={18} />
+              </Link>
+            )}
+          </div>
+        )}
       </header>
 
       <main className="flex-1 flex flex-col items-center px-4 pb-12">

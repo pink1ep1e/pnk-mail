@@ -1,7 +1,9 @@
 "use client";
 
 import { Header } from "@/components/shared/header";
+import { AppSplash } from "@/components/shared/app-splash";
 import { mailAuthStartUrl } from "@/lib/id-auth";
+import { haptic } from "@/lib/haptic";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import AOS from "aos";
@@ -9,13 +11,13 @@ import "aos/dist/aos.css";
 
 export default function BusinessPage() {
   const [isLoading, setIsLoading] = useState(false);
-  const [hint, setHint] = useState("Готовим корпоративную почту...");
+  const [hint, setHint] = useState("Готовим корпоративную почту…");
 
   const hints = [
-    "Создаём домен для вашего магазина...",
-    "Настраиваем ящики команды...",
-    "Почта для бизнеса почти готова.",
-    "Ещё секунда — и можно писать клиентам.",
+    "Создаём домен для вашего магазина…",
+    "Настраиваем ящики команды…",
+    "Почта для бизнеса почти готова…",
+    "Ещё секунда — и можно писать клиентам…",
   ];
 
   useEffect(() => {
@@ -30,32 +32,20 @@ export default function BusinessPage() {
     const interval = setInterval(() => {
       const randomIndex = Math.floor(Math.random() * hints.length);
       setHint(hints[randomIndex]);
-    }, 1800);
+    }, 1600);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoading]);
 
   const handleButtonClick = (url: string) => {
+    haptic("medium");
     setIsLoading(true);
     window.location.href = url;
   };
 
   return (
     <div className="min-h-screen overflow-hidden bg-[#07111f] text-white">
-      {isLoading && (
-        <div className="fixed inset-0 bg-[#050b14] flex items-center justify-center z-[9999]">
-          <div className="flex flex-col items-center px-6">
-            <div className="flex items-center font-[family-name:var(--font-unbounded)] font-bold text-[36px] md:text-[64px] gap-3 select-none">
-              <h1>pnk</h1>
-              <h1 className="text-white/50">почта</h1>
-            </div>
-            <div className="animate-spin rounded-full mt-10 h-20 w-20 border-t-4 border-b-4 border-white" />
-            <div className="mt-10 text-lg text-center font-[family-name:var(--font-manrope)] text-white/60">
-              {hint}
-            </div>
-          </div>
-        </div>
-      )}
+      {isLoading && <AppSplash hint={hint} />}
 
       <section className="relative min-h-[100svh] overflow-hidden">
         <div

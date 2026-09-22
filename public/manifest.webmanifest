@@ -1,14 +1,22 @@
 {
+  "id": "/",
   "name": "pnk почта",
   "short_name": "почта",
   "description": "Быстрая и защищённая почта pnk",
   "start_url": "/mail",
   "scope": "/",
   "display": "standalone",
-  "orientation": "portrait",
+  "display_override": ["standalone", "minimal-ui", "browser"],
+  "orientation": "portrait-primary",
   "background_color": "#0c0d10",
   "theme_color": "#0c0d10",
   "lang": "ru",
+  "dir": "ltr",
+  "categories": ["productivity", "social"],
+  "prefer_related_applications": false,
+  "launch_handler": {
+    "client_mode": ["navigate-existing", "auto"]
+  },
   "icons": [
     {
       "src": "/icon-192.png",

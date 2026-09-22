@@ -29,6 +29,9 @@
   --blue-900: #0a1a3a;
   --surface: #0c0d10;
   --surface-elevated: #1a1c22;
+
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --app-height: 100dvh;
 }
 
 @theme inline {
@@ -80,6 +83,7 @@ html {
   min-height: 100%;
   /* height: 100% traps scroll on some mobile browsers with tall pages */
   height: auto;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
@@ -91,10 +95,54 @@ body {
   overscroll-behavior: none;
   width: 100%;
   min-height: 100%;
-  min-height: 100dvh;
+  min-height: var(--app-height);
   position: relative;
   touch-action: pan-y;
   -webkit-tap-highlight-color: transparent;
+}
+
+/*
+  WebKit standalone PWA: 100dvh is short by the bottom safe-area.
+  100vh includes it — use that in installed mode so bottom:0 is the
+  real screen edge.
+*/
+@media (display-mode: standalone), (display-mode: fullscreen) {
+  :root {
+    --app-height: 100vh;
+  }
+
+  html,
+  body {
+    height: 100vh;
+    min-height: 100vh;
+  }
+}
+
+html.standalone {
+  --app-height: 100vh;
+}
+
+html.standalone,
+html.standalone body {
+  height: 100vh;
+  min-height: 100vh;
+}
+
+.mail-app-shell {
+  height: var(--app-height);
+  max-height: var(--app-height);
+}
+
+button,
+[role="button"],
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+main button,
+main [role="button"],
+main a {
+  touch-action: pan-y;
 }
 
 .mail-scroll {
