@@ -31,6 +31,24 @@ const PERSONAL_MAIL_DOMAINS = new Set([
   "hey.com",
 ]);
 
+/** Our own product domain — never use site favicon as a person avatar. */
+function isPnkMailProductDomain(domain: string): boolean {
+  const root = rootDomain(domain);
+  const configured = (
+    process.env.MAIL_FROM_DOMAIN ||
+    process.env.NEXT_PUBLIC_MAIL_FROM_DOMAIN ||
+    "pnkmail.ru"
+  )
+    .replace(/^\./, "")
+    .toLowerCase();
+  return (
+    domain === "pnkmail.ru" ||
+    root === "pnkmail.ru" ||
+    domain === configured ||
+    root === configured
+  );
+}
+
 /**
  * High-quality brand marks (prefer over generic favicon when known).
  * Values are absolute https URLs safe for <img>.
@@ -226,7 +244,11 @@ export function resolveSenderAvatarUrl(
   if (KNOWN_BRAND_LOGOS[domain]) return KNOWN_BRAND_LOGOS[domain];
   if (KNOWN_BRAND_LOGOS[root]) return KNOWN_BRAND_LOGOS[root];
 
-  if (PERSONAL_MAIL_DOMAINS.has(domain) || PERSONAL_MAIL_DOMAINS.has(root)) {
+  if (
+    PERSONAL_MAIL_DOMAINS.has(domain) ||
+    PERSONAL_MAIL_DOMAINS.has(root) ||
+    isPnkMailProductDomain(domain)
+  ) {
     return null;
   }
 

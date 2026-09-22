@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireActiveMailbox } from "@/lib/mail-auth";
-import { toListDto } from "@/lib/mail-store";
+import { toListDto, attachPnkMailAvatars } from "@/lib/mail-store";
 import {
   extractLogoFromHtml,
   resolveSenderAvatarUrl,
@@ -98,11 +98,14 @@ export async function GET(req: NextRequest, { params }: Params) {
     };
   };
 
+  const message = (await attachPnkMailAvatars([toDetail(row)]))[0];
+  const thread = await attachPnkMailAvatars(threadRows.map(toDetail));
+
   return NextResponse.json({
     ok: true,
     data: {
-      message: toDetail(row),
-      thread: threadRows.map(toDetail),
+      message,
+      thread,
     },
   });
 }

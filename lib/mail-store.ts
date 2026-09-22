@@ -1,8 +1,9 @@
 import { prisma } from "@/lib/db";
-import { avatarColor } from "@/lib/mail-session";
+import { avatarColor, idPublicAvatarUrl } from "@/lib/mail-session";
 import type { FolderId, MailMessage } from "@/lib/mail-data";
 import { welcomeMailHtml } from "@/lib/mail-template";
 import { resolveSenderAvatarUrl } from "@/lib/sender-avatar";
+import { getMailFromDomain } from "@/lib/mail-transport";
 
 export type MailFolder = Exclude<FolderId, "all">;
 
@@ -216,5 +217,40 @@ export function groupMessagesIntoThreads<
 }
 
 export function isPnkMailAddress(email: string): boolean {
-  return email.trim().toLowerCase().endsWith("@pnkmail.ru");
+  const addr = email.trim().toLowerCase();
+  const domain = getMailFromDomain().toLowerCase();
+  return addr.endsWith(`@${domain}`) || addr.endsWith("@pnkmail.ru");
+}
+
+/**
+ * For @pnkmail.ru senders, replace missing/brand avatars with pnk-id public photos.
+ */
+export async function attachPnkMailAvatars<
+  T extends { fromEmail: string; avatarUrl?: string | null },
+>(messages: T[]): Promise<T[]> {
+  const emails = [
+    ...new Set(
+      messages
+        .map((m) => (m.fromEmail || "").trim().toLowerCase())
+        .filter((e) => e && isPnkMailAddress(e)),
+    ),
+  ];
+  if (!emails.length) return messages;
+
+  const boxes = await prisma.mailbox.findMany({
+    where: { address: { in: emails } },
+    select: { address: true, ownerUserId: true },
+  });
+  if (!boxes.length) return messages;
+
+  const byAddress = new Map(
+    boxes.map((b) => [b.address.toLowerCase(), idPublicAvatarUrl(b.ownerUserId)]),
+  );
+
+  return messages.map((m) => {
+    const key = (m.fromEmail || "").trim().toLowerCase();
+    const url = byAddress.get(key);
+    if (!url) return m;
+    return { ...m, avatarUrl: url };
+  });
 }

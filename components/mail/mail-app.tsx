@@ -147,6 +147,20 @@ function withAccountAvatar(account: MailAccount): MailAccount {
   };
 }
 
+/** Prefer signed-in pnk-id photo when the sender is one of our accounts. */
+function avatarForSender(
+  fromEmail: string | null | undefined,
+  fallback: string | null | undefined,
+  accounts: MailAccount[],
+): string | null | undefined {
+  const key = (fromEmail || "").trim().toLowerCase();
+  if (key) {
+    const hit = accounts.find((a) => a.email.trim().toLowerCase() === key);
+    if (hit?.avatarUrl) return hit.avatarUrl;
+  }
+  return fallback;
+}
+
 function AccountAvatar({
   account,
   size,
@@ -213,6 +227,11 @@ function SenderAvatar({
     setBroken(false);
   }, [avatarUrl, fromEmail]);
   const showImg = Boolean(avatarUrl) && !broken;
+  const isPersonPhoto = Boolean(
+    avatarUrl &&
+      (/\/api\/public\/avatar\//i.test(avatarUrl) ||
+        /\b(googleusercontent|gravatar|avatar)\b/i.test(avatarUrl)),
+  );
 
   return (
     <div
@@ -223,7 +242,11 @@ function SenderAvatar({
       style={{
         width: size,
         height: size,
-        backgroundColor: showImg ? "#ffffff" : avatarColor,
+        backgroundColor: showImg
+          ? isPersonPhoto
+            ? undefined
+            : "#ffffff"
+          : avatarColor,
         fontSize: Math.round(size * 0.36),
       }}
       title={fromEmail || from}
@@ -233,7 +256,11 @@ function SenderAvatar({
         <img
           src={avatarUrl!}
           alt=""
-          className="h-[70%] w-[70%] object-contain"
+          className={
+            isPersonPhoto
+              ? "h-full w-full object-cover"
+              : "h-[70%] w-[70%] object-contain"
+          }
           referrerPolicy="no-referrer"
           onError={() => setBroken(true)}
         />
@@ -1710,7 +1737,11 @@ export default function MailApp() {
                           from={m.from}
                           fromEmail={m.fromEmail}
                           avatarColor={m.avatarColor}
-                          avatarUrl={m.avatarUrl}
+                          avatarUrl={avatarForSender(
+                            m.fromEmail,
+                            m.avatarUrl,
+                            accounts,
+                          )}
                           size={36}
                         />
                         <div className="min-w-0 flex-1">
@@ -1994,7 +2025,11 @@ export default function MailApp() {
                             from={m.from}
                             fromEmail={m.fromEmail}
                             avatarColor={m.avatarColor}
-                            avatarUrl={m.avatarUrl}
+                            avatarUrl={avatarForSender(
+                              m.fromEmail,
+                              m.avatarUrl,
+                              accounts,
+                            )}
                             size={28}
                           />
 
@@ -2171,7 +2206,11 @@ export default function MailApp() {
                                           avatarColor={
                                             msg.avatarColor || "#3b82f6"
                                           }
-                                          avatarUrl={msg.avatarUrl}
+                                          avatarUrl={avatarForSender(
+                                            msg.fromEmail,
+                                            msg.avatarUrl,
+                                            accounts,
+                                          )}
                                           size={44}
                                         />
 
