@@ -6,6 +6,7 @@ import {
   parseAddressList,
 } from "@/lib/mail-store";
 import { sanitizeMailHtml } from "@/lib/mail-template";
+import { extractLogoFromHtml } from "@/lib/sender-avatar";
 import {
   headerValue,
   normalizeRfcMessageId,
@@ -108,6 +109,7 @@ export async function deliverInbound(
     ...parseMessageIdList(payload.references),
   ];
   const inReplyTo = replyIds[0] || null;
+  const senderLogoUrl = extractLogoFromHtml(bodyHtml);
 
   for (const address of ours) {
     const mailbox = await prisma.mailbox.findUnique({ where: { address } });
@@ -152,6 +154,7 @@ export async function deliverInbound(
         preview,
         bodyHtml,
         bodyText,
+        senderLogoUrl: senderLogoUrl || undefined,
         unread: true,
         hasAttachment: Boolean(payload.hasAttachment),
         threadId: threadId || undefined,

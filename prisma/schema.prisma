@@ -35,6 +35,8 @@ model Message {
   preview        String
   bodyHtml       String    @default("")
   bodyText       String    @default("")
+  /// Logo URL extracted from branded HTML (or null → resolve from domain at read time)
+  senderLogoUrl  String?
   unread         Boolean   @default(true)
   hasAttachment  Boolean   @default(false)
   /// JSON array of MailLabel ids

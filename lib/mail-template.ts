@@ -1,16 +1,64 @@
 import DOMPurify from "isomorphic-dompurify";
 
-/** Allow safe HTML + inline styles (needed for branded / rich email). */
+const EMAIL_ATTRS = [
+  "target",
+  "style",
+  "charset",
+  "content",
+  "name",
+  "http-equiv",
+  "rel",
+  "href",
+  "src",
+  "alt",
+  "title",
+  "width",
+  "height",
+  "border",
+  "cellpadding",
+  "cellspacing",
+  "bgcolor",
+  "background",
+  "align",
+  "valign",
+  "color",
+  "face",
+  "size",
+  "colspan",
+  "rowspan",
+  "role",
+  "class",
+  "id",
+  "dir",
+  "lang",
+  "type",
+  "value",
+  "abbr",
+  "axis",
+  "headers",
+  "scope",
+  "start",
+  "nowrap",
+  "hspace",
+  "vspace",
+  "usemap",
+  "shape",
+  "coords",
+  "aria-hidden",
+  "aria-label",
+];
+
+/** Allow safe HTML + email layout attributes (tables/bgcolor/align). */
 export function sanitizeMailHtml(html: string, wholeDocument = false): string {
   return DOMPurify.sanitize(html, {
     USE_PROFILES: { html: true },
     WHOLE_DOCUMENT: wholeDocument,
-    FORBID_TAGS: ["iframe", "object", "embed", "form", "input", "script"],
+    FORBID_TAGS: ["iframe", "object", "embed", "form", "input", "script", "base"],
     ALLOW_DATA_ATTR: false,
     ADD_TAGS: wholeDocument
-      ? ["html", "head", "body", "meta", "style", "title", "link"]
-      : ["style"],
-    ADD_ATTR: ["target", "style", "charset", "content", "name", "http-equiv", "rel", "href"],
+      ? ["html", "head", "body", "meta", "style", "title", "link", "center", "font"]
+      : ["style", "center", "font"],
+    ADD_ATTR: EMAIL_ATTRS,
   });
 }
 
@@ -27,8 +75,8 @@ export function isFullHtmlDocument(html: string): boolean {
   return /<html[\s>]/i.test(html) || /<!DOCTYPE/i.test(html);
 }
 
-/** Dark reader chrome for fragments / docs that lost their styles. */
-const READER_BASE_CSS = `
+/** Dark reader chrome for plain / simple messages. */
+const READER_DARK_CSS = `
   html, body {
     margin: 0;
     padding: 0;
@@ -39,7 +87,7 @@ const READER_BASE_CSS = `
     line-height: 1.55;
     -webkit-font-smoothing: antialiased;
   }
-  body { padding: 0 2px 8px; }
+  body { padding: 4px 2px 12px; }
   a {
     color: #4d9fff !important;
     text-decoration: underline !important;
@@ -52,7 +100,14 @@ const READER_BASE_CSS = `
     text-decoration: none !important;
     cursor: default !important;
   }
-  img, video { max-width: 100%; height: auto; }
+  img, video { max-width: 100%; }
+  img[width]:not([width="1"]):not([width="0"]),
+  img:not([width]) { height: auto; }
+  img[width="1"], img[height="1"], img[width="0"], img[height="0"] {
+    max-width: none !important;
+    width: 1px !important;
+    height: 1px !important;
+  }
   p { margin: 0 0 0.55em; }
   p:last-child { margin-bottom: 0; }
   h1, h2, h3, h4 { color: #fff; line-height: 1.25; }
@@ -80,7 +135,6 @@ const READER_BASE_CSS = `
     color: rgba(255,255,255,0.48) !important;
     margin-bottom: 0.35em !important;
   }
-  /* Collapse Gmail's empty spacer lines at the top of replies */
   body > br:first-child,
   body > div:empty:first-child,
   body > p:empty:first-child {
@@ -98,6 +152,56 @@ const READER_BASE_CSS = `
     background: #1a1c22;
   }
 `;
+
+/**
+ * Light canvas for branded HTML mail (Reg.ru, banks, newsletters).
+ * Do NOT force text/link colors — preserve author layout.
+ * Avoid height:auto on all images — spacer GIFs hold table layouts together.
+ */
+const READER_LIGHT_CSS = `
+  :root { color-scheme: light; }
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #1a1a1a;
+    font-family: "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  img, video {
+    max-width: 100%;
+  }
+  /* Real content images may scale; keep 1px spacers intact */
+  img[width]:not([width="1"]):not([width="0"]),
+  img:not([width]) {
+    height: auto;
+  }
+  img[width="1"], img[height="1"], img[width="0"], img[height="0"] {
+    max-width: none !important;
+    width: 1px !important;
+    height: 1px !important;
+  }
+  table {
+    border-collapse: collapse;
+  }
+  a {
+    cursor: pointer;
+    pointer-events: auto;
+  }
+  center { display: block; width: 100%; }
+`;
+/** True if message looks like a branded / table-based HTML email. */
+export function isBrandedHtmlEmail(html: string): boolean {
+  const s = html || "";
+  if (isFullHtmlDocument(s)) return true;
+  if (/<table[\s>]/i.test(s) && /<(td|tr|th)[\s>]/i.test(s)) return true;
+  if (/\bbgcolor\s*=/i.test(s)) return true;
+  if (/background(-color)?\s*:\s*#?(?:fff|ffffff|f\d|e\d)/i.test(s)) return true;
+  if (/role\s*=\s*["']?presentation/i.test(s)) return true;
+  return false;
+}
 
 /** True if a CSS color is too dark for our dark reader canvas. */
 function isDarkCssColor(raw: string): boolean {
@@ -231,11 +335,13 @@ function ensureClickableLinks(html: string): string {
 }
 
 /**
- * Build srcDoc for the in-app reader: real HTML support on a dark canvas.
- * Does not strip the author's markup — only adds a safe base stylesheet.
+ * Build srcDoc for the in-app reader.
+ * Branded HTML mail → light canvas (preserve author CSS).
+ * Plain replies → dark canvas.
  */
 export function prepareMailReaderSrcDoc(html: string): string {
   const raw = (html || "").trim() || "<p></p>";
+  const branded = isBrandedHtmlEmail(raw);
   const cleaned = isFullHtmlDocument(raw)
     ? sanitizeMailHtml(raw, true)
     : sanitizeMailHtml(raw, false);
@@ -246,20 +352,24 @@ export function prepareMailReaderSrcDoc(html: string): string {
           `<body${attrs}>${trimLeadingEmptyMarkup(body)}</body>`,
       )
     : trimLeadingEmptyMarkup(cleaned);
-  const safe = lightenDarkTextColors(
-    ensureClickableLinks(linkifyBareUrls(trimmed)),
-  );
+
+  let safe = ensureClickableLinks(linkifyBareUrls(trimmed));
+  if (!branded) {
+    safe = lightenDarkTextColors(safe);
+  }
+
+  const css = branded ? READER_LIGHT_CSS : READER_DARK_CSS;
 
   if (isFullHtmlDocument(safe)) {
     if (/<head[\s>]/i.test(safe)) {
       return safe.replace(
         /<head([^>]*)>/i,
-        `<head$1><style data-pnk-reader>${READER_BASE_CSS}</style>`,
+        `<head$1><meta name="color-scheme" content="${branded ? "light" : "dark"}"/><style data-pnk-reader>${css}</style>`,
       );
     }
     return safe.replace(
       /<html([^>]*)>/i,
-      `<html$1><head><meta charset="utf-8"/><style data-pnk-reader>${READER_BASE_CSS}</style></head>`,
+      `<html$1><head><meta charset="utf-8"/><meta name="color-scheme" content="${branded ? "light" : "dark"}"/><style data-pnk-reader>${css}</style></head>`,
     );
   }
 
@@ -268,7 +378,8 @@ export function prepareMailReaderSrcDoc(html: string): string {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <style data-pnk-reader>${READER_BASE_CSS}</style>
+  <meta name="color-scheme" content="${branded ? "light" : "dark"}" />
+  <style data-pnk-reader>${css}</style>
 </head>
 <body>${safe}</body>
 </html>`;

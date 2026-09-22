@@ -23,7 +23,7 @@ import {
   Paperclip,
   Pencil,
   Plus,
-  RefreshCw,
+  Reload,
   Reply,
   Search,
   Settings,
@@ -35,7 +35,7 @@ import {
 } from "@/lib/icons";
 import ComposeEditor from "@/components/mail/compose-editor";
 import { haptic } from "@/lib/haptic";
-import { prepareMailReaderSrcDoc } from "@/lib/mail-template";
+import { prepareMailReaderSrcDoc, isBrandedHtmlEmail } from "@/lib/mail-template";
 import Image from "next/image";
 import Link from "next/link";
 import { AnimatePresence, motion, type PanInfo } from "motion/react";
@@ -193,8 +193,60 @@ function AccountAvatar({
   );
 }
 
+function SenderAvatar({
+  from,
+  fromEmail,
+  avatarColor,
+  avatarUrl,
+  size,
+  className,
+}: {
+  from: string;
+  fromEmail?: string | null;
+  avatarColor: string;
+  avatarUrl?: string | null;
+  size: number;
+  className?: string;
+}) {
+  const [broken, setBroken] = useState(false);
+  useEffect(() => {
+    setBroken(false);
+  }, [avatarUrl, fromEmail]);
+  const showImg = Boolean(avatarUrl) && !broken;
+
+  return (
+    <div
+      className={cn(
+        "shrink-0 rounded-full overflow-hidden flex items-center justify-center text-white font-semibold font-[family-name:var(--font-manrope)]",
+        className,
+      )}
+      style={{
+        width: size,
+        height: size,
+        backgroundColor: showImg ? "#ffffff" : avatarColor,
+        fontSize: Math.round(size * 0.36),
+      }}
+      title={fromEmail || from}
+    >
+      {showImg ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={avatarUrl!}
+          alt=""
+          className="h-[70%] w-[70%] object-contain"
+          referrerPolicy="no-referrer"
+          onError={() => setBroken(true)}
+        />
+      ) : (
+        initials(from || "?")
+      )}
+    </div>
+  );
+}
+
 function MailBodyFrame({ html }: { html: string }) {
   const ref = useRef<HTMLIFrameElement>(null);
+  const branded = useMemo(() => isBrandedHtmlEmail(html || ""), [html]);
   const srcDoc = useMemo(() => prepareMailReaderSrcDoc(html), [html]);
 
   useEffect(() => {
@@ -205,7 +257,7 @@ function MailBodyFrame({ html }: { html: string }) {
       const doc = iframe.contentDocument;
       if (!doc?.documentElement) return;
       const h = Math.max(
-        48,
+        80,
         doc.documentElement.scrollHeight,
         doc.body?.scrollHeight || 0,
       );
@@ -216,22 +268,36 @@ function MailBodyFrame({ html }: { html: string }) {
     resize();
     const t1 = window.setTimeout(resize, 40);
     const t2 = window.setTimeout(resize, 200);
+    const t3 = window.setTimeout(resize, 600);
     return () => {
       iframe.removeEventListener("load", resize);
       window.clearTimeout(t1);
       window.clearTimeout(t2);
+      window.clearTimeout(t3);
     };
   }, [srcDoc]);
 
   return (
-    <iframe
-      ref={ref}
-      title="Письмо"
-      sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
-      srcDoc={srcDoc}
-      className="w-full border-0 block bg-[#0c0d10] rounded-[12px]"
-      style={{ minHeight: 48 }}
-    />
+    <div
+      className={cn(
+        "w-full overflow-hidden rounded-[16px] border",
+        branded
+          ? "bg-white border-white/15 shadow-[0_0_0_1px_rgba(255,255,255,0.04)]"
+          : "bg-[#0c0d10] border-white/8",
+      )}
+    >
+      <iframe
+        ref={ref}
+        title="Письмо"
+        sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
+        srcDoc={srcDoc}
+        className={cn(
+          "w-full border-0 block",
+          branded ? "bg-white" : "bg-[#0c0d10]",
+        )}
+        style={{ minHeight: 80 }}
+      />
+    </div>
   );
 }
 
@@ -1056,6 +1122,21 @@ export default function MailApp() {
         detailCache.current.set(id, { message: msg, thread: threadMsgs });
         setDetail(msg);
         setThread(threadMsgs);
+        // Propagate richer logos into the list (from HTML / backfill)
+        const logoByEmail = new Map<string, string>();
+        for (const m of threadMsgs) {
+          if (m.avatarUrl && m.fromEmail) {
+            logoByEmail.set(m.fromEmail.toLowerCase(), m.avatarUrl);
+          }
+        }
+        if (logoByEmail.size) {
+          setItems((prev) =>
+            prev.map((m) => {
+              const url = logoByEmail.get((m.fromEmail || "").toLowerCase());
+              return url && url !== m.avatarUrl ? { ...m, avatarUrl: url } : m;
+            }),
+          );
+        }
       }
     } catch {
       /* ignore */
@@ -1219,16 +1300,19 @@ export default function MailApp() {
         </button>
         <button
           type="button"
-          className="h-8 w-8 rounded-full flex items-center justify-center text-white/45 hover:bg-white/5 hover:text-white"
+          className="h-8 w-8 rounded-full flex items-center justify-center text-white/45 hover:bg-white/5 hover:text-white disabled:opacity-40"
           aria-label="Обновить"
+          title="Обновить"
+          disabled={loadingMail}
           onClick={() => {
             void loadMessages(folder);
             clearSelection();
           }}
         >
-          <RefreshCw
+          <Reload
             size={15}
-            className={loadingMail ? "animate-spin" : undefined}
+            strokeWidth={2}
+            className={loadingMail ? "animate-spin text-[#4d9fff]" : undefined}
           />
         </button>
       </div>
@@ -1622,12 +1706,13 @@ export default function MailApp() {
                           setQuery("");
                         }}
                       >
-                        <div
-                          className="h-9 w-9 rounded-full shrink-0 flex items-center justify-center text-white text-[11px] font-semibold font-[family-name:var(--font-manrope)]"
-                          style={{ backgroundColor: m.avatarColor }}
-                        >
-                          {initials(m.from)}
-                        </div>
+                        <SenderAvatar
+                          from={m.from}
+                          fromEmail={m.fromEmail}
+                          avatarColor={m.avatarColor}
+                          avatarUrl={m.avatarUrl}
+                          size={36}
+                        />
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
                             <span className="text-[14px] font-semibold font-[family-name:var(--font-manrope)] truncate">
@@ -1905,12 +1990,13 @@ export default function MailApp() {
                             aria-label={`Выбрать ${m.from}`}
                           />
 
-                          <div
-                            className="h-7 w-7 rounded-full shrink-0 flex items-center justify-center text-white text-[10px] font-semibold font-[family-name:var(--font-manrope)]"
-                            style={{ backgroundColor: m.avatarColor }}
-                          >
-                            {initials(m.from)}
-                          </div>
+                          <SenderAvatar
+                            from={m.from}
+                            fromEmail={m.fromEmail}
+                            avatarColor={m.avatarColor}
+                            avatarUrl={m.avatarUrl}
+                            size={28}
+                          />
 
                           <div className="min-w-0 flex-1 flex items-center gap-2 overflow-hidden">
                             <span
@@ -2079,15 +2165,15 @@ export default function MailApp() {
                                       )}
                                     >
                                       <div className="flex items-start gap-3.5">
-                                        <div
-                                          className="shrink-0 h-11 w-11 rounded-full flex items-center justify-center text-[14px] font-semibold text-white font-[family-name:var(--font-manrope)]"
-                                          style={{
-                                            backgroundColor:
-                                              msg.avatarColor || "#3b82f6",
-                                          }}
-                                        >
-                                          {initials(msg.from || "?")}
-                                        </div>
+                                        <SenderAvatar
+                                          from={msg.from || "?"}
+                                          fromEmail={msg.fromEmail}
+                                          avatarColor={
+                                            msg.avatarColor || "#3b82f6"
+                                          }
+                                          avatarUrl={msg.avatarUrl}
+                                          size={44}
+                                        />
 
                                         <div className="min-w-0 flex-1 pt-0.5">
                                           <div className="flex items-start justify-between gap-3">

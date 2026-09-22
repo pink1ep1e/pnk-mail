@@ -21,6 +21,8 @@ export type MailMessage = {
   unread: boolean;
   hasAttachment?: boolean;
   avatarColor: string;
+  /** Sender brand/logo/favicon when available */
+  avatarUrl?: string | null;
   deliveryStatus?: string | null;
   deliveryDetail?: string | null;
   threadId?: string | null;

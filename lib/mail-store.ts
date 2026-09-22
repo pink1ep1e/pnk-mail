@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { avatarColor } from "@/lib/mail-session";
 import type { FolderId, MailMessage } from "@/lib/mail-data";
 import { welcomeMailHtml } from "@/lib/mail-template";
+import { resolveSenderAvatarUrl } from "@/lib/sender-avatar";
 
 export type MailFolder = Exclude<FolderId, "all">;
 
@@ -158,6 +159,7 @@ export function toListDto(row: {
   deliveryDetail?: string | null;
   threadId?: string | null;
   threadCount?: number;
+  senderLogoUrl?: string | null;
 }): MailMessage {
   return {
     id: row.id,
@@ -170,6 +172,9 @@ export function toListDto(row: {
     unread: row.unread,
     hasAttachment: row.hasAttachment || undefined,
     avatarColor: avatarColor(row.fromEmail || row.fromName),
+    avatarUrl: resolveSenderAvatarUrl(row.fromEmail, {
+      stored: row.senderLogoUrl,
+    }),
     deliveryStatus: row.deliveryStatus || null,
     deliveryDetail: row.deliveryDetail || null,
     threadId: row.threadId || row.id,

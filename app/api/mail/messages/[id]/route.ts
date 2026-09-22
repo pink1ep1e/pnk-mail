@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireActiveMailbox } from "@/lib/mail-auth";
 import { toListDto } from "@/lib/mail-store";
+import {
+  extractLogoFromHtml,
+  resolveSenderAvatarUrl,
+} from "@/lib/sender-avatar";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -60,14 +64,39 @@ export async function GET(req: NextRequest, { params }: Params) {
     }
   }
 
-  const toDetail = (m: (typeof row)) => ({
-    ...toListDto(m),
-    bodyHtml: m.bodyHtml,
-    bodyText: m.bodyText,
-    to: m.toAddresses,
-    cc: m.ccAddresses,
-    createdAt: m.createdAt.toISOString(),
-  });
+  // Lazy-backfill logos extracted from branded HTML (old messages)
+  for (const m of threadRows) {
+    if (m.senderLogoUrl || !m.bodyHtml) continue;
+    const logo = extractLogoFromHtml(m.bodyHtml);
+    if (!logo) continue;
+    m.senderLogoUrl = logo;
+    void prisma.message
+      .update({
+        where: { id: m.id },
+        data: { senderLogoUrl: logo },
+      })
+      .catch(() => undefined);
+  }
+  if (!row.senderLogoUrl && row.bodyHtml) {
+    const logo = extractLogoFromHtml(row.bodyHtml);
+    if (logo) row.senderLogoUrl = logo;
+  }
+
+  const toDetail = (m: (typeof row)) => {
+    const base = toListDto(m);
+    return {
+      ...base,
+      avatarUrl: resolveSenderAvatarUrl(m.fromEmail, {
+        stored: m.senderLogoUrl,
+        html: m.bodyHtml,
+      }),
+      bodyHtml: m.bodyHtml,
+      bodyText: m.bodyText,
+      to: m.toAddresses,
+      cc: m.ccAddresses,
+      createdAt: m.createdAt.toISOString(),
+    };
+  };
 
   return NextResponse.json({
     ok: true,
