@@ -54,12 +54,13 @@ export const Logo: React.FC<Props> = ({
       width={defaultSize.width}
       height={defaultSize.height}
       priority={priority}
+      unoptimized={variant === "mark" || variant === "bg"}
       className={cn(
         "select-none object-contain",
         variant === "text" && "h-auto w-[120px] md:w-[160px]",
         variant === "business" && "h-auto w-[160px] md:w-[210px]",
         variant === "id" && "h-auto w-[96px] md:w-[110px]",
-        variant === "mark" && "h-11 w-11 md:h-12 md:w-12 rounded-[14px]",
+        variant === "mark" && "h-11 w-11 md:h-12 md:w-12",
         variant === "bg" && "h-auto w-auto",
         className,
       )}

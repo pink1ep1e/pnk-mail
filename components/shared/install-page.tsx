@@ -39,7 +39,7 @@ function InstallContent() {
           priority
           width={160}
           height={160}
-          className="w-[120px] md:w-[150px] rounded-[28px]"
+          className="w-[120px] md:w-[150px]"
         />
         <h1 className="mt-8 max-w-[640px] text-center font-[family-name:var(--font-unbounded)] font-bold text-[24px] md:text-[34px] leading-[1.2] tracking-[-0.02em]">
           Установите pnk почту на экран «Домой»

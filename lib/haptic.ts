@@ -1,15 +1,44 @@
-export type HapticKind = "light" | "medium" | "success";
+import {
+  PRESETS,
+  isIOS,
+  isVibrationSupported,
+  schedulePattern,
+  toVibrateSequence,
+  type PresetName,
+} from "@haptics/core";
 
-/** Short vibration for mobile tap feedback. No-ops if unsupported. */
+export type HapticKind = "light" | "medium" | "selection" | "success";
+
+const KIND_TO_PRESET: Record<HapticKind, PresetName> = {
+  light: "impact-light",
+  medium: "impact-medium",
+  selection: "selection",
+  success: "success",
+};
+
+/**
+ * Vibration only — no audio, no DOM overlays.
+ * Android: navigator.vibrate. iOS: best-effort within the user gesture.
+ */
 export function haptic(kind: HapticKind = "light") {
-  if (typeof navigator === "undefined" || typeof navigator.vibrate !== "function") {
-    return;
-  }
+  if (typeof window === "undefined") return;
+
+  const pattern = PRESETS[KIND_TO_PRESET[kind]];
+
   try {
-    if (kind === "light") navigator.vibrate(10);
-    else if (kind === "medium") navigator.vibrate(18);
-    else navigator.vibrate([10, 40, 14]);
+    if (isVibrationSupported()) {
+      navigator.vibrate(toVibrateSequence(pattern));
+      return;
+    }
   } catch {
-    // ignore
+    /* ignore */
+  }
+
+  if (isIOS()) {
+    try {
+      schedulePattern(pattern);
+    } catch {
+      /* ignore */
+    }
   }
 }

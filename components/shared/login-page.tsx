@@ -30,7 +30,7 @@ export default function LoginPage() {
           priority
           width={180}
           height={180}
-          className="w-[140px] md:w-[180px] rounded-[32px]"
+          className="w-[140px] md:w-[180px]"
         />
       </header>
 

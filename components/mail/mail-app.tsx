@@ -34,6 +34,7 @@ import {
   X,
 } from "@/lib/icons";
 import ComposeEditor from "@/components/mail/compose-editor";
+import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { haptic } from "@/lib/haptic";
 import { prepareMailReaderSrcDoc, isBrandedHtmlEmail } from "@/lib/mail-template";
 import Image from "next/image";
@@ -681,15 +682,15 @@ export default function MailApp() {
   // Haptic tap feedback on interactive controls (phones)
   useEffect(() => {
     const onDown = (e: PointerEvent) => {
-      if (e.pointerType !== "touch") return;
+      if (e.pointerType !== "touch" && e.pointerType !== "pen") return;
       const el = e.target as HTMLElement | null;
       if (!el) return;
       if (
         el.closest(
-          'button, a, [role="checkbox"], [role="switch"], [role="menuitem"]',
+          'button, a, [role="checkbox"], [role="switch"], [role="menuitem"], [role="option"], label[for]',
         )
       ) {
-        haptic("light");
+        haptic("selection");
       }
     };
     document.addEventListener("pointerdown", onDown, { passive: true });
@@ -1024,6 +1025,7 @@ export default function MailApp() {
         );
         return;
       }
+      haptic("success");
       if (nameModal === "folder") {
         setCustomFolders((prev) => [...prev, json.data.folder as CustomFolder]);
         showToast("Папка создана");
@@ -1282,7 +1284,8 @@ export default function MailApp() {
             width={200}
             height={200}
             priority
-            className="w-[160px] md:w-[200px] h-auto rounded-[36px]"
+            unoptimized
+            className="w-[148px] md:w-[180px] h-auto"
           />
         </motion.div>
 
@@ -2425,78 +2428,70 @@ export default function MailApp() {
         }}
       />
 
-      {nameModal && (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center px-4 bg-black/65 backdrop-blur-sm"
-          onClick={() => {
-            if (!nameModalBusy) {
-              setNameModal(null);
-              setNameModalValue("");
+      <BottomSheet
+        open={Boolean(nameModal)}
+        onClose={() => {
+          if (nameModalBusy) return;
+          setNameModal(null);
+          setNameModalValue("");
+        }}
+        labelledBy="name-modal-title"
+        dismissible={!nameModalBusy}
+        className="sm:max-w-[400px]"
+      >
+        <h3
+          id="name-modal-title"
+          className="text-[17px] font-semibold text-white font-[family-name:var(--font-manrope)]"
+        >
+          {nameModal === "folder" ? "Новая папка" : "Новая метка"}
+        </h3>
+        <p className="mt-1 text-[13px] text-white/40 font-[family-name:var(--font-manrope)]">
+          {nameModal === "folder"
+            ? "Введите название папки"
+            : "Введите название метки"}
+        </p>
+        <input
+          autoFocus
+          value={nameModalValue}
+          onChange={(e) => setNameModalValue(e.target.value)}
+          placeholder={
+            nameModal === "folder" ? "Название папки" : "Название метки"
+          }
+          disabled={nameModalBusy}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              void submitNameModal();
             }
           }}
-        >
-          <div
-            role="dialog"
-            aria-modal
-            aria-labelledby="name-modal-title"
-            className="w-full max-w-[400px] rounded-[20px] bg-[#1a1c22] border border-white/10 shadow-[0_24px_80px_rgba(0,0,0,0.55)] p-5"
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => {
-              if (e.key === "Escape" && !nameModalBusy) {
-                setNameModal(null);
-                setNameModalValue("");
-              }
-              if (e.key === "Enter") {
-                e.preventDefault();
-                void submitNameModal();
-              }
+          className="mt-4 w-full h-12 rounded-[12px] bg-[#0f1115] border border-white/10 px-3.5 text-[15px] text-white font-[family-name:var(--font-manrope)] outline-none focus:border-[#0066ff]/60 focus:shadow-[0_0_0_3px_rgba(0,102,255,0.18)] placeholder:text-white/30"
+        />
+        <div className="mt-4 flex items-center justify-end gap-2">
+          <button
+            type="button"
+            disabled={nameModalBusy}
+            onClick={() => {
+              haptic("light");
+              setNameModal(null);
+              setNameModalValue("");
             }}
+            className="h-10 px-4 rounded-full text-[14px] text-white/55 hover:bg-white/5 hover:text-white font-[family-name:var(--font-manrope)] transition-colors"
           >
-            <h3
-              id="name-modal-title"
-              className="text-[17px] font-semibold text-white font-[family-name:var(--font-manrope)]"
-            >
-              {nameModal === "folder" ? "Новая папка" : "Новая метка"}
-            </h3>
-            <p className="mt-1 text-[13px] text-white/40 font-[family-name:var(--font-manrope)]">
-              {nameModal === "folder"
-                ? "Введите название папки"
-                : "Введите название метки"}
-            </p>
-            <input
-              autoFocus
-              value={nameModalValue}
-              onChange={(e) => setNameModalValue(e.target.value)}
-              placeholder={
-                nameModal === "folder" ? "Название папки" : "Название метки"
-              }
-              disabled={nameModalBusy}
-              className="mt-4 w-full h-12 rounded-[12px] bg-[#0f1115] border border-white/10 px-3.5 text-[15px] text-white font-[family-name:var(--font-manrope)] outline-none focus:border-[#0066ff]/60 focus:shadow-[0_0_0_3px_rgba(0,102,255,0.18)] placeholder:text-white/30"
-            />
-            <div className="mt-4 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                disabled={nameModalBusy}
-                onClick={() => {
-                  setNameModal(null);
-                  setNameModalValue("");
-                }}
-                className="h-10 px-4 rounded-full text-[14px] text-white/55 hover:bg-white/5 hover:text-white font-[family-name:var(--font-manrope)] transition-colors"
-              >
-                Отмена
-              </button>
-              <button
-                type="button"
-                disabled={nameModalBusy || !nameModalValue.trim()}
-                onClick={() => void submitNameModal()}
-                className="h-10 px-5 rounded-full bg-[#0066ff] text-white text-[14px] font-semibold font-[family-name:var(--font-manrope)] hover:bg-[#0052cc] disabled:opacity-40 disabled:cursor-default transition-colors"
-              >
-                {nameModalBusy ? "Создание…" : "Создать"}
-              </button>
-            </div>
-          </div>
+            Отмена
+          </button>
+          <button
+            type="button"
+            disabled={nameModalBusy || !nameModalValue.trim()}
+            onClick={() => {
+              haptic("medium");
+              void submitNameModal();
+            }}
+            className="h-10 px-5 rounded-full bg-[#0066ff] text-white text-[14px] font-semibold font-[family-name:var(--font-manrope)] hover:bg-[#0052cc] disabled:opacity-40 disabled:cursor-default transition-colors"
+          >
+            {nameModalBusy ? "Создание…" : "Создать"}
+          </button>
         </div>
-      )}
+      </BottomSheet>
 
       {(sendError || toast) && (
         <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 max-w-[min(90vw,420px)] rounded-[14px] bg-[#2a2d36] px-4 py-3 text-[13px] text-white/80 shadow-lg font-[family-name:var(--font-manrope)]">
