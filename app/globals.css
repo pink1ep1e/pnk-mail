@@ -176,6 +176,17 @@ a {
   [data-pressable]:active {
     transform: scale(0.96);
   }
+
+  /* No shrink while pulling the folder drawer / swiping a mail row */
+  html[data-mail-gesture] button:active,
+  html[data-mail-gesture] a:active,
+  html[data-mail-gesture] [role="button"]:active,
+  html[data-mail-gesture] [role="checkbox"]:active,
+  html[data-mail-gesture] [data-pressable]:active,
+  html[data-mail-h-swipe] button:active,
+  html[data-mail-h-swipe] [data-pressable]:active {
+    transform: none !important;
+  }
 }
 
 main button,

@@ -42,7 +42,7 @@ import { haptic } from "@/lib/haptic";
 import { prepareMailReaderSrcDoc, isBrandedHtmlEmail } from "@/lib/mail-template";
 import Image from "next/image";
 import Link from "next/link";
-import { AnimatePresence, motion, type PanInfo } from "motion/react";
+import { AnimatePresence, animate, motion, useMotionValue, useTransform, type PanInfo } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 const folderIcons: Partial<Record<FolderId, typeof Inbox>> = {
@@ -72,6 +72,9 @@ type MailAccount = {
 };
 
 type FolderCounts = Partial<Record<string, { unread: number; total: number }>>;
+
+const DRAWER_W = 280;
+const DRAWER_EDGE = 52;
 
 type MessageDetail = MailMessage & {
   bodyHtml?: string;
@@ -294,56 +297,76 @@ function MailBodyFrame({ html }: { html: string }) {
       const root = doc?.documentElement;
       if (!doc || !body || !root) return;
 
+      // Reset previous fit
       body.style.transform = "";
       body.style.transformOrigin = "";
       body.style.width = "";
+      body.style.height = "";
+      (root.style as CSSStyleDeclaration & { zoom?: string }).zoom = "";
       root.style.overflowX = "visible";
       body.style.overflowX = "visible";
+      root.style.overflowY = "visible";
+      body.style.overflowY = "visible";
 
       const frameW =
         iframe.clientWidth || wrapRef.current?.clientWidth || 0;
       if (!frameW) return;
 
       let contentW = Math.max(root.scrollWidth, body.scrollWidth);
-      body.querySelectorAll("table, img").forEach((el) => {
+      body.querySelectorAll("table, img, pre").forEach((el) => {
         contentW = Math.max(contentW, (el as HTMLElement).scrollWidth || 0);
       });
 
       let scale = 1;
       if (contentW > frameW + 2) {
-        scale = Math.max(0.5, Math.min(1, frameW / contentW));
+        scale = Math.max(0.45, Math.min(1, (frameW - 2) / contentW));
       }
 
-      if (scale < 1) {
+      const supportsZoom =
+        typeof CSS !== "undefined" &&
+        (CSS.supports?.("zoom", "0.5") || "zoom" in root.style);
+
+      if (scale < 1 && supportsZoom) {
+        // zoom keeps layout height correct (avoids bottom crop from transform)
+        (root.style as CSSStyleDeclaration & { zoom?: string }).zoom =
+          String(scale);
+      } else if (scale < 1) {
         body.style.transformOrigin = "top left";
         body.style.transform = `scale(${scale})`;
         body.style.width = `${100 / scale}%`;
       }
 
-      root.style.overflowX = "hidden";
-      body.style.overflowX = "hidden";
-
-      const rawH = Math.max(root.scrollHeight, body.scrollHeight, 80);
-      iframe.style.height = `${Math.ceil(rawH * scale)}px`;
+      // Measure after scale/zoom applied
+      const rawH = Math.max(
+        root.scrollHeight,
+        body.scrollHeight,
+        body.offsetHeight,
+        80,
+      );
+      const h =
+        scale < 1 && !supportsZoom ? Math.ceil(rawH * scale) : Math.ceil(rawH);
+      iframe.style.height = `${h + 4}px`;
     };
 
     const onLoad = () => {
       fit();
-      // Next frame so first paint isn't a blank white iframe
       requestAnimationFrame(() => {
         fit();
-        setReady(true);
+        requestAnimationFrame(() => {
+          fit();
+          setReady(true);
+        });
       });
     };
 
     iframe.addEventListener("load", onLoad);
     if (iframe.contentDocument?.readyState === "complete") onLoad();
-    const t1 = window.setTimeout(fit, 40);
-    const t2 = window.setTimeout(fit, 200);
+    const t1 = window.setTimeout(fit, 50);
+    const t2 = window.setTimeout(fit, 250);
     const t3 = window.setTimeout(() => {
       fit();
       setReady(true);
-    }, 600);
+    }, 800);
     const ro =
       typeof ResizeObserver !== "undefined"
         ? new ResizeObserver(() => fit())
@@ -362,7 +385,7 @@ function MailBodyFrame({ html }: { html: string }) {
     <div
       ref={wrapRef}
       className={cn(
-        "relative w-full overflow-hidden rounded-[16px] border mx-auto",
+        "relative w-full overflow-x-hidden overflow-y-visible rounded-[16px] border mx-auto",
         branded
           ? "border-white/15 shadow-[0_0_0_1px_rgba(255,255,255,0.04)]"
           : "border-white/8",
@@ -371,7 +394,7 @@ function MailBodyFrame({ html }: { html: string }) {
     >
       {!ready && (
         <div
-          className="absolute inset-0 z-[1] flex items-center justify-center bg-[#0c0d10]"
+          className="absolute inset-0 z-[1] flex items-center justify-center bg-[#0c0d10] min-h-[120px]"
           aria-hidden
         >
           <div className="h-7 w-7 rounded-full border-2 border-white/10 border-t-[#0066ff] animate-spin" />
@@ -447,6 +470,9 @@ export default function MailApp() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [drawerPulling, setDrawerPulling] = useState(false);
+  const drawerX = useMotionValue(-DRAWER_W);
+  const drawerBackdrop = useTransform(drawerX, [-DRAWER_W, 0], [0, 1]);
   const [searchOpen, setSearchOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
@@ -673,23 +699,26 @@ export default function MailApp() {
     return () => document.removeEventListener("keydown", onKey);
   }, [nameModal, nameModalBusy]);
 
-  // Mobile: edge swipe opens menu without dragging the page
+  // Mobile: pull folder drawer with the finger from the left edge
   useEffect(() => {
     const isMobile = () => window.matchMedia("(max-width: 767px)").matches;
     let tracking = false;
     let startX = 0;
     let startY = 0;
     let locked: "h" | "v" | null = null;
+    let openedByPull = false;
 
     const onTouchStart = (e: TouchEvent) => {
       if (!isMobile()) return;
-      if (sidebarOpen || composeOpen || searchOpen) return;
+      if (composeOpen || searchOpen) return;
+      if (sidebarOpen) return;
       const t = e.touches[0];
-      if (!t || t.clientX > 48) {
+      if (!t || t.clientX > DRAWER_EDGE) {
         tracking = false;
         return;
       }
       tracking = true;
+      openedByPull = false;
       locked = null;
       startX = t.clientX;
       startY = t.clientY;
@@ -703,47 +732,89 @@ export default function MailApp() {
       const dy = t.clientY - startY;
       if (!locked) {
         if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
-        locked = Math.abs(dx) > Math.abs(dy) ? "h" : "v";
+        locked = Math.abs(dx) > Math.abs(dy) * 1.1 ? "h" : "v";
+        if (locked === "h" && dx > 0) {
+          document.documentElement.dataset.mailGesture = "1";
+          setDrawerPulling(true);
+          setSwipeOpenId(null);
+          openedByPull = true;
+        } else if (locked === "v") {
+          tracking = false;
+          return;
+        }
       }
-      if (locked === "h") {
-        e.preventDefault();
-      }
+      if (locked !== "h") return;
+      e.preventDefault();
+      const next = Math.max(-DRAWER_W, Math.min(0, -DRAWER_W + dx));
+      drawerX.set(next);
     };
 
-    const onTouchEnd = (e: TouchEvent) => {
+    const onTouchEnd = () => {
       if (!tracking) return;
       tracking = false;
-      const t = e.changedTouches[0];
-      if (!t || locked === "v") {
-        locked = null;
-        return;
-      }
-      const dx = t.clientX - startX;
-      const dy = t.clientY - startY;
+      const wasH = locked === "h";
       locked = null;
-      if (dx > 56 && Math.abs(dy) < 50) {
-        setSwipeOpenId(null);
+      delete document.documentElement.dataset.mailGesture;
+      setDrawerPulling(false);
+      if (!wasH || !openedByPull) return;
+      const x = drawerX.get();
+      const progress = (x + DRAWER_W) / DRAWER_W;
+      if (progress > 0.35) {
         setSidebarOpen(true);
+        void animate(drawerX, 0, {
+          type: "spring",
+          stiffness: 420,
+          damping: 38,
+        });
+      } else {
+        setSidebarOpen(false);
+        void animate(drawerX, -DRAWER_W, {
+          type: "spring",
+          stiffness: 420,
+          damping: 38,
+        });
       }
     };
 
     document.addEventListener("touchstart", onTouchStart, { passive: true });
     document.addEventListener("touchmove", onTouchMove, { passive: false });
     document.addEventListener("touchend", onTouchEnd, { passive: true });
+    document.addEventListener("touchcancel", onTouchEnd, { passive: true });
     return () => {
       document.removeEventListener("touchstart", onTouchStart);
       document.removeEventListener("touchmove", onTouchMove);
       document.removeEventListener("touchend", onTouchEnd);
+      document.removeEventListener("touchcancel", onTouchEnd);
+      delete document.documentElement.dataset.mailGesture;
     };
-  }, [sidebarOpen, composeOpen, searchOpen]);
+  }, [sidebarOpen, composeOpen, searchOpen, drawerX]);
 
   useEffect(() => {
     if (sidebarOpen) setSwipeOpenId(null);
   }, [sidebarOpen]);
 
+  const openDrawer = () => {
+    setSwipeOpenId(null);
+    setSidebarOpen(true);
+    void animate(drawerX, 0, {
+      type: "spring",
+      stiffness: 420,
+      damping: 38,
+    });
+  };
+
+  const closeDrawer = () => {
+    setSidebarOpen(false);
+    void animate(drawerX, -DRAWER_W, {
+      type: "spring",
+      stiffness: 420,
+      damping: 38,
+    });
+  };
+
   // Lock background scroll while folder drawer or account menu is open
   useEffect(() => {
-    const locked = sidebarOpen || profileOpen;
+    const locked = sidebarOpen || profileOpen || drawerPulling;
     if (!locked) return;
 
     const body = document.body;
@@ -784,12 +855,13 @@ export default function MailApp() {
       }
       document.removeEventListener("touchmove", onTouchMove);
     };
-  }, [sidebarOpen, profileOpen]);
+  }, [sidebarOpen, profileOpen, drawerPulling]);
 
   // Haptic tap feedback on interactive controls (phones)
   useEffect(() => {
     const onDown = (e: PointerEvent) => {
       if (e.pointerType !== "touch" && e.pointerType !== "pen") return;
+      if (document.documentElement.dataset.mailGesture === "1") return;
       const el = e.target as HTMLElement | null;
       if (!el) return;
       if (
@@ -805,9 +877,17 @@ export default function MailApp() {
   }, []);
 
   const onSidebarDragEnd = (_: unknown, info: PanInfo) => {
-    if (info.offset.x < -90 || info.velocity.x < -450) {
-      haptic("light");
-      setSidebarOpen(false);
+    delete document.documentElement.dataset.mailGesture;
+    const x = drawerX.get();
+    if (x < -DRAWER_W * 0.45 || info.velocity.x < -400) {
+      closeDrawer();
+    } else {
+      setSidebarOpen(true);
+      void animate(drawerX, 0, {
+        type: "spring",
+        stiffness: 420,
+        damping: 38,
+      });
     }
   };
 
@@ -1130,7 +1210,7 @@ export default function MailApp() {
     setNameModalValue("");
     setNameModal(kind);
     setToolbarMenu(null);
-    setSidebarOpen(false);
+    closeDrawer();
   };
 
   const submitNameModal = async () => {
@@ -1323,7 +1403,7 @@ export default function MailApp() {
   const selectFolder = (id: string) => {
     setFolder(id);
     clearSelection();
-    setSidebarOpen(false);
+    closeDrawer();
     setSwipeOpenId(null);
     setOpenId(null);
     openIdRef.current = null;
@@ -1443,7 +1523,7 @@ export default function MailApp() {
           onClick={() => {
             setComposeDraft(null);
             setComposeOpen(true);
-            setSidebarOpen(false);
+            closeDrawer();
           }}
           className="w-full h-11 rounded-full bg-[#0066ff] text-white font-[family-name:var(--font-manrope)] font-semibold text-[15px] inline-flex items-center justify-center gap-2 hover:bg-[#0052cc] transition-colors"
         >
@@ -1534,7 +1614,7 @@ export default function MailApp() {
                       const json = await res.json();
                       if (json.ok) {
                         setItems((json.data.messages as MailMessage[]) || []);
-                        setSidebarOpen(false);
+                        closeDrawer();
                       }
                     } finally {
                       setLoadingMail(false);
@@ -1587,7 +1667,7 @@ export default function MailApp() {
           <button
             type="button"
             className="md:hidden h-9 w-9 rounded-[10px] flex items-center justify-center text-white/60 hover:bg-white/5"
-            onClick={() => setSidebarOpen(true)}
+            onClick={() => openDrawer()}
             aria-label="Меню"
           >
             <Menu size={20} />
@@ -1901,47 +1981,47 @@ export default function MailApp() {
           {Sidebar}
         </div>
 
-        {/* Folder drawer — CSS backdrop (no remount flicker) + panel */}
-        <button
+        {/* Folder drawer — always mounted; x follows finger via drawerX */}
+        <motion.button
           type="button"
           aria-label="Закрыть меню"
-          aria-hidden={!sidebarOpen}
-          tabIndex={sidebarOpen ? 0 : -1}
+          style={{ opacity: drawerBackdrop }}
           className={cn(
-            "md:hidden fixed inset-0 z-40 bg-black/55 transition-opacity duration-200 ease-out",
-            sidebarOpen ? "opacity-100" : "opacity-0 pointer-events-none",
+            "md:hidden fixed inset-0 z-40 bg-black/55",
+            sidebarOpen || drawerPulling
+              ? "pointer-events-auto"
+              : "pointer-events-none",
           )}
-          onClick={() => setSidebarOpen(false)}
+          onClick={() => closeDrawer()}
         />
-        <AnimatePresence>
-          {sidebarOpen && (
-            <motion.div
-              key="mail-drawer-panel"
-              data-mail-drawer
-              initial={{ x: "-105%" }}
-              animate={{ x: 0 }}
-              exit={{ x: "-105%" }}
-              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-              drag="x"
-              dragConstraints={{ left: -280, right: 0 }}
-              dragElastic={{ left: 0.12, right: 0 }}
-              dragDirectionLock
-              onDragEnd={onSidebarDragEnd}
-              className="md:hidden fixed left-0 z-50 p-3 overscroll-contain"
-              style={{
-                width: "min(100vw, 280px)",
-                top: "var(--safe-top)",
-                bottom: "var(--safe-bottom)",
-                height: "auto",
-                touchAction: "pan-y",
-              }}
-            >
-              <div className="h-full shadow-2xl overflow-y-auto overscroll-contain">
-                {Sidebar}
-              </div>
-            </motion.div>
+        <motion.div
+          data-mail-drawer
+          drag="x"
+          dragConstraints={{ left: -DRAWER_W, right: 0 }}
+          dragElastic={{ left: 0.08, right: 0 }}
+          dragDirectionLock
+          onDragStart={() => {
+            document.documentElement.dataset.mailGesture = "1";
+            setSwipeOpenId(null);
+          }}
+          onDragEnd={onSidebarDragEnd}
+          className={cn(
+            "md:hidden fixed left-0 z-50 p-3 overscroll-contain",
+            !(sidebarOpen || drawerPulling) && "pointer-events-none",
           )}
-        </AnimatePresence>
+          style={{
+            x: drawerX,
+            width: DRAWER_W,
+            top: "var(--safe-top)",
+            bottom: "var(--safe-bottom)",
+            height: "auto",
+            touchAction: "pan-y",
+          }}
+        >
+          <div className="h-full shadow-2xl overflow-y-auto overscroll-contain">
+            {Sidebar}
+          </div>
+        </motion.div>
 
         {/* Main — Yandex-style list pane */}
         <main className="flex-1 min-w-0 flex flex-col p-0">
