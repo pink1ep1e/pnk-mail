@@ -388,20 +388,15 @@ function defaultRect(): WinRect {
     return { x: 40, y: 40, w: 720, h: 640 };
   }
   if (isNarrowViewport()) {
-    const box = viewportBox();
+    // Stable layout-viewport fullscreen — do not chase visualViewport.offsetTop
+    // (that causes jitter while scrolling the compose body / focusing inputs).
     const safeTop = readCssPx("--safe-top");
     const safeBottom = readCssPx("--safe-bottom");
-    // When the keyboard is open, visualViewport already shrinks — don't double-pad.
-    const keyboardOpen =
-      box.offsetTop > 1 ||
-      box.height < window.innerHeight - safeTop - safeBottom - 48;
-    const topPad = keyboardOpen ? 0 : safeTop;
-    const bottomPad = keyboardOpen ? 0 : safeBottom;
     return {
-      x: box.offsetLeft,
-      y: box.offsetTop + topPad,
-      w: Math.max(280, box.width),
-      h: Math.max(280, box.height - topPad - bottomPad),
+      x: 0,
+      y: 0,
+      w: window.innerWidth,
+      h: Math.max(280, window.innerHeight - safeTop - safeBottom),
     };
   }
   const w = Math.min(720, window.innerWidth - 24);
@@ -756,6 +751,10 @@ export default function ComposeEditor({
   const [narrow, setNarrow] = useState(
     () => typeof window !== "undefined" && window.innerWidth < 640,
   );
+  /** Mobile keyboard inset — only from visualViewport.resize, never scroll */
+  const [kbFrame, setKbFrame] = useState<{ top: number; height: number } | null>(
+    null,
+  );
   const [rect, setRect] = useState<WinRect>(() => loadComposeRect());
   const [restoreRect, setRestoreRect] = useState<WinRect | null>(null);
   const [showCopies, setShowCopies] = useState(false);
@@ -1105,6 +1104,7 @@ export default function ComposeEditor({
     if (!open) return;
     const mobile = isNarrowViewport();
     setNarrow(mobile);
+    setKbFrame(null);
     const saved = mobile ? defaultRect() : loadComposeRect();
     setRect(saved);
     rectRef.current = saved;
@@ -1613,29 +1613,91 @@ export default function ComposeEditor({
     setPopover((cur) => (cur === id ? null : id));
   };
 
-  // Keep mobile compose fitted to visualViewport (keyboard / PWA safe area)
+  // Keep mobile compose stable: fullscreen CSS + keyboard via resize only (no vv scroll)
   useEffect(() => {
     if (!open) return;
-    const sync = () => {
+    const syncNarrow = () => {
       const mobile = isNarrowViewport();
       setNarrow(mobile);
-      if (!mobile || minimized) return;
-      const next = defaultRect();
-      rectRef.current = next;
-      setRect(next);
-      setMaximized(true);
+      if (!mobile) {
+        setKbFrame(null);
+        return;
+      }
+      if (!minimized) setMaximized(true);
     };
-    sync();
-    window.addEventListener("resize", sync);
+
+    let raf = 0;
+    let lastH = 0;
+    const onVvResize = () => {
+      cancelAnimationFrame(raf);
+      raf = window.requestAnimationFrame(() => {
+        if (!isNarrowViewport() || minimized) {
+          setKbFrame(null);
+          return;
+        }
+        const vv = window.visualViewport;
+        if (!vv) return;
+        const h = Math.round(vv.height);
+        const layoutH = window.innerHeight;
+        if (Math.abs(h - lastH) < 8) return;
+        lastH = h;
+        // Keyboard open: visual viewport shorter than layout viewport
+        if (h < layoutH - 72) {
+          setKbFrame({
+            top: Math.max(0, Math.round(vv.offsetTop)),
+            height: Math.max(240, h),
+          });
+        } else {
+          setKbFrame(null);
+        }
+      });
+    };
+
+    syncNarrow();
+    onVvResize();
+    window.addEventListener("resize", syncNarrow);
     const vv = window.visualViewport;
-    vv?.addEventListener("resize", sync);
-    vv?.addEventListener("scroll", sync);
+    vv?.addEventListener("resize", onVvResize);
+    // Intentionally NOT listening to visualViewport.scroll — it repositions
+    // the sheet on every editor scroll and causes the "floating" jitter.
     return () => {
-      window.removeEventListener("resize", sync);
-      vv?.removeEventListener("resize", sync);
-      vv?.removeEventListener("scroll", sync);
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", syncNarrow);
+      vv?.removeEventListener("resize", onVvResize);
     };
   }, [open, minimized]);
+
+  // Lock background scroll while composing on mobile
+  useEffect(() => {
+    if (!open) return;
+    const body = document.body;
+    const prevOverflow = body.style.overflow;
+    body.style.overflow = "hidden";
+    const scrollers = Array.from(
+      document.querySelectorAll<HTMLElement>(".mail-scroll"),
+    );
+    const prev = scrollers.map((el) => {
+      const overflowY = el.style.overflowY;
+      const touchAction = el.style.touchAction;
+      el.style.overflowY = "hidden";
+      el.style.touchAction = "none";
+      return { el, overflowY, touchAction };
+    });
+    const onTouchMove = (e: TouchEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t?.closest("[data-compose-sheet]")) return;
+      e.preventDefault();
+    };
+    document.addEventListener("touchmove", onTouchMove, { passive: false });
+    return () => {
+      body.style.overflow = prevOverflow;
+      for (const { el, overflowY, touchAction } of prev) {
+        el.style.overflowY = overflowY;
+        el.style.touchAction = touchAction;
+      }
+      document.removeEventListener("touchmove", onTouchMove);
+    };
+  }, [open]);
 
   const winStyle: CSSProperties = narrow
     ? minimized
@@ -1647,13 +1709,24 @@ export default function ComposeEditor({
           width: "auto",
           height: 56,
         }
-      : {
-          left: rect.x,
-          top: rect.y,
-          width: rect.w,
-          height: rect.h,
-          borderRadius: 0,
-        }
+      : kbFrame
+        ? {
+            left: 0,
+            top: kbFrame.top,
+            width: "100%",
+            height: kbFrame.height,
+            borderRadius: 0,
+          }
+        : {
+            left: 0,
+            top: 0,
+            width: "100%",
+            height: "var(--app-height, 100dvh)",
+            borderRadius: 0,
+            paddingTop: "var(--safe-top)",
+            paddingBottom: "var(--safe-bottom)",
+            boxSizing: "border-box",
+          }
     : minimized
       ? {
           left: rect.x,
@@ -1673,10 +1746,11 @@ export default function ComposeEditor({
     <AnimatePresence>
       {open && (
         <motion.div
-          initial={narrow ? { opacity: 0, y: 24 } : { opacity: 0, scale: 0.98 }}
-          animate={narrow ? { opacity: 1, y: 0 } : { opacity: 1, scale: 1 }}
-          exit={narrow ? { opacity: 0, y: 16 } : { opacity: 0, scale: 0.98 }}
-          transition={{ duration: 0.18 }}
+          data-compose-sheet
+          initial={narrow ? { opacity: 0 } : { opacity: 0, scale: 0.98 }}
+          animate={narrow ? { opacity: 1 } : { opacity: 1, scale: 1 }}
+          exit={narrow ? { opacity: 0 } : { opacity: 0, scale: 0.98 }}
+          transition={{ duration: 0.16 }}
           className={cn(
             "fixed z-50 flex flex-col bg-[#1a1c22] font-[family-name:var(--font-manrope)] shadow-[0_24px_80px_rgba(0,0,0,0.55)]",
             narrow && !minimized ? "rounded-none" : "rounded-[24px]",
@@ -2243,7 +2317,7 @@ export default function ComposeEditor({
                   suppressContentEditableWarning
                   spellCheck
                   className={cn(
-                    "relative z-[1] h-full overflow-y-auto px-4 py-3 text-[15px] text-white/90 outline-none",
+                    "relative z-[1] h-full overflow-y-auto overscroll-contain px-4 py-3 text-[15px] text-white/90 outline-none touch-pan-y",
                     "leading-[1.45]",
                     "[&_div]:m-0 [&_p]:m-0 [&_p]:leading-[1.45] [&_div]:leading-[1.45]",
                     "[&_ul]:my-1 [&_ol]:my-1 [&_ul]:pl-5 [&_ol]:pl-5",

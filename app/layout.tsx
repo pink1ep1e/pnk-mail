@@ -50,6 +50,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
+  interactiveWidget: "resizes-content",
   themeColor: [
     { media: "(display-mode: standalone)", color: "#0c0d10" },
     { color: "#0c0d10" },
