@@ -668,10 +668,6 @@ export default function MailApp() {
     }
   };
 
-  const addAccount = () => {
-    window.location.href = mailAuthAddAccountUrl();
-  };
-
   const closeIdOverlay = () => {
     setIdOverlayUrl(null);
     setIdOverlayLoading(false);
@@ -679,6 +675,39 @@ export default function MailApp() {
     window.scrollTo(0, 0);
     document.body.style.overflow = "";
     syncAppViewport();
+  };
+
+  const openIdOverlayUrl = (url: string) => {
+    setIdOverlayUrl(url);
+    setIdOverlayLoading(false);
+  };
+
+  /** Fetch auth/manage URL and show in-app iframe (no Safari chrome). */
+  const openAuthInOverlay = async (startPath: string) => {
+    setIdOverlayLoading(true);
+    try {
+      const u = new URL(startPath, window.location.origin);
+      u.searchParams.set("embed", "1");
+      const res = await fetch(u.pathname + u.search, { cache: "no-store" });
+      const json = await res.json().catch(() => null);
+      if (json?.ok && json.data?.url) {
+        openIdOverlayUrl(String(json.data.url));
+        return true;
+      }
+    } catch {
+      /* fall through */
+    } finally {
+      setIdOverlayLoading(false);
+    }
+    return false;
+  };
+
+  const addAccount = () => {
+    setProfileOpen(false);
+    void (async () => {
+      const ok = await openAuthInOverlay(mailAuthAddAccountUrl());
+      if (!ok) window.location.href = mailAuthAddAccountUrl();
+    })();
   };
 
   const manageAccount = () => {
@@ -691,13 +720,18 @@ export default function MailApp() {
         });
         const json = await res.json().catch(() => null);
         if (json?.ok && json.data?.url) {
-          setIdOverlayUrl(String(json.data.url));
+          openIdOverlayUrl(String(json.data.url));
           return;
         }
-        if (json?.loginUrl) {
-          window.location.href = String(json.loginUrl);
-          return;
-        }
+        // Need login — open auth in the same overlay (no Safari chrome)
+        setIdOverlayLoading(false);
+        const loginPath =
+          typeof json?.loginUrl === "string"
+            ? json.loginUrl.replace(window.location.origin, "") ||
+              mailAuthStartUrl("login")
+            : mailAuthStartUrl("login");
+        const ok = await openAuthInOverlay(loginPath);
+        if (ok) return;
       } catch {
         /* fall through */
       } finally {
@@ -764,13 +798,29 @@ export default function MailApp() {
   }, []);
 
   useEffect(() => {
-    if (!idOverlayUrl) return;
+    if (!idOverlayUrl && !idOverlayLoading) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = prev;
     };
-  }, [idOverlayUrl]);
+  }, [idOverlayUrl, idOverlayLoading]);
+
+  useEffect(() => {
+    if (!idOverlayUrl && !idOverlayLoading) return;
+    const onMessage = (e: MessageEvent) => {
+      const data = e.data;
+      if (!data || typeof data !== "object") return;
+      if ((data as { type?: string }).type === "pnk-id-close") {
+        closeIdOverlay();
+        syncAppViewport();
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+    // closeIdOverlay is stable enough for this overlay lifecycle
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idOverlayUrl, idOverlayLoading]);
 
   useEffect(() => {
     if (!profileOpen) return;
@@ -2833,7 +2883,7 @@ export default function MailApp() {
         </div>
       )}
 
-      {!composeOpen && !idOverlayUrl && (
+      {!composeOpen && !idOverlayUrl && !idOverlayLoading && (
         <button
           type="button"
           onClick={() => setComposeOpen(true)}
@@ -2845,27 +2895,9 @@ export default function MailApp() {
         </button>
       )}
 
-      {/* In-app pnk ID — stays inside PWA (no Safari URL bar) */}
+      {/* In-app pnk ID / auth — edge-to-edge, no mail chrome (back lives in ID) */}
       {(idOverlayUrl || idOverlayLoading) && (
-        <div
-          className="fixed inset-0 z-[120] flex flex-col bg-[#0c0d10]"
-          style={{
-            paddingTop: "var(--safe-top)",
-            paddingBottom: "var(--safe-bottom)",
-          }}
-        >
-          <div className="shrink-0 h-12 px-3 flex items-center gap-2 border-b border-white/8 bg-[#0c0d10]">
-            <button
-              type="button"
-              onClick={closeIdOverlay}
-              className="h-9 px-3 rounded-full text-[14px] text-white/80 hover:bg-white/5 font-[family-name:var(--font-manrope)]"
-            >
-              ← Почта
-            </button>
-            <span className="flex-1 text-center text-[14px] font-semibold font-[family-name:var(--font-unbounded)] text-white/90 pr-16">
-              pnk ID
-            </span>
-          </div>
+        <div className="fixed inset-0 z-[120] flex flex-col bg-[#0c0d10]">
           {idOverlayLoading && !idOverlayUrl ? (
             <div className="flex-1 flex items-center justify-center">
               <div className="h-8 w-8 rounded-full border-2 border-white/10 border-t-[#0066ff] animate-spin" />
@@ -2874,9 +2906,27 @@ export default function MailApp() {
             <iframe
               title="pnk ID"
               src={idOverlayUrl || "about:blank"}
-              className="flex-1 w-full border-0 bg-[#0c0d10]"
-              allow="clipboard-read; clipboard-write"
+              className="flex-1 w-full min-h-0 border-0 bg-[#0c0d10]"
+              allow="camera *; microphone *; clipboard-read; clipboard-write"
               referrerPolicy="no-referrer-when-downgrade"
+              onLoad={(e) => {
+                // After OAuth callback the iframe lands back on mail origin
+                try {
+                  const win = e.currentTarget.contentWindow;
+                  const loc = win?.location;
+                  if (!loc || loc.origin !== window.location.origin) return;
+                  if (
+                    loc.pathname.startsWith("/api/auth/callback") ||
+                    loc.pathname === "/mail" ||
+                    loc.pathname === "/"
+                  ) {
+                    closeIdOverlay();
+                    window.location.assign("/mail");
+                  }
+                } catch {
+                  /* cross-origin ID pages */
+                }
+              }}
             />
           )}
         </div>
