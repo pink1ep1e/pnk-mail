@@ -230,7 +230,17 @@ export function resolveSenderAvatarUrl(
   opts?: { html?: string | null; stored?: string | null },
 ): string | null {
   const stored = (opts?.stored || "").trim();
-  if (stored && /^https?:\/\//i.test(stored)) return stored;
+  if (stored) {
+    if (/^https?:\/\//i.test(stored)) return stored;
+    if (stored.startsWith("/")) {
+      const base = (
+        process.env.NEXT_PUBLIC_MAIL_URL ||
+        process.env.MAIL_PUBLIC_URL ||
+        ""
+      ).replace(/\/$/, "");
+      return base ? `${base}${stored}` : stored;
+    }
+  }
 
   if (opts?.html) {
     const fromHtml = extractLogoFromHtml(opts.html);
@@ -244,11 +254,27 @@ export function resolveSenderAvatarUrl(
   if (KNOWN_BRAND_LOGOS[domain]) return KNOWN_BRAND_LOGOS[domain];
   if (KNOWN_BRAND_LOGOS[root]) return KNOWN_BRAND_LOGOS[root];
 
-  if (
-    PERSONAL_MAIL_DOMAINS.has(domain) ||
-    PERSONAL_MAIL_DOMAINS.has(root) ||
-    isPnkMailProductDomain(domain)
-  ) {
+  // System mail from pnk почта (welcome, daemon) → product mark
+  if (isPnkMailProductDomain(domain)) {
+    const local = (fromEmail.split("@")[0] || "").toLowerCase();
+    if (
+      local === "hello" ||
+      local === "noreply" ||
+      local === "mailer-daemon" ||
+      local === "support" ||
+      local === "postmaster"
+    ) {
+      const base = (
+        process.env.NEXT_PUBLIC_MAIL_URL ||
+        process.env.MAIL_PUBLIC_URL ||
+        ""
+      ).replace(/\/$/, "");
+      return base ? `${base}/icon-192.png` : "/icon-192.png";
+    }
+    return null;
+  }
+
+  if (PERSONAL_MAIL_DOMAINS.has(domain) || PERSONAL_MAIL_DOMAINS.has(root)) {
     return null;
   }
 

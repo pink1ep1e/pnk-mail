@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import { avatarColor, idPublicAvatarUrl } from "@/lib/mail-session";
 import type { FolderId, MailMessage } from "@/lib/mail-data";
-import { welcomeMailHtml } from "@/lib/mail-template";
+import { pnkMailMarkUrl, welcomeMailHtml } from "@/lib/mail-template";
 import { resolveSenderAvatarUrl } from "@/lib/sender-avatar";
 import { getMailFromDomain } from "@/lib/mail-transport";
 
@@ -37,6 +37,7 @@ const WELCOME_FROM = "hello@pnkmail.ru";
 
 async function createWelcomeMessage(mailboxId: string, address: string) {
   const bodyHtml = welcomeMailHtml(address);
+  const mark = pnkMailMarkUrl();
   await prisma.message.create({
     data: {
       mailboxId,
@@ -51,6 +52,7 @@ async function createWelcomeMessage(mailboxId: string, address: string) {
       bodyText: htmlToText(bodyHtml),
       unread: true,
       hasAttachment: false,
+      senderLogoUrl: mark,
     },
   });
 }
@@ -66,7 +68,16 @@ async function refreshWelcomeMessage(mailboxId: string, address: string) {
     orderBy: { createdAt: "asc" },
   });
   if (!welcome) return;
-  if (welcome.bodyHtml.includes("data-pnk-welcome=\"v3\"")) return;
+  const mark = pnkMailMarkUrl();
+  if (welcome.bodyHtml.includes('data-pnk-welcome="v4"')) {
+    if (welcome.senderLogoUrl !== mark) {
+      await prisma.message.update({
+        where: { id: welcome.id },
+        data: { senderLogoUrl: mark },
+      });
+    }
+    return;
+  }
 
   const bodyHtml = welcomeMailHtml(address);
   await prisma.message.update({
@@ -76,6 +87,7 @@ async function refreshWelcomeMessage(mailboxId: string, address: string) {
       bodyText: htmlToText(bodyHtml),
       preview:
         "Ваш ящик готов. Пишите на @pnkmail.ru — письма между аккаунтами доставляются сразу.",
+      senderLogoUrl: mark,
     },
   });
 }

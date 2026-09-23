@@ -291,61 +291,74 @@ function MailBodyFrame({ html }: { html: string }) {
     const iframe = ref.current;
     if (!iframe) return;
 
+    let fitting = false;
+    let lastH = 0;
+    let lastW = 0;
+
     const fit = () => {
       const doc = iframe.contentDocument;
       const body = doc?.body;
       const root = doc?.documentElement;
       if (!doc || !body || !root) return;
+      if (fitting) return;
+      fitting = true;
 
-      // Reset previous fit
-      body.style.transform = "";
-      body.style.transformOrigin = "";
-      body.style.width = "";
-      body.style.height = "";
-      (root.style as CSSStyleDeclaration & { zoom?: string }).zoom = "";
-      root.style.overflowX = "visible";
-      body.style.overflowX = "visible";
-      root.style.overflowY = "visible";
-      body.style.overflowY = "visible";
+      try {
+        // Reset previous fit
+        body.style.transform = "";
+        body.style.transformOrigin = "";
+        body.style.width = "";
+        body.style.height = "";
+        (root.style as CSSStyleDeclaration & { zoom?: string }).zoom = "";
+        root.style.overflowX = "visible";
+        body.style.overflowX = "visible";
+        root.style.overflowY = "visible";
+        body.style.overflowY = "visible";
 
-      const frameW =
-        iframe.clientWidth || wrapRef.current?.clientWidth || 0;
-      if (!frameW) return;
+        const frameW =
+          iframe.clientWidth || wrapRef.current?.clientWidth || 0;
+        if (!frameW) return;
 
-      let contentW = Math.max(root.scrollWidth, body.scrollWidth);
-      body.querySelectorAll("table, img, pre").forEach((el) => {
-        contentW = Math.max(contentW, (el as HTMLElement).scrollWidth || 0);
-      });
+        let contentW = Math.max(root.scrollWidth, body.scrollWidth);
+        body.querySelectorAll("table, img, pre").forEach((el) => {
+          contentW = Math.max(contentW, (el as HTMLElement).scrollWidth || 0);
+        });
 
-      let scale = 1;
-      if (contentW > frameW + 2) {
-        scale = Math.max(0.45, Math.min(1, (frameW - 2) / contentW));
+        let scale = 1;
+        if (contentW > frameW + 2) {
+          scale = Math.max(0.45, Math.min(1, (frameW - 2) / contentW));
+        }
+
+        const supportsZoom =
+          typeof CSS !== "undefined" &&
+          (CSS.supports?.("zoom", "0.5") || "zoom" in root.style);
+
+        if (scale < 1 && supportsZoom) {
+          (root.style as CSSStyleDeclaration & { zoom?: string }).zoom =
+            String(scale);
+        } else if (scale < 1) {
+          body.style.transformOrigin = "top left";
+          body.style.transform = `scale(${scale})`;
+          body.style.width = `${100 / scale}%`;
+        }
+
+        const rawH = Math.max(
+          root.scrollHeight,
+          body.scrollHeight,
+          body.offsetHeight,
+          80,
+        );
+        let h =
+          scale < 1 && !supportsZoom ? Math.ceil(rawH * scale) : Math.ceil(rawH);
+        // Hard cap — prevents ResizeObserver feedback loops (welcome SVG/white canvas)
+        h = Math.min(h + 4, 8000);
+        if (Math.abs(h - lastH) < 2 && Math.abs(frameW - lastW) < 1) return;
+        lastH = h;
+        lastW = frameW;
+        iframe.style.height = `${h}px`;
+      } finally {
+        fitting = false;
       }
-
-      const supportsZoom =
-        typeof CSS !== "undefined" &&
-        (CSS.supports?.("zoom", "0.5") || "zoom" in root.style);
-
-      if (scale < 1 && supportsZoom) {
-        // zoom keeps layout height correct (avoids bottom crop from transform)
-        (root.style as CSSStyleDeclaration & { zoom?: string }).zoom =
-          String(scale);
-      } else if (scale < 1) {
-        body.style.transformOrigin = "top left";
-        body.style.transform = `scale(${scale})`;
-        body.style.width = `${100 / scale}%`;
-      }
-
-      // Measure after scale/zoom applied
-      const rawH = Math.max(
-        root.scrollHeight,
-        body.scrollHeight,
-        body.offsetHeight,
-        80,
-      );
-      const h =
-        scale < 1 && !supportsZoom ? Math.ceil(rawH * scale) : Math.ceil(rawH);
-      iframe.style.height = `${h + 4}px`;
     };
 
     const onLoad = () => {
@@ -369,7 +382,12 @@ function MailBodyFrame({ html }: { html: string }) {
     }, 800);
     const ro =
       typeof ResizeObserver !== "undefined"
-        ? new ResizeObserver(() => fit())
+        ? new ResizeObserver((entries) => {
+            const w = entries[0]?.contentRect?.width ?? 0;
+            // Only re-fit on width changes — height changes from us must not loop
+            if (Math.abs(w - lastW) < 1) return;
+            fit();
+          })
         : null;
     if (wrapRef.current) ro?.observe(wrapRef.current);
     return () => {

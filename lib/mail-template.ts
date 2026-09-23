@@ -200,6 +200,8 @@ const READER_LIGHT_CSS = `
 /** True if message looks like a branded / table-based HTML email. */
 export function isBrandedHtmlEmail(html: string): boolean {
   const s = html || "";
+  // Our own dark welcome card — keep dark reader (light CSS caused infinite white growth)
+  if (/data-pnk-welcome\s*=/i.test(s)) return false;
   if (isFullHtmlDocument(s)) return true;
   if (/<table[\s>]/i.test(s) && /<(td|tr|th)[\s>]/i.test(s)) return true;
   if (/\bbgcolor\s*=/i.test(s)) return true;
@@ -418,41 +420,41 @@ export function wrapMailHtml(params: {
   return outboundMailHtml(params.bodyHtml);
 }
 
-/** Welcome letter — short dark greeting with mail logo. */
+/** Welcome letter — compact dark card (v4). Fixed image sizes; no layout blow-up. */
 export function welcomeMailHtml(address: string): string {
   const safe = escapeHtml(address);
-  const base = process.env.NEXT_PUBLIC_MAIL_URL?.replace(/\/$/, "");
-  const logoSrc = `${base || ""}/logo-blue-text.svg`;
+  const markSrc = pnkMailMarkUrl();
 
   return `<!DOCTYPE html>
 <html lang="ru">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
   <title>Добро пожаловать в pnk почту</title>
 </head>
-<body style="margin:0;padding:0;background:#0c0d10;font-family:Manrope,Segoe UI,Helvetica,Arial,sans-serif;">
-  <div style="display:none;max-height:0;overflow:hidden;opacity:0;" data-pnk-welcome="v3">Добро пожаловать в pnk почту · ${safe}</div>
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0c0d10;padding:48px 20px;">
+<body style="margin:0;padding:0;background:#0c0d10;color:#fff;font-family:Manrope,Segoe UI,Helvetica,Arial,sans-serif;-webkit-text-size-adjust:100%;">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;" data-pnk-welcome="v4">Добро пожаловать в pnk почту · ${safe}</div>
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;max-width:100%;background:#0c0d10;border-collapse:collapse;">
     <tr>
-      <td align="center">
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:420px;">
+      <td align="center" style="padding:32px 16px;">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;max-width:400px;border-collapse:collapse;">
           <tr>
-            <td align="center" style="padding-bottom:28px;">
-              <img src="${escapeHtml(logoSrc)}" alt="pnk почта" width="160" height="85" style="display:block;margin:0 auto;border:0;width:160px;height:auto;" />
+            <td align="center" style="padding:0 0 20px;">
+              <img src="${escapeHtml(markSrc)}" alt="pnk почта" width="56" height="56" style="display:block;width:56px;height:56px;border:0;border-radius:14px;" />
             </td>
           </tr>
           <tr>
-            <td align="center" style="background:#1a1c22;border-radius:20px;padding:36px 28px;">
-              <div style="color:#fff;font-size:22px;font-weight:700;letter-spacing:-0.03em;margin-bottom:12px;">Добро пожаловать</div>
-              <div style="color:rgba(255,255,255,0.55);font-size:15px;line-height:1.55;">
+            <td align="center" style="background:#1a1c22;border-radius:18px;padding:28px 22px;">
+              <div style="color:#ffffff;font-size:20px;font-weight:700;letter-spacing:-0.03em;line-height:1.25;margin:0 0 10px;">Добро пожаловать</div>
+              <div style="color:rgba(255,255,255,0.55);font-size:14px;line-height:1.55;margin:0;">
                 Ящик <span style="color:#4d9fff;">${safe}</span> готов.<br />
                 Пишите на @pnkmail.ru — письма доставляются сразу.
               </div>
             </td>
           </tr>
           <tr>
-            <td align="center" style="padding-top:20px;color:rgba(255,255,255,0.28);font-size:12px;">
+            <td align="center" style="padding:16px 0 0;color:rgba(255,255,255,0.28);font-size:12px;line-height:1.4;">
               pnkmail.ru
             </td>
           </tr>
@@ -462,4 +464,11 @@ export function welcomeMailHtml(address: string): string {
   </table>
 </body>
 </html>`;
+}
+
+/** Absolute URL for the pnk mail mark (avatars / welcome). */
+export function pnkMailMarkUrl(): string {
+  const base = (process.env.NEXT_PUBLIC_MAIL_URL || "").replace(/\/$/, "");
+  if (base) return `${base}/icon-192.png`;
+  return "/icon-192.png";
 }
