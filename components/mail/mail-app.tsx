@@ -280,8 +280,11 @@ function MailBodyFrame({ html }: { html: string }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const branded = useMemo(() => isBrandedHtmlEmail(html || ""), [html]);
   const srcDoc = useMemo(() => prepareMailReaderSrcDoc(html), [html]);
+  const [ready, setReady] = useState(false);
+  const canvas = branded ? "#ffffff" : "#0c0d10";
 
   useEffect(() => {
+    setReady(false);
     const iframe = ref.current;
     if (!iframe) return;
 
@@ -324,18 +327,30 @@ function MailBodyFrame({ html }: { html: string }) {
       iframe.style.height = `${Math.ceil(rawH * scale)}px`;
     };
 
-    iframe.addEventListener("load", fit);
-    fit();
+    const onLoad = () => {
+      fit();
+      // Next frame so first paint isn't a blank white iframe
+      requestAnimationFrame(() => {
+        fit();
+        setReady(true);
+      });
+    };
+
+    iframe.addEventListener("load", onLoad);
+    if (iframe.contentDocument?.readyState === "complete") onLoad();
     const t1 = window.setTimeout(fit, 40);
     const t2 = window.setTimeout(fit, 200);
-    const t3 = window.setTimeout(fit, 600);
+    const t3 = window.setTimeout(() => {
+      fit();
+      setReady(true);
+    }, 600);
     const ro =
       typeof ResizeObserver !== "undefined"
         ? new ResizeObserver(() => fit())
         : null;
     if (wrapRef.current) ro?.observe(wrapRef.current);
     return () => {
-      iframe.removeEventListener("load", fit);
+      iframe.removeEventListener("load", onLoad);
       window.clearTimeout(t1);
       window.clearTimeout(t2);
       window.clearTimeout(t3);
@@ -347,22 +362,34 @@ function MailBodyFrame({ html }: { html: string }) {
     <div
       ref={wrapRef}
       className={cn(
-        "w-full overflow-hidden rounded-[16px] border mx-auto",
+        "relative w-full overflow-hidden rounded-[16px] border mx-auto",
         branded
-          ? "bg-white border-white/15 shadow-[0_0_0_1px_rgba(255,255,255,0.04)]"
-          : "bg-[#0c0d10] border-white/8",
+          ? "border-white/15 shadow-[0_0_0_1px_rgba(255,255,255,0.04)]"
+          : "border-white/8",
       )}
+      style={{ backgroundColor: ready && branded ? "#ffffff" : "#0c0d10" }}
     >
+      {!ready && (
+        <div
+          className="absolute inset-0 z-[1] flex items-center justify-center bg-[#0c0d10]"
+          aria-hidden
+        >
+          <div className="h-7 w-7 rounded-full border-2 border-white/10 border-t-[#0066ff] animate-spin" />
+        </div>
+      )}
       <iframe
         ref={ref}
         title="Письмо"
         sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
         srcDoc={srcDoc}
-        className={cn(
-          "w-full border-0 block",
-          branded ? "bg-white" : "bg-[#0c0d10]",
-        )}
-        style={{ minHeight: 80 }}
+        className="w-full border-0 block"
+        style={{
+          minHeight: 80,
+          backgroundColor: canvas,
+          colorScheme: branded ? "light" : "dark",
+          opacity: ready ? 1 : 0,
+          transition: "opacity 0.12s ease-out",
+        }}
       />
     </div>
   );
@@ -1650,20 +1677,20 @@ export default function MailApp() {
                       exit={{ opacity: 0, y: -3, scale: 0.99 }}
                       transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
                       style={{ transformOrigin: "calc(100% - 16px) 0%" }}
-                      className="absolute right-0 top-[calc(100%+8px)] w-[min(calc(100vw-40px),268px)] rounded-[18px] bg-[#22252e] border border-white/22 shadow-[0_16px_48px_rgba(0,0,0,0.75),0_0_0_1px_rgba(255,255,255,0.06)] p-2 z-50"
+                      className="absolute right-0 top-[calc(100%+10px)] w-[min(calc(100vw-32px),340px)] rounded-[22px] bg-[#22252e] border border-white/22 shadow-[0_16px_48px_rgba(0,0,0,0.75),0_0_0_1px_rgba(255,255,255,0.06)] p-3 z-50"
                     >
-                      <div className="rounded-[12px] bg-[#17191f] border border-white/10 overflow-hidden mb-1.5">
-                        <div className="flex items-center gap-2.5 px-2.5 py-2.5">
-                          <AccountAvatar account={activeAccount} size={40} />
+                      <div className="rounded-[14px] bg-[#17191f] border border-white/10 overflow-hidden mb-2">
+                        <div className="flex items-center gap-3 px-3 py-3">
+                          <AccountAvatar account={activeAccount} size={52} />
                           <div className="min-w-0 flex-1">
-                            <p className="font-[family-name:var(--font-manrope)] font-semibold text-[14px] truncate">
+                            <p className="font-[family-name:var(--font-manrope)] font-semibold text-[16px] truncate">
                               {activeAccount.name}
                             </p>
                             <button
                               type="button"
                               onClick={() => copyEmail("profile")}
                               title="Скопировать адрес"
-                              className="relative text-[12px] text-white/50 font-[family-name:var(--font-manrope)] truncate hover:text-white/80 transition-colors text-left max-w-full"
+                              className="relative text-[13px] text-white/50 font-[family-name:var(--font-manrope)] truncate hover:text-white/80 transition-colors text-left max-w-full"
                             >
                               <span className="truncate block">
                                 {activeAccount.email}
@@ -1681,7 +1708,7 @@ export default function MailApp() {
                         </div>
                       </div>
 
-                      <div className="rounded-[12px] bg-[#17191f] border border-white/10 overflow-hidden mb-2">
+                      <div className="rounded-[14px] bg-[#17191f] border border-white/10 overflow-hidden mb-2.5">
                         {accounts
                           .filter((a) => !a.active)
                           .map((a) => (
@@ -1689,14 +1716,14 @@ export default function MailApp() {
                               key={a.id}
                               type="button"
                               onClick={() => void switchAccount(a.id)}
-                              className="w-full flex items-center gap-2.5 px-2.5 py-2 hover:bg-white/[0.05] transition-colors text-left"
+                              className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/[0.05] transition-colors text-left"
                             >
-                              <AccountAvatar account={a} size={32} />
+                              <AccountAvatar account={a} size={36} />
                               <div className="min-w-0">
-                                <p className="text-[13px] font-medium font-[family-name:var(--font-manrope)] truncate">
+                                <p className="text-[14px] font-medium font-[family-name:var(--font-manrope)] truncate">
                                   {a.name}
                                 </p>
-                                <p className="text-[11px] text-white/40 font-[family-name:var(--font-manrope)] truncate">
+                                <p className="text-[12px] text-white/40 font-[family-name:var(--font-manrope)] truncate">
                                   {a.email}
                                 </p>
                               </div>
@@ -1705,24 +1732,24 @@ export default function MailApp() {
                         <button
                           type="button"
                           onClick={addAccount}
-                          className="w-full flex items-center gap-2.5 px-2.5 py-2 hover:bg-white/[0.05] transition-colors text-left"
+                          className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/[0.05] transition-colors text-left"
                         >
-                          <div className="h-8 w-8 rounded-full bg-[#2a2d36] flex items-center justify-center text-white/70">
-                            <Plus size={15} />
+                          <div className="h-9 w-9 rounded-full bg-[#2a2d36] flex items-center justify-center text-white/70">
+                            <Plus size={16} />
                           </div>
-                          <span className="text-[13px] font-[family-name:var(--font-manrope)]">
+                          <span className="text-[14px] font-[family-name:var(--font-manrope)]">
                             Добавить аккаунт
                           </span>
                         </button>
                         <button
                           type="button"
                           onClick={() => void logoutAll()}
-                          className="w-full flex items-center gap-2.5 px-2.5 py-2 hover:bg-white/[0.05] transition-colors text-left"
+                          className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/[0.05] transition-colors text-left"
                         >
-                          <div className="h-8 w-8 rounded-full bg-[#2a2d36] flex items-center justify-center text-white/70">
-                            <LogOut size={15} />
+                          <div className="h-9 w-9 rounded-full bg-[#2a2d36] flex items-center justify-center text-white/70">
+                            <LogOut size={16} />
                           </div>
-                          <span className="text-[13px] font-[family-name:var(--font-manrope)]">
+                          <span className="text-[14px] font-[family-name:var(--font-manrope)]">
                             Выйти из всех аккаунтов
                           </span>
                         </button>
@@ -1731,13 +1758,13 @@ export default function MailApp() {
                       <button
                         type="button"
                         onClick={manageAccount}
-                        className="w-full h-10 rounded-full bg-[#17191f] border border-white/12 hover:bg-[#1c1f27] transition-colors px-3.5 inline-flex items-center gap-2.5 text-[13px] font-[family-name:var(--font-manrope)]"
+                        className="w-full h-11 rounded-full bg-[#17191f] border border-white/12 hover:bg-[#1c1f27] transition-colors px-4 inline-flex items-center gap-3 text-[14px] font-[family-name:var(--font-manrope)]"
                       >
-                        <Settings size={15} className="text-white/55" />
+                        <Settings size={16} className="text-white/55" />
                         Управление аккаунтом
                       </button>
 
-                      <div className="mt-2 pt-1.5 flex items-center justify-center gap-2 text-[11px] text-white/35 font-[family-name:var(--font-manrope)]">
+                      <div className="mt-3 pt-2 flex items-center justify-center gap-2 text-[12px] text-white/35 font-[family-name:var(--font-manrope)]">
                         <Link href="/help" className="hover:text-white/55">
                           Справка
                         </Link>
