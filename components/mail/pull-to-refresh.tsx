@@ -53,6 +53,10 @@ export function PullToRefresh({
 
     const onTouchStart = (e: TouchEvent) => {
       if (refreshingRef.current) return;
+      if (document.documentElement.dataset.mailHSwipe === "1") {
+        pulling.current = false;
+        return;
+      }
       if (el.scrollTop > 1) {
         pulling.current = false;
         return;
@@ -62,6 +66,11 @@ export function PullToRefresh({
     };
 
     const onTouchMove = (e: TouchEvent) => {
+      if (document.documentElement.dataset.mailHSwipe === "1") {
+        pulling.current = false;
+        setPullBoth(0);
+        return;
+      }
       if (!pulling.current || refreshingRef.current) return;
       if (el.scrollTop > 1) {
         pulling.current = false;

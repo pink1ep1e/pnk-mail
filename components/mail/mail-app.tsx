@@ -2048,7 +2048,7 @@ export default function MailApp() {
                   </p>
                 </div>
               ) : (
-                <ul className="space-y-1.5 pt-2 pb-20 md:pb-2">
+                <ul className="space-y-2 pt-2 pb-20 md:pb-2">
                   {visible.map((m) => {
                     const isSel = selected.has(m.id);
                     const isOpen = openId === m.id;
@@ -2069,7 +2069,7 @@ export default function MailApp() {
                           <div
                             data-pressable
                             className={cn(
-                              "flex items-center gap-2 md:gap-2.5 px-2 md:px-2.5 h-[48px] md:h-[46px] cursor-pointer rounded-[12px] transition-colors",
+                              "flex items-center gap-2.5 md:gap-2.5 px-2.5 md:px-2.5 h-[56px] md:h-[50px] cursor-pointer rounded-[14px] transition-colors",
                               isOpen
                                 ? "bg-[#0066ff]/25 outline outline-1 outline-[#0066ff]/40"
                                 : isSel
@@ -2100,13 +2100,13 @@ export default function MailApp() {
                                 m.avatarUrl,
                                 accounts,
                               )}
-                              size={28}
+                              size={34}
                             />
 
                             <div className="min-w-0 flex-1 flex items-center gap-2 overflow-hidden">
                               <span
                                 className={cn(
-                                  "shrink-0 w-[100px] sm:w-[120px] md:w-[140px] truncate text-[13px] md:text-[14px] font-[family-name:var(--font-manrope)]",
+                                  "shrink-0 w-[100px] sm:w-[120px] md:w-[140px] truncate text-[14px] md:text-[14px] font-[family-name:var(--font-manrope)]",
                                   m.unread
                                     ? "font-bold text-white"
                                     : "font-medium text-white/70",
@@ -2115,7 +2115,7 @@ export default function MailApp() {
                                 {m.from}
                               </span>
 
-                              <span className="min-w-0 flex-1 truncate text-[13px] md:text-[14px] font-[family-name:var(--font-manrope)]">
+                              <span className="min-w-0 flex-1 truncate text-[14px] md:text-[14px] font-[family-name:var(--font-manrope)]">
                                 <span
                                   className={
                                     m.unread

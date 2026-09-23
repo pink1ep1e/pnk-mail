@@ -2,12 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { Reply, Trash2 } from "@/lib/icons";
-import {
-  animate,
-  motion,
-  useMotionValue,
-  type PanInfo,
-} from "motion/react";
+import { animate, motion, useMotionValue } from "motion/react";
 import {
   type ReactNode,
   useEffect,
@@ -15,8 +10,9 @@ import {
   useState,
 } from "react";
 
-const ACTION_W = 132;
-const OPEN_X = -ACTION_W - 6;
+const ACTION_W = 124;
+const OPEN_X = -ACTION_W;
+const AXIS_LOCK = 10;
 
 type SwipeMailRowProps = {
   id: string;
@@ -28,9 +24,24 @@ type SwipeMailRowProps = {
   className?: string;
 };
 
+function lockListScroll(): () => void {
+  const el = document.querySelector(".mail-scroll") as HTMLElement | null;
+  if (!el) return () => undefined;
+  const prevOverflow = el.style.overflowY;
+  const prevTouch = el.style.touchAction;
+  el.style.overflowY = "hidden";
+  el.style.touchAction = "none";
+  document.documentElement.dataset.mailHSwipe = "1";
+  return () => {
+    el.style.overflowY = prevOverflow;
+    el.style.touchAction = prevTouch;
+    delete document.documentElement.dataset.mailHSwipe;
+  };
+}
+
 /**
- * Mobile swipe-left reveals Reply + Delete pills (reference-style).
- * Desktop: no drag, children only.
+ * Mobile swipe-left reveals Reply + Delete.
+ * Clips actions to the row, locks vertical scroll while swiping horizontally.
  */
 export function SwipeMailRow({
   id,
@@ -42,7 +53,13 @@ export function SwipeMailRow({
   className,
 }: SwipeMailRowProps) {
   const x = useMotionValue(0);
-  const dragging = useRef(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const startX = useRef(0);
+  const startY = useRef(0);
+  const baseX = useRef(0);
+  const axis = useRef<"h" | "v" | null>(null);
+  const tracking = useRef(false);
+  const unlockScroll = useRef<(() => void) | null>(null);
   const suppressClick = useRef(false);
   const [mobile, setMobile] = useState(false);
 
@@ -61,116 +78,178 @@ export function SwipeMailRow({
     }
     void animate(x, open ? OPEN_X : 0, {
       type: "spring",
-      stiffness: 420,
-      damping: 36,
-      mass: 0.7,
+      stiffness: 480,
+      damping: 40,
+      mass: 0.65,
     });
   }, [open, mobile, x]);
 
-  const snap = (info: PanInfo) => {
-    const shouldOpen =
-      info.offset.x < -48 ||
-      info.velocity.x < -400 ||
-      x.get() < OPEN_X / 2;
-    if (shouldOpen) {
-      onOpenChange(id);
-      void animate(x, OPEN_X, {
-        type: "spring",
-        stiffness: 420,
-        damping: 36,
-      });
-    } else {
-      onOpenChange(null);
-      void animate(x, 0, {
-        type: "spring",
-        stiffness: 420,
-        damping: 36,
-      });
-    }
-  };
+  useEffect(() => {
+    if (!mobile || !open) return;
+    const scroller = document.querySelector(".mail-scroll");
+    if (!scroller) return;
+    const onScroll = () => onOpenChange(null);
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    return () => scroller.removeEventListener("scroll", onScroll);
+  }, [mobile, open, onOpenChange]);
+
+  useEffect(() => {
+    if (!mobile) return;
+    const el = wrapRef.current;
+    if (!el) return;
+
+    const release = () => {
+      unlockScroll.current?.();
+      unlockScroll.current = null;
+    };
+
+    const onStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      const t = e.touches[0];
+      tracking.current = true;
+      axis.current = null;
+      startX.current = t.clientX;
+      startY.current = t.clientY;
+      baseX.current = x.get();
+      suppressClick.current = false;
+    };
+
+    const onMove = (e: TouchEvent) => {
+      if (!tracking.current || e.touches.length !== 1) return;
+      const t = e.touches[0];
+      const dx = t.clientX - startX.current;
+      const dy = t.clientY - startY.current;
+
+      if (!axis.current) {
+        if (Math.abs(dx) < AXIS_LOCK && Math.abs(dy) < AXIS_LOCK) return;
+        axis.current = Math.abs(dx) > Math.abs(dy) * 1.15 ? "h" : "v";
+        if (axis.current === "h") {
+          unlockScroll.current = lockListScroll();
+          suppressClick.current = true;
+        } else {
+          tracking.current = false;
+          return;
+        }
+      }
+
+      if (axis.current !== "h") return;
+
+      e.preventDefault();
+      const next = Math.max(OPEN_X, Math.min(0, baseX.current + dx));
+      x.set(next);
+      if (Math.abs(dx) > 8) suppressClick.current = true;
+    };
+
+    const onEnd = () => {
+      if (!tracking.current && axis.current !== "h") {
+        release();
+        return;
+      }
+      const wasH = axis.current === "h";
+      tracking.current = false;
+      axis.current = null;
+      release();
+
+      if (!wasH) return;
+
+      const cur = x.get();
+      const shouldOpen = cur < OPEN_X * 0.45 || cur < baseX.current - 36;
+      if (shouldOpen) {
+        onOpenChange(id);
+        void animate(x, OPEN_X, {
+          type: "spring",
+          stiffness: 480,
+          damping: 40,
+        });
+      } else {
+        onOpenChange(null);
+        void animate(x, 0, {
+          type: "spring",
+          stiffness: 480,
+          damping: 40,
+        });
+      }
+      window.setTimeout(() => {
+        suppressClick.current = false;
+      }, 100);
+    };
+
+    el.addEventListener("touchstart", onStart, { passive: true });
+    el.addEventListener("touchmove", onMove, { passive: false });
+    el.addEventListener("touchend", onEnd, { passive: true });
+    el.addEventListener("touchcancel", onEnd, { passive: true });
+    return () => {
+      release();
+      el.removeEventListener("touchstart", onStart);
+      el.removeEventListener("touchmove", onMove);
+      el.removeEventListener("touchend", onEnd);
+      el.removeEventListener("touchcancel", onEnd);
+    };
+  }, [mobile, id, onOpenChange, x]);
 
   if (!mobile) {
     return <div className={className}>{children}</div>;
   }
 
   return (
-    <div className={cn("relative", className)}>
+    <div
+      ref={wrapRef}
+      className={cn("relative overflow-hidden rounded-[14px]", className)}
+    >
       <div
-        className="pointer-events-none absolute inset-y-0 right-0 z-0 flex items-center justify-end gap-1.5 pr-1"
-        style={{ width: ACTION_W + 10 }}
+        className="absolute inset-y-0 right-0 z-0 flex items-center gap-1.5 pr-1.5"
+        style={{ width: ACTION_W }}
         aria-hidden={!open}
       >
-        <div className="pointer-events-auto flex flex-col items-center gap-1 w-[58px]">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenChange(null);
-              onReply();
-            }}
-            className="h-9 w-full rounded-full bg-[#0066ff] text-white inline-flex items-center justify-center active:scale-[0.9] transition-transform duration-100 touch-manipulation shadow-[0_4px_14px_rgba(0,102,255,0.4)]"
-            aria-label="Ответить"
-          >
-            <Reply size={17} strokeWidth={2.25} />
-          </button>
-          <span className="text-[10px] leading-none text-white/50 font-[family-name:var(--font-manrope)]">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenChange(null);
+            onReply();
+          }}
+          className="h-[calc(100%-6px)] min-h-0 w-[56px] rounded-full bg-[#0066ff] text-white inline-flex flex-col items-center justify-center gap-0.5 active:scale-[0.92] transition-transform duration-100 touch-manipulation"
+          aria-label="Ответить"
+        >
+          <Reply size={16} strokeWidth={2.25} />
+          <span className="text-[9px] font-medium leading-none font-[family-name:var(--font-manrope)]">
             Ответить
           </span>
-        </div>
-        <div className="pointer-events-auto flex flex-col items-center gap-1 w-[58px]">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenChange(null);
-              onDelete();
-            }}
-            className="h-9 w-full rounded-full bg-[#e53935] text-white inline-flex items-center justify-center active:scale-[0.9] transition-transform duration-100 touch-manipulation shadow-[0_4px_14px_rgba(229,57,53,0.4)]"
-            aria-label="Удалить"
-          >
-            <Trash2 size={17} strokeWidth={2.25} />
-          </button>
-          <span className="text-[10px] leading-none text-white/50 font-[family-name:var(--font-manrope)]">
+        </button>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenChange(null);
+            onDelete();
+          }}
+          className="h-[calc(100%-6px)] min-h-0 w-[56px] rounded-full bg-[#e53935] text-white inline-flex flex-col items-center justify-center gap-0.5 active:scale-[0.92] transition-transform duration-100 touch-manipulation"
+          aria-label="Удалить"
+        >
+          <Trash2 size={16} strokeWidth={2.25} />
+          <span className="text-[9px] font-medium leading-none font-[family-name:var(--font-manrope)]">
             Удалить
           </span>
-        </div>
+        </button>
       </div>
 
       <motion.div
         style={{ x }}
-        drag="x"
-        dragDirectionLock
-        dragConstraints={{ left: OPEN_X, right: 0 }}
-        dragElastic={0.08}
-        onDragStart={() => {
-          dragging.current = true;
-          suppressClick.current = false;
-        }}
-        onDrag={(_, info) => {
-          if (Math.abs(info.offset.x) > 10) suppressClick.current = true;
-        }}
-        onDragEnd={(_, info) => {
-          dragging.current = false;
-          snap(info);
-          window.setTimeout(() => {
-            suppressClick.current = false;
-          }, 80);
-        }}
         onClickCapture={(e) => {
-          if (suppressClick.current || Math.abs(x.get()) > 12) {
+          if (suppressClick.current || Math.abs(x.get()) > 10) {
             e.preventDefault();
             e.stopPropagation();
-            if (Math.abs(x.get()) > 12 && !dragging.current) {
+            if (Math.abs(x.get()) > 10 && !tracking.current) {
               onOpenChange(null);
               void animate(x, 0, {
                 type: "spring",
-                stiffness: 420,
-                damping: 36,
+                stiffness: 480,
+                damping: 40,
               });
             }
           }
         }}
-        className="relative z-10 touch-pan-y rounded-[12px]"
+        className="relative z-10 touch-pan-y"
       >
         {children}
       </motion.div>
