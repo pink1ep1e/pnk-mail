@@ -493,6 +493,8 @@ export default function MailApp() {
   const drawerBackdrop = useTransform(drawerX, [-DRAWER_W, 0], [0, 1]);
   const [searchOpen, setSearchOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [idOverlayUrl, setIdOverlayUrl] = useState<string | null>(null);
+  const [idOverlayLoading, setIdOverlayLoading] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
   const [copied, setCopied] = useState<"header" | "profile" | null>(null);
   const profileRef = useRef<HTMLDivElement>(null);
@@ -670,9 +672,40 @@ export default function MailApp() {
     window.location.href = mailAuthAddAccountUrl();
   };
 
+  const closeIdOverlay = () => {
+    setIdOverlayUrl(null);
+    setIdOverlayLoading(false);
+    // Restore chrome after leaving ID sheet
+    window.scrollTo(0, 0);
+    document.body.style.overflow = "";
+    syncAppViewport();
+  };
+
   const manageAccount = () => {
     setProfileOpen(false);
-    window.location.href = idCabinetUrl();
+    void (async () => {
+      setIdOverlayLoading(true);
+      try {
+        const res = await fetch("/api/auth/manage?embed=1", {
+          cache: "no-store",
+        });
+        const json = await res.json().catch(() => null);
+        if (json?.ok && json.data?.url) {
+          setIdOverlayUrl(String(json.data.url));
+          return;
+        }
+        if (json?.loginUrl) {
+          window.location.href = String(json.loginUrl);
+          return;
+        }
+      } catch {
+        /* fall through */
+      } finally {
+        setIdOverlayLoading(false);
+      }
+      // Last resort: full navigation (may leave PWA on iOS)
+      window.location.href = idCabinetUrl();
+    })();
   };
 
   const logoutAll = async () => {
@@ -683,6 +716,61 @@ export default function MailApp() {
     }
     window.location.href = idLogoutThenLoginUrl();
   };
+
+  /** Fix layout after Safari / bfcache return (safe-area + height collapse). */
+  const syncAppViewport = () => {
+    if (typeof window === "undefined") return;
+    window.scrollTo(0, 0);
+    const standalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      Boolean(
+        (window.navigator as Navigator & { standalone?: boolean }).standalone,
+      );
+    document.documentElement.classList.toggle("standalone", standalone);
+    const h = Math.round(
+      standalone
+        ? window.innerHeight
+        : (window.visualViewport?.height ?? window.innerHeight),
+    );
+    if (h > 0) {
+      document.documentElement.style.setProperty("--app-height", `${h}px`);
+    }
+  };
+
+  useEffect(() => {
+    syncAppViewport();
+    const onShow = () => {
+      // iOS often restores a scrolled/collapsed layout after leaving to Safari
+      requestAnimationFrame(() => {
+        syncAppViewport();
+        window.setTimeout(syncAppViewport, 50);
+        window.setTimeout(syncAppViewport, 300);
+      });
+    };
+    window.addEventListener("pageshow", onShow);
+    window.addEventListener("focus", onShow);
+    window.addEventListener("resize", syncAppViewport);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") onShow();
+    });
+    const vv = window.visualViewport;
+    vv?.addEventListener("resize", syncAppViewport);
+    return () => {
+      window.removeEventListener("pageshow", onShow);
+      window.removeEventListener("focus", onShow);
+      window.removeEventListener("resize", syncAppViewport);
+      vv?.removeEventListener("resize", syncAppViewport);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!idOverlayUrl) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [idOverlayUrl]);
 
   useEffect(() => {
     if (!profileOpen) return;
@@ -2745,7 +2833,7 @@ export default function MailApp() {
         </div>
       )}
 
-      {!composeOpen && (
+      {!composeOpen && !idOverlayUrl && (
         <button
           type="button"
           onClick={() => setComposeOpen(true)}
@@ -2755,6 +2843,43 @@ export default function MailApp() {
         >
           <Pencil size={22} />
         </button>
+      )}
+
+      {/* In-app pnk ID — stays inside PWA (no Safari URL bar) */}
+      {(idOverlayUrl || idOverlayLoading) && (
+        <div
+          className="fixed inset-0 z-[120] flex flex-col bg-[#0c0d10]"
+          style={{
+            paddingTop: "var(--safe-top)",
+            paddingBottom: "var(--safe-bottom)",
+          }}
+        >
+          <div className="shrink-0 h-12 px-3 flex items-center gap-2 border-b border-white/8 bg-[#0c0d10]">
+            <button
+              type="button"
+              onClick={closeIdOverlay}
+              className="h-9 px-3 rounded-full text-[14px] text-white/80 hover:bg-white/5 font-[family-name:var(--font-manrope)]"
+            >
+              ← Почта
+            </button>
+            <span className="flex-1 text-center text-[14px] font-semibold font-[family-name:var(--font-unbounded)] text-white/90 pr-16">
+              pnk ID
+            </span>
+          </div>
+          {idOverlayLoading && !idOverlayUrl ? (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="h-8 w-8 rounded-full border-2 border-white/10 border-t-[#0066ff] animate-spin" />
+            </div>
+          ) : (
+            <iframe
+              title="pnk ID"
+              src={idOverlayUrl || "about:blank"}
+              className="flex-1 w-full border-0 bg-[#0c0d10]"
+              allow="clipboard-read; clipboard-write"
+              referrerPolicy="no-referrer-when-downgrade"
+            />
+          )}
+        </div>
       )}
     </div>
   );
