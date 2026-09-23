@@ -714,14 +714,50 @@ export default function MailApp() {
     if (sidebarOpen) setSwipeOpenId(null);
   }, [sidebarOpen]);
 
+  // Lock background scroll while folder drawer or account menu is open
   useEffect(() => {
-    if (!sidebarOpen) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
+    const locked = sidebarOpen || profileOpen;
+    if (!locked) return;
+
+    const body = document.body;
+    const prevBodyOverflow = body.style.overflow;
+    body.style.overflow = "hidden";
+
+    const scrollers = Array.from(
+      document.querySelectorAll<HTMLElement>(".mail-scroll"),
+    );
+    const prevScroll: { el: HTMLElement; overflowY: string; touchAction: string }[] =
+      scrollers.map((el) => {
+        const overflowY = el.style.overflowY;
+        const touchAction = el.style.touchAction;
+        el.style.overflowY = "hidden";
+        el.style.touchAction = "none";
+        return { el, overflowY, touchAction };
+      });
+
+    const onTouchMove = (e: TouchEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      if (
+        target.closest(
+          "[data-mail-drawer], [data-account-menu], [data-account-trigger]",
+        )
+      ) {
+        return;
+      }
+      e.preventDefault();
     };
-  }, [sidebarOpen]);
+
+    document.addEventListener("touchmove", onTouchMove, { passive: false });
+    return () => {
+      body.style.overflow = prevBodyOverflow;
+      for (const { el, overflowY, touchAction } of prevScroll) {
+        el.style.overflowY = overflowY;
+        el.style.touchAction = touchAction;
+      }
+      document.removeEventListener("touchmove", onTouchMove);
+    };
+  }, [sidebarOpen, profileOpen]);
 
   // Haptic tap feedback on interactive controls (phones)
   useEffect(() => {
@@ -1581,6 +1617,7 @@ export default function MailApp() {
             <div className="relative" ref={profileRef}>
               <button
                 type="button"
+                data-account-trigger
                 onClick={() => setProfileOpen((v) => !v)}
                 className="rounded-full ring-2 ring-transparent hover:ring-white/20 transition overflow-hidden"
                 aria-label="Аккаунт"
@@ -1589,29 +1626,29 @@ export default function MailApp() {
                 <AccountAvatar account={activeAccount} size={40} />
               </button>
 
-              <AnimatePresence>
-                {profileOpen && (
-                  <motion.button
-                    key="account-menu-backdrop"
-                    type="button"
-                    aria-label="Закрыть меню аккаунта"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.15 }}
-                    className="fixed inset-0 z-40 bg-black/55 backdrop-blur-[2px]"
-                    onClick={() => setProfileOpen(false)}
-                  />
+              <button
+                type="button"
+                aria-label="Закрыть меню аккаунта"
+                aria-hidden={!profileOpen}
+                tabIndex={profileOpen ? 0 : -1}
+                className={cn(
+                  "fixed inset-0 z-40 bg-black/50 transition-opacity duration-150 ease-out",
+                  profileOpen
+                    ? "opacity-100"
+                    : "opacity-0 pointer-events-none",
                 )}
-              </AnimatePresence>
+                onClick={() => setProfileOpen(false)}
+              />
+
               <AnimatePresence>
                 {profileOpen && (
                     <motion.div
                       key="account-menu"
-                      initial={{ opacity: 0, y: -4, scale: 0.97 }}
+                      data-account-menu
+                      initial={{ opacity: 0, y: -4, scale: 0.98 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: -3, scale: 0.98 }}
-                      transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+                      exit={{ opacity: 0, y: -3, scale: 0.99 }}
+                      transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
                       style={{ transformOrigin: "calc(100% - 16px) 0%" }}
                       className="absolute right-0 top-[calc(100%+8px)] w-[min(calc(100vw-40px),268px)] rounded-[18px] bg-[#22252e] border border-white/22 shadow-[0_16px_48px_rgba(0,0,0,0.75),0_0_0_1px_rgba(255,255,255,0.06)] p-2 z-50"
                     >
@@ -1837,42 +1874,45 @@ export default function MailApp() {
           {Sidebar}
         </div>
 
+        {/* Folder drawer — CSS backdrop (no remount flicker) + panel */}
+        <button
+          type="button"
+          aria-label="Закрыть меню"
+          aria-hidden={!sidebarOpen}
+          tabIndex={sidebarOpen ? 0 : -1}
+          className={cn(
+            "md:hidden fixed inset-0 z-40 bg-black/55 transition-opacity duration-200 ease-out",
+            sidebarOpen ? "opacity-100" : "opacity-0 pointer-events-none",
+          )}
+          onClick={() => setSidebarOpen(false)}
+        />
         <AnimatePresence>
           {sidebarOpen && (
-            <>
-              <motion.button
-                key="mail-drawer-backdrop"
-                type="button"
-                aria-label="Закрыть меню"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="md:hidden fixed inset-0 z-40 bg-black/70"
-                onClick={() => setSidebarOpen(false)}
-              />
-              <motion.div
-                key="mail-drawer-panel"
-                initial={{ x: "-105%" }}
-                animate={{ x: 0 }}
-                exit={{ x: "-105%" }}
-                transition={{ type: "spring", stiffness: 380, damping: 36 }}
-                drag="x"
-                dragConstraints={{ left: -280, right: 0 }}
-                dragElastic={{ left: 0.15, right: 0.02 }}
-                dragDirectionLock
-                onDragEnd={onSidebarDragEnd}
-                className="md:hidden fixed left-0 z-50 h-full p-3 touch-pan-y"
-                style={{
-                  width: "min(100vw, 280px)",
-                  top: "var(--safe-top)",
-                  bottom: "var(--safe-bottom)",
-                  height: "auto",
-                }}
-              >
-                <div className="h-full shadow-2xl">{Sidebar}</div>
-              </motion.div>
-            </>
+            <motion.div
+              key="mail-drawer-panel"
+              data-mail-drawer
+              initial={{ x: "-105%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "-105%" }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              drag="x"
+              dragConstraints={{ left: -280, right: 0 }}
+              dragElastic={{ left: 0.12, right: 0 }}
+              dragDirectionLock
+              onDragEnd={onSidebarDragEnd}
+              className="md:hidden fixed left-0 z-50 p-3 overscroll-contain"
+              style={{
+                width: "min(100vw, 280px)",
+                top: "var(--safe-top)",
+                bottom: "var(--safe-bottom)",
+                height: "auto",
+                touchAction: "pan-y",
+              }}
+            >
+              <div className="h-full shadow-2xl overflow-y-auto overscroll-contain">
+                {Sidebar}
+              </div>
+            </motion.div>
           )}
         </AnimatePresence>
 
