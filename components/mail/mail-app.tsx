@@ -2301,17 +2301,12 @@ export default function MailApp() {
                   </p>
                 </div>
               ) : (
-                <ul className="space-y-2 pt-2 pb-20 md:pb-2">
+                <ul className="space-y-2.5 pt-3 pb-20 md:pb-2">
                   {visible.map((m) => {
                     const isSel = selected.has(m.id);
                     const isOpen = openId === m.id;
                     return (
                       <li key={m.id} className="relative">
-                        {m.unread && (
-                          <span className="absolute -top-1.5 -left-2.5 z-10 h-[18px] px-1.5 rounded-[6px] bg-[#0066ff] text-white text-[10px] font-semibold font-[family-name:var(--font-manrope)] inline-flex items-center leading-none">
-                            новое
-                          </span>
-                        )}
                         <SwipeMailRow
                           id={m.id}
                           open={swipeOpenId === m.id}
@@ -2322,7 +2317,7 @@ export default function MailApp() {
                           <div
                             data-pressable
                             className={cn(
-                              "flex items-center gap-2.5 md:gap-2.5 px-2.5 md:px-2.5 h-[56px] md:h-[50px] cursor-pointer rounded-[14px] transition-colors",
+                              "relative flex items-center gap-2.5 md:gap-2.5 px-2.5 md:px-2.5 h-[56px] md:h-[50px] cursor-pointer rounded-[14px] transition-colors",
                               isOpen
                                 ? "bg-[#0066ff]/25 outline outline-1 outline-[#0066ff]/40"
                                 : isSel
@@ -2338,6 +2333,11 @@ export default function MailApp() {
                             onMouseEnter={() => prefetchMessage(m.id)}
                             onFocus={() => prefetchMessage(m.id)}
                           >
+                            {m.unread && (
+                              <span className="pointer-events-none absolute top-1 left-2 z-20 h-[18px] px-1.5 rounded-[6px] bg-[#0066ff] text-white text-[10px] font-semibold font-[family-name:var(--font-manrope)] inline-flex items-center leading-none shadow-[0_2px_8px_rgba(0,102,255,0.4)]">
+                                новое
+                              </span>
+                            )}
                             <Checkbox
                               checked={isSel}
                               onChange={() => toggleOne(m.id)}
