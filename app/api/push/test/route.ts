@@ -35,7 +35,7 @@ export async function POST() {
     );
   }
 
-  await notifyMailboxNewMail(auth.ctx.mailboxId, {
+  const result = await notifyMailboxNewMail(auth.ctx.mailboxId, {
     id: "test",
     fromName: "pnk Почта",
     fromEmail: "noreply@pnkmail.ru",
@@ -43,8 +43,23 @@ export async function POST() {
     preview: "Если вы это видите — push работает",
   });
 
+  if (result.ok === 0) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: {
+          message: result.failed
+            ? "Отправка не удалась — нажмите «Включить» уведомления ещё раз"
+            : "Нет активных подписок",
+        },
+        data: result,
+      },
+      { status: 502 },
+    );
+  }
+
   return NextResponse.json({
     ok: true,
-    data: { sent: true, subscriptions: count },
+    data: { sent: true, subscriptions: count, ...result },
   });
 }

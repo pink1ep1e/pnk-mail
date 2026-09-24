@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   // Fallback when Resend webhook is missing/misconfigured: pull on inbox open
   if (folder === "inbox" || folder === "all") {
     try {
-      await maybeSyncResendInbound({ limit: 12, minIntervalMs: 45_000 });
+      await maybeSyncResendInbound({ limit: 12, minIntervalMs: 20_000 });
     } catch {
       /* ignore — list still works */
     }

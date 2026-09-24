@@ -49,17 +49,21 @@ export async function notifyMailboxNewMail(
     subject: string;
     preview: string;
   },
-): Promise<void> {
-  if (!ensureVapid()) return;
+): Promise<{ ok: number; failed: number }> {
+  if (!ensureVapid()) return { ok: 0, failed: 0 };
 
   const subs = await prisma.pushSubscription.findMany({
     where: { mailboxId },
   });
   if (!subs.length) {
     console.info("[push] no subscriptions for mailbox", mailboxId);
-    return;
+    return { ok: 0, failed: 0 };
   }
-  console.info("[push] sending", { mailboxId, devices: subs.length, tag: `mail-${msg.id}` });
+  console.info("[push] sending", {
+    mailboxId,
+    devices: subs.length,
+    tag: `mail-${msg.id}`,
+  });
 
   const title = (msg.fromName || msg.fromEmail || "Новое письмо").slice(0, 80);
   const body = [msg.subject, msg.preview]
@@ -74,6 +78,8 @@ export async function notifyMailboxNewMail(
   };
   const json = JSON.stringify(payload);
 
+  let ok = 0;
+  let failed = 0;
   await Promise.all(
     subs.map(async (sub) => {
       try {
@@ -85,20 +91,31 @@ export async function notifyMailboxNewMail(
           json,
           { TTL: 60 * 60 * 12, urgency: "high" },
         );
+        ok += 1;
       } catch (err: unknown) {
+        failed += 1;
         const status =
           err && typeof err === "object" && "statusCode" in err
             ? Number((err as { statusCode: number }).statusCode)
             : 0;
-        // Gone / expired subscription
+        const errBody =
+          err && typeof err === "object" && "body" in err
+            ? String((err as { body: unknown }).body)
+            : "";
         if (status === 404 || status === 410) {
           await prisma.pushSubscription
             .delete({ where: { id: sub.id } })
             .catch(() => undefined);
           return;
         }
-        console.warn("[push] send failed", status || err);
+        console.warn("[push] send failed", {
+          status,
+          body: errBody.slice(0, 200),
+          err,
+        });
       }
     }),
   );
+  console.info("[push] done", { mailboxId, ok, failed });
+  return { ok, failed };
 }

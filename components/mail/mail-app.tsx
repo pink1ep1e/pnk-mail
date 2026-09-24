@@ -10,6 +10,7 @@ import {
 } from "@/lib/mail-data";
 import {
   Archive,
+  Bell,
   Check,
   Clock,
   FolderInput,
@@ -1543,6 +1544,25 @@ export default function MailApp() {
 
   useEffect(() => {
     if (!bootReady || !showApp) return;
+    // Near-realtime: refresh inbox while the app is open (also pulls Resend + can push)
+    const tick = () => {
+      if (document.visibilityState !== "visible") return;
+      void loadMessages(folder);
+    };
+    const id = window.setInterval(tick, 30_000);
+    const onVis = () => {
+      if (document.visibilityState === "visible") tick();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bootReady, showApp, folder]);
+
+  useEffect(() => {
+    if (!bootReady || !showApp) return;
     try {
       const id = new URLSearchParams(window.location.search).get("open");
       if (!id) return;
@@ -2019,6 +2039,58 @@ export default function MailApp() {
                       >
                         <Settings size={16} className="text-white/55" />
                         Управление аккаунтом
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void (async () => {
+                            try {
+                              sessionStorage.removeItem(
+                                "pnk-mail-push-dismissed",
+                              );
+                            } catch {
+                              /* ignore */
+                            }
+                            const statusRes = await fetch("/api/push/status", {
+                              cache: "no-store",
+                            });
+                            const statusJson = await statusRes.json();
+                            if (!statusJson.ok) {
+                              showToast(
+                                statusJson.error?.message ||
+                                  "Нужна авторизация",
+                              );
+                              return;
+                            }
+                            if (!statusJson.data?.vapidLooksValid) {
+                              showToast(
+                                "VAPID ключ на сервере неверный или обрезан",
+                              );
+                              return;
+                            }
+                            if (!statusJson.data?.subscriptions) {
+                              showToast(
+                                "Сначала разрешите уведомления (баннер внизу)",
+                              );
+                              return;
+                            }
+                            const res = await fetch("/api/push/test", {
+                              method: "POST",
+                            });
+                            const json = await res.json();
+                            showToast(
+                              json.ok
+                                ? "Тестовое уведомление отправлено"
+                                : json.error?.message || "Не удалось отправить",
+                            );
+                          })();
+                          setProfileOpen(false);
+                        }}
+                        className="mt-2 w-full h-11 rounded-full bg-[#17191f] border border-white/12 hover:bg-[#1c1f27] transition-colors px-4 inline-flex items-center gap-3 text-[14px] font-[family-name:var(--font-manrope)]"
+                      >
+                        <Bell size={16} className="text-white/55" />
+                        Тест уведомления
                       </button>
 
                       <div className="mt-3 pt-2 flex items-center justify-center gap-2 text-[12px] text-white/35 font-[family-name:var(--font-manrope)]">
