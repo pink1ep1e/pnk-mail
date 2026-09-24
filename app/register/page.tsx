@@ -1,5 +1,6 @@
-import RegisterPage from "@/components/shared/register-page";
+import { redirect } from "next/navigation";
 
+/** Registration goes through pnk ID. */
 export default function Page() {
-  return <RegisterPage />;
+  redirect("/api/auth/start?kind=register");
 }

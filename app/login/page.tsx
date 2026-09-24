@@ -1,5 +1,6 @@
-import LoginPage from "@/components/shared/login-page"
+import { redirect } from "next/navigation";
 
+/** Always authenticate via pnk ID OAuth — no local mail password form. */
 export default function Page() {
-  return <LoginPage />
+  redirect("/api/auth/start?kind=login");
 }
