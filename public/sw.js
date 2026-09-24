@@ -1,5 +1,5 @@
 /* Fast offline fallback + Web Push for pnk Почта PWA */
-const CACHE = "pnk-mail-offline-v6";
+const CACHE = "pnk-mail-offline-v7";
 const OFFLINE_URL = "/offline.html";
 const PRECACHE = [
   OFFLINE_URL,
@@ -123,8 +123,9 @@ self.addEventListener("fetch", (event) => {
 
 self.addEventListener("push", (event) => {
   let data = {
-    title: "pnk Почта",
-    body: "Новое письмо",
+    title: "Новое письмо",
+    subject: "",
+    body: "",
     url: "/mail",
     tag: "mail",
   };
@@ -142,9 +143,15 @@ self.addEventListener("push", (event) => {
     }
   }
 
+  // Layout: sender (title) → subject → preview/body
+  const lines = [data.subject, data.body].filter(
+    (s) => typeof s === "string" && s.trim(),
+  );
+  const bodyText = lines.length ? lines.join("\n") : "Новое письмо";
+
   event.waitUntil(
-    self.registration.showNotification(data.title || "pnk Почта", {
-      body: data.body || "Новое письмо",
+    self.registration.showNotification(data.title || "Новое письмо", {
+      body: bodyText,
       icon: "/icon-192.png",
       badge: "/favicon-32.png",
       tag: data.tag || "mail",

@@ -16,6 +16,7 @@ import {
   normalizeRfcMessageId,
 } from "@/lib/mail-thread";
 import { getMailFromDomain, sendOutbound } from "@/lib/mail-transport";
+import { notifyMailboxNewMail } from "@/lib/web-push";
 
 export async function POST(req: NextRequest) {
   const origin = assertSameOrigin(req);
@@ -195,7 +196,7 @@ export async function POST(req: NextRequest) {
     const recipient = await prisma.mailbox.findUnique({ where: { address } });
     if (!recipient) continue;
 
-    await prisma.message.create({
+    const created = await prisma.message.create({
       data: {
         mailboxId: recipient.id,
         folder: "inbox",
@@ -214,6 +215,18 @@ export async function POST(req: NextRequest) {
         inReplyTo: inReplyTo || undefined,
       },
     });
+
+    try {
+      await notifyMailboxNewMail(recipient.id, {
+        id: created.id,
+        fromName: created.fromName,
+        fromEmail: created.fromEmail,
+        subject: created.subject,
+        preview: created.preview,
+      });
+    } catch (e) {
+      console.warn("[mail-send] push notify failed", e);
+    }
   }
 
   let transportWarning: string | null = null;

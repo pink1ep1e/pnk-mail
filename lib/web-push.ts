@@ -2,7 +2,11 @@ import webpush from "web-push";
 import { prisma } from "@/lib/db";
 
 export type PushPayload = {
+  /** Sender — top line of the notification */
   title: string;
+  /** Subject — middle line */
+  subject: string;
+  /** Preview / body text — bottom line */
   body: string;
   url?: string;
   tag?: string;
@@ -26,7 +30,6 @@ function ensureVapid(): boolean {
   }
   const pub = process.env.VAPID_PUBLIC_KEY!.trim();
   const priv = process.env.VAPID_PRIVATE_KEY!.trim();
-  // Typical VAPID public key is ~87 chars URL-safe base64; truncated keys break subscribe/send
   if (pub.length < 80 || !pub.startsWith("B")) {
     console.warn(
       "[push] VAPID_PUBLIC_KEY похоже обрезан (должен начинаться с B и быть ~87 символов)",
@@ -65,14 +68,10 @@ export async function notifyMailboxNewMail(
     tag: `mail-${msg.id}`,
   });
 
-  const title = (msg.fromName || msg.fromEmail || "Новое письмо").slice(0, 80);
-  const body = [msg.subject, msg.preview]
-    .filter(Boolean)
-    .join(" — ")
-    .slice(0, 160);
   const payload: PushPayload = {
-    title,
-    body: body || "Новое письмо",
+    title: (msg.fromName || msg.fromEmail || "Новое письмо").slice(0, 80),
+    subject: (msg.subject || "(без темы)").slice(0, 120),
+    body: (msg.preview || "").slice(0, 200),
     url: `/mail?open=${encodeURIComponent(msg.id)}`,
     tag: `mail-${msg.id}`,
   };

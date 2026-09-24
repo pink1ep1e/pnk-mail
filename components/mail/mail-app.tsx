@@ -1544,25 +1544,6 @@ export default function MailApp() {
 
   useEffect(() => {
     if (!bootReady || !showApp) return;
-    // Near-realtime: refresh inbox while the app is open (also pulls Resend + can push)
-    const tick = () => {
-      if (document.visibilityState !== "visible") return;
-      void loadMessages(folder);
-    };
-    const id = window.setInterval(tick, 30_000);
-    const onVis = () => {
-      if (document.visibilityState === "visible") tick();
-    };
-    document.addEventListener("visibilitychange", onVis);
-    return () => {
-      window.clearInterval(id);
-      document.removeEventListener("visibilitychange", onVis);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bootReady, showApp, folder]);
-
-  useEffect(() => {
-    if (!bootReady || !showApp) return;
     try {
       const id = new URLSearchParams(window.location.search).get("open");
       if (!id) return;
