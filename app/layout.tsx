@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Unbounded, Manrope } from "next/font/google";
 import { OfflineProvider } from "@/components/shared/offline-provider";
 import { InstallPrompt } from "@/components/shared/install-prompt";
+import { OFFLINE_ICON_DATA_URI } from "@/lib/offline-icon-datauri";
 import "./globals.css";
 
 const unbounded = Unbounded({
@@ -22,7 +23,7 @@ export const metadata: Metadata = {
   title: "pnk почта",
   description:
     "Быстрая и защищённая почта с крупным интерфейсом. Войдите по логину, QR или телефону.",
-  applicationName: "pnk почта",
+  applicationName: "pnk Mail",
   manifest: "/manifest.webmanifest",
   icons: {
     icon: [
@@ -36,7 +37,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "pnk почта",
+    title: "pnk Mail",
   },
   other: {
     "mobile-web-app-capable": "yes",
@@ -112,7 +113,7 @@ export default function RootLayout({
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src="/icon-192.png"
+                src={OFFLINE_ICON_DATA_URI}
                 alt=""
                 width={72}
                 height={72}

@@ -1,7 +1,8 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { Cloud, Reload } from "@/lib/icons";
+import { Reload } from "@/lib/icons";
+import { OFFLINE_ICON_DATA_URI } from "@/lib/offline-icon-datauri";
 
 export function OfflineScreen({
   className,
@@ -20,8 +21,15 @@ export function OfflineScreen({
       aria-live="assertive"
     >
       <div className="w-full max-w-[360px] text-center">
-        <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-[18px] bg-[#1a1c22]">
-          <Cloud size={30} className="text-white/55" />
+        <div className="mx-auto mb-6 h-[72px] w-[72px] overflow-hidden rounded-[18px]">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={OFFLINE_ICON_DATA_URI}
+            alt=""
+            width={72}
+            height={72}
+            className="h-full w-full object-contain"
+          />
         </div>
         <h1 className="text-[24px] font-semibold tracking-[-0.03em] font-[family-name:var(--font-unbounded),ui-sans-serif,system-ui,sans-serif]">
           Нет интернета

@@ -47,7 +47,7 @@ export function AppSplash({
         transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
       >
         <Image
-          src="/logo-big-mail.svg"
+          src="/logo-new.svg"
           alt="pnk почта"
           width={200}
           height={200}

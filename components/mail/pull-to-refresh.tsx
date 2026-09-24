@@ -128,7 +128,12 @@ export function PullToRefresh({
   const pad = showLoader ? Math.max(pull, refreshing ? THRESHOLD : 0) : 0;
 
   return (
-    <div className={cn("relative flex-1 min-h-0 flex flex-col", className)}>
+    <div
+      className={cn(
+        "relative flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden",
+        className,
+      )}
+    >
       <div
         className="pointer-events-none absolute left-0 right-0 top-0 z-10 flex justify-center overflow-hidden"
         style={{ height: pad }}
@@ -157,13 +162,13 @@ export function PullToRefresh({
 
       <div
         ref={scrollerRef}
-        className="flex-1 min-h-0 overflow-y-auto mail-scroll overscroll-y-contain"
+        className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden mail-scroll overscroll-y-contain"
         style={{
           paddingTop: pad,
           transition: pulling.current ? undefined : "padding-top 0.18s ease",
         }}
       >
-        <div className="p-2 md:p-2.5">{children}</div>
+        <div className="p-2 md:p-2.5 min-w-0">{children}</div>
       </div>
     </div>
   );

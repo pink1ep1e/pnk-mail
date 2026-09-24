@@ -2203,7 +2203,7 @@ export default function PnkIdPage() {
     <div className="h-dvh bg-[#0c0d10] text-white flex overflow-hidden">
       <aside className="hidden md:flex w-[240px] shrink-0 flex-col px-3 py-5 min-h-0">
         <div className="px-2 mb-6 shrink-0">
-          <Logo variant="id" href="/id" priority className="w-[96px]" />
+          <Logo variant="id" href="/id" priority className="w-[72px]" />
         </div>
 
         <nav className="flex-1 min-h-0 overflow-y-auto space-y-0.5">
@@ -2268,7 +2268,7 @@ export default function PnkIdPage() {
           >
             <Menu size={20} />
           </button>
-          <Logo variant="id" href="/id" className="w-[88px]" />
+          <Logo variant="id" href="/id" className="w-[56px]" />
           <Link
             href="/mail"
             className="text-[13px] text-white/45 font-[family-name:var(--font-manrope)] hover:text-white/70"
@@ -2338,7 +2338,7 @@ export default function PnkIdPage() {
           />
           <div className="absolute left-0 top-0 bottom-0 w-[280px] bg-[#12141a] p-4 flex flex-col">
             <div className="flex items-center justify-between mb-5">
-              <Logo variant="id" href="" className="w-[92px]" />
+              <Logo variant="id" href="" className="w-[64px]" />
               <button
                 type="button"
                 onClick={() => setMobileNavOpen(false)}

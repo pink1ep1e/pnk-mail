@@ -195,7 +195,11 @@ export function SwipeMailRow({
   }, [mobile, id, onOpenChange, x]);
 
   if (!mobile) {
-    return <div className={className}>{children}</div>;
+    return (
+      <div className={cn("min-w-0 w-full overflow-hidden", className)}>
+        {children}
+      </div>
+    );
   }
 
   return (

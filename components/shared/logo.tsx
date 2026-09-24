@@ -23,19 +23,17 @@ export const Logo: React.FC<Props> = ({
   const src =
     variant === "business"
       ? "/logo-bussines.svg"
-      : variant === "id"
-        ? "/logo-id.svg"
-        : variant === "mark"
-          ? "/logo-big-mail.svg"
-          : variant === "bg"
-            ? "/logo-blue-bg.svg"
-            : "/logo-blue-text.svg";
+      : variant === "id" || variant === "mark"
+        ? "/logo-new.svg"
+        : variant === "bg"
+          ? "/logo-blue-bg.svg"
+          : "/logo-blue-text.svg";
 
   const defaultSize =
     variant === "business"
       ? { width: width ?? 220, height: height ?? 47 }
-      : variant === "id"
-        ? { width: width ?? 160, height: height ?? 48 }
+      : variant === "id" || variant === "mark"
+        ? { width: width ?? 160, height: height ?? 160 }
         : variant === "text"
           ? { width: width ?? 160, height: height ?? 85 }
           : { width: width ?? 48, height: height ?? 48 };
@@ -54,12 +52,14 @@ export const Logo: React.FC<Props> = ({
       width={defaultSize.width}
       height={defaultSize.height}
       priority={priority}
-      unoptimized={variant === "mark" || variant === "bg"}
+      unoptimized={
+        variant === "mark" || variant === "id" || variant === "bg"
+      }
       className={cn(
         "select-none object-contain",
         variant === "text" && "h-auto w-[120px] md:w-[160px]",
         variant === "business" && "h-auto w-[160px] md:w-[210px]",
-        variant === "id" && "h-auto w-[96px] md:w-[110px]",
+        variant === "id" && "h-auto w-[72px] md:w-[88px]",
         variant === "mark" && "h-11 w-11 md:h-12 md:w-12",
         variant === "bg" && "h-auto w-auto",
         className,

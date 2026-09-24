@@ -1,7 +1,12 @@
-/* Fast offline fallback for pnk почта PWA */
-const CACHE = "pnk-mail-offline-v4";
+/* Fast offline fallback for pnk Mail PWA */
+const CACHE = "pnk-mail-offline-v5";
 const OFFLINE_URL = "/offline.html";
-const PRECACHE = [OFFLINE_URL, "/icon-192.png", "/favicon-32.png"];
+const PRECACHE = [
+  OFFLINE_URL,
+  "/icon-192.png",
+  "/favicon-32.png",
+  "/apple-touch-icon.png",
+];
 const NET_TIMEOUT_MS = 2000;
 
 self.addEventListener("install", (event) => {
@@ -63,15 +68,42 @@ async function offlineResponse() {
   );
 }
 
+async function cachedAsset(pathname) {
+  const cache = await caches.open(CACHE);
+  const hit = await cache.match(pathname);
+  if (hit) return hit;
+  try {
+    const res = await fetch(pathname, { cache: "reload" });
+    if (res.ok) await cache.put(pathname, res.clone());
+    return res;
+  } catch {
+    return null;
+  }
+}
+
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET") return;
+
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
+
+  // Serve precached icons offline (offline.html embeds a data-URI fallback too)
+  if (PRECACHE.includes(url.pathname) && url.pathname !== OFFLINE_URL) {
+    event.respondWith(
+      (async () => {
+        const cached = await cachedAsset(url.pathname);
+        if (cached) return cached;
+        return Response.error();
+      })(),
+    );
+    return;
+  }
 
   const accept = req.headers.get("accept") || "";
   const isNav = req.mode === "navigate" || accept.includes("text/html");
   if (!isNav) return;
 
-  const url = new URL(req.url);
   if (url.pathname === OFFLINE_URL) {
     event.respondWith(
       fetch(req, { cache: "no-store" }).catch(() => offlineResponse()),

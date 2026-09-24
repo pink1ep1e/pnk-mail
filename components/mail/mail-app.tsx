@@ -1829,16 +1829,22 @@ export default function MailApp() {
             <Menu size={20} />
           </button>
 
-          <Link href="/" className="shrink-0 inline-flex items-center">
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="shrink-0 inline-flex items-center"
+            aria-label="Обновить страницу"
+          >
             <Image
-              src="/logo-blue-text.svg"
+              src="/logo-new.svg"
               alt="pnk почта"
               width={200}
-              height={106}
+              height={200}
               priority
+              unoptimized
               className="h-10 md:h-12 w-auto select-none object-contain"
             />
-          </Link>
+          </button>
 
           <div className="ml-auto flex items-center gap-2 md:gap-3 min-w-0">
             <button
@@ -2329,7 +2335,7 @@ export default function MailApp() {
             <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
               <div
                 className={cn(
-                  "flex-1 min-h-0 flex flex-col",
+                  "flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden",
                   openId && "hidden md:flex md:max-w-[50%] md:border-r md:border-white/8",
                 )}
               >
@@ -2351,12 +2357,12 @@ export default function MailApp() {
                   </p>
                 </div>
               ) : (
-                <ul className="space-y-2.5 pt-3 pb-20 md:pb-2">
+                <ul className="space-y-2.5 pt-3 pb-20 md:pb-2 min-w-0">
                   {visible.map((m) => {
                     const isSel = selected.has(m.id);
                     const isOpen = openId === m.id;
                     return (
-                      <li key={m.id} className="relative">
+                      <li key={m.id} className="relative min-w-0">
                         <SwipeMailRow
                           id={m.id}
                           open={swipeOpenId === m.id}
@@ -2367,7 +2373,7 @@ export default function MailApp() {
                           <div
                             data-pressable
                             className={cn(
-                              "relative flex items-center gap-2.5 md:gap-2.5 px-2.5 md:px-2.5 h-[56px] md:h-[50px] cursor-pointer rounded-[14px] transition-colors",
+                              "relative flex items-center gap-2.5 md:gap-2.5 px-2.5 md:px-2.5 h-[56px] md:h-[50px] cursor-pointer rounded-[14px] transition-colors overflow-hidden min-w-0 w-full",
                               isOpen
                                 ? "bg-[#0066ff]/25 outline outline-1 outline-[#0066ff]/40"
                                 : isSel
@@ -2406,7 +2412,7 @@ export default function MailApp() {
                               size={34}
                             />
 
-                            <div className="min-w-0 flex-1 flex items-center gap-2 overflow-hidden">
+                            <div className="min-w-0 flex-1 basis-0 flex items-center gap-2 overflow-hidden">
                               <span
                                 className={cn(
                                   "shrink-0 w-[100px] sm:w-[120px] md:w-[140px] truncate text-[14px] md:text-[14px] font-[family-name:var(--font-manrope)]",
@@ -2418,7 +2424,7 @@ export default function MailApp() {
                                 {m.from}
                               </span>
 
-                              <span className="min-w-0 flex-1 truncate text-[14px] md:text-[14px] font-[family-name:var(--font-manrope)]">
+                              <span className="min-w-0 flex-1 basis-0 truncate block text-[14px] md:text-[14px] font-[family-name:var(--font-manrope)]">
                                 <span
                                   className={
                                     m.unread
