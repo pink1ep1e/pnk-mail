@@ -12,5 +12,17 @@ export async function GET() {
       { status: 503 },
     );
   }
+  if (key.length < 80 || !key.startsWith("B")) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: {
+          message:
+            "VAPID_PUBLIC_KEY обрезан — вставьте полный ключ (начинается с B, ~87 символов)",
+        },
+      },
+      { status: 503 },
+    );
+  }
   return NextResponse.json({ ok: true, data: { publicKey: key } });
 }

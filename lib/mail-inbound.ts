@@ -172,13 +172,17 @@ export async function deliverInbound(
     }
     delivered.push(address);
 
-    void notifyMailboxNewMail(mailbox.id, {
-      id: created.id,
-      fromName: created.fromName,
-      fromEmail: created.fromEmail,
-      subject: created.subject,
-      preview: created.preview,
-    }).catch((e) => console.warn("[inbound] push notify failed", e));
+    try {
+      await notifyMailboxNewMail(mailbox.id, {
+        id: created.id,
+        fromName: created.fromName,
+        fromEmail: created.fromEmail,
+        subject: created.subject,
+        preview: created.preview,
+      });
+    } catch (e) {
+      console.warn("[inbound] push notify failed", e);
+    }
   }
 
   return { delivered, skipped, unknown };
