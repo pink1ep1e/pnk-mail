@@ -23,7 +23,7 @@ export const metadata: Metadata = {
   title: "pnk почта",
   description:
     "Быстрая и защищённая почта с крупным интерфейсом. Войдите по логину, QR или телефону.",
-  applicationName: "pnk Mail",
+  applicationName: "pnk Почта",
   manifest: "/manifest.webmanifest",
   icons: {
     icon: [
@@ -37,7 +37,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "pnk Mail",
+    title: "pnk Почта",
   },
   other: {
     "mobile-web-app-capable": "yes",

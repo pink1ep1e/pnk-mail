@@ -1,5 +1,5 @@
-/* Fast offline fallback for pnk Mail PWA */
-const CACHE = "pnk-mail-offline-v5";
+/* Fast offline fallback + Web Push for pnk Почта PWA */
+const CACHE = "pnk-mail-offline-v6";
 const OFFLINE_URL = "/offline.html";
 const PRECACHE = [
   OFFLINE_URL,
@@ -88,7 +88,6 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
 
-  // Serve precached icons offline (offline.html embeds a data-URI fallback too)
   if (PRECACHE.includes(url.pathname) && url.pathname !== OFFLINE_URL) {
     event.respondWith(
       (async () => {
@@ -117,6 +116,71 @@ self.addEventListener("fetch", (event) => {
         return await withTimeout(fetch(req), NET_TIMEOUT_MS);
       } catch {
         return offlineResponse();
+      }
+    })(),
+  );
+});
+
+self.addEventListener("push", (event) => {
+  let data = {
+    title: "pnk Почта",
+    body: "Новое письмо",
+    url: "/mail",
+    tag: "mail",
+  };
+  try {
+    if (event.data) {
+      const parsed = event.data.json();
+      data = { ...data, ...parsed };
+    }
+  } catch {
+    try {
+      const text = event.data && event.data.text();
+      if (text) data.body = text;
+    } catch {
+      /* ignore */
+    }
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(data.title || "pnk Почта", {
+      body: data.body || "Новое письмо",
+      icon: "/icon-192.png",
+      badge: "/favicon-32.png",
+      tag: data.tag || "mail",
+      renotify: true,
+      data: { url: data.url || "/mail" },
+    }),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target =
+    (event.notification.data && event.notification.data.url) || "/mail";
+  const abs = new URL(target, self.location.origin).href;
+
+  event.waitUntil(
+    (async () => {
+      const all = await self.clients.matchAll({
+        type: "window",
+        includeUncontrolled: true,
+      });
+      for (const client of all) {
+        if ("focus" in client) {
+          await client.focus();
+          if ("navigate" in client) {
+            try {
+              await client.navigate(abs);
+            } catch {
+              /* ignore */
+            }
+          }
+          return;
+        }
+      }
+      if (self.clients.openWindow) {
+        await self.clients.openWindow(abs);
       }
     })(),
   );

@@ -14,6 +14,7 @@ import {
   parseMessageIdList,
 } from "@/lib/mail-thread";
 import { getMailFromDomain } from "@/lib/mail-transport";
+import { notifyMailboxNewMail } from "@/lib/web-push";
 
 export type InboundPayload = {
   fromName: string;
@@ -170,6 +171,14 @@ export async function deliverInbound(
       });
     }
     delivered.push(address);
+
+    void notifyMailboxNewMail(mailbox.id, {
+      id: created.id,
+      fromName: created.fromName,
+      fromEmail: created.fromEmail,
+      subject: created.subject,
+      preview: created.preview,
+    }).catch((e) => console.warn("[inbound] push notify failed", e));
   }
 
   return { delivered, skipped, unknown };

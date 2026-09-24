@@ -37,6 +37,7 @@ import ComposeEditor from "@/components/mail/compose-editor";
 import { PullToRefresh } from "@/components/mail/pull-to-refresh";
 import { SwipeMailRow } from "@/components/mail/swipe-mail-row";
 import { AppSplash } from "@/components/shared/app-splash";
+import { PushSubscribe } from "@/components/shared/push-subscribe";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { haptic } from "@/lib/haptic";
 import { prepareMailReaderSrcDoc, isBrandedHtmlEmail } from "@/lib/mail-template";
@@ -1540,6 +1541,21 @@ export default function MailApp() {
     }
   };
 
+  useEffect(() => {
+    if (!bootReady || !showApp) return;
+    try {
+      const id = new URLSearchParams(window.location.search).get("open");
+      if (!id) return;
+      void openMessage(id);
+      const u = new URL(window.location.href);
+      u.searchParams.delete("open");
+      window.history.replaceState({}, "", `${u.pathname}${u.search}${u.hash}`);
+    } catch {
+      /* ignore */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- open once after boot
+  }, [bootReady, showApp]);
+
   const prefetchMessage = (id: string) => {
     if (detailCache.current.has(id)) return;
     void fetch(`/api/mail/messages/${id}?read=0`, { cache: "no-store" })
@@ -1836,12 +1852,11 @@ export default function MailApp() {
             aria-label="Обновить страницу"
           >
             <Image
-              src="/logo-new.svg"
+              src="/logo-blue-text.svg"
               alt="pnk почта"
               width={200}
-              height={200}
+              height={106}
               priority
-              unoptimized
               className="h-10 md:h-12 w-auto select-none object-contain"
             />
           </button>
@@ -2937,6 +2952,7 @@ export default function MailApp() {
           )}
         </div>
       )}
+      <PushSubscribe enabled={Boolean(activeAccount)} />
     </div>
   );
 }

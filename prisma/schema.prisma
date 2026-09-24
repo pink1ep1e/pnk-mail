@@ -10,14 +10,15 @@ datasource db {
 }
 
 model Mailbox {
-  id          String       @id @default(cuid())
+  id          String             @id @default(cuid())
   ownerUserId String
-  address     String       @unique
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  address     String             @unique
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
   messages    Message[]
   folders     MailFolder[]
   labels      MailLabel[]
+  pushSubs    PushSubscription[]
 
   @@index([ownerUserId])
 }
@@ -83,5 +84,20 @@ model MailLabel {
   createdAt DateTime @default(now())
 
   @@unique([mailboxId, name])
+  @@index([mailboxId])
+}
+
+/// Web Push subscription for PWA mail notifications
+model PushSubscription {
+  id        String   @id @default(cuid())
+  mailboxId String
+  mailbox   Mailbox  @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([mailboxId])
 }
