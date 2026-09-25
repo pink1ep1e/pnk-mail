@@ -1,5 +1,5 @@
 /* Fast offline fallback + Web Push for pnk Почта PWA */
-const CACHE = "pnk-mail-offline-v7";
+const CACHE = "pnk-mail-offline-v8";
 const OFFLINE_URL = "/offline.html";
 const PRECACHE = [
   OFFLINE_URL,
