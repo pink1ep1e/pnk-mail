@@ -10,7 +10,6 @@ import {
 } from "@/lib/mail-data";
 import {
   Archive,
-  Bell,
   Check,
   Clock,
   FolderInput,
@@ -286,6 +285,8 @@ function MailBodyFrame({ html }: { html: string }) {
   const branded = useMemo(() => isBrandedHtmlEmail(html || ""), [html]);
   const srcDoc = useMemo(() => prepareMailReaderSrcDoc(html), [html]);
   const [ready, setReady] = useState(false);
+  /** Reserved height so thread messages below don't jump while the iframe fits. */
+  const [frameH, setFrameH] = useState(140);
   const canvas = branded ? "#ffffff" : "#0c0d10";
 
   useEffect(() => {
@@ -296,17 +297,18 @@ function MailBodyFrame({ html }: { html: string }) {
     let fitting = false;
     let lastH = 0;
     let lastW = 0;
+    let settled = false;
+    let pendingH = 140;
 
-    const fit = () => {
+    const measure = (): number | null => {
       const doc = iframe.contentDocument;
       const body = doc?.body;
       const root = doc?.documentElement;
-      if (!doc || !body || !root) return;
-      if (fitting) return;
+      if (!doc || !body || !root) return null;
+      if (fitting) return null;
       fitting = true;
 
       try {
-        // Reset previous fit
         body.style.transform = "";
         body.style.transformOrigin = "";
         body.style.width = "";
@@ -319,7 +321,7 @@ function MailBodyFrame({ html }: { html: string }) {
 
         const frameW =
           iframe.clientWidth || wrapRef.current?.clientWidth || 0;
-        if (!frameW) return;
+        if (!frameW) return null;
 
         let contentW = Math.max(root.scrollWidth, body.scrollWidth);
         body.querySelectorAll("table, img, pre").forEach((el) => {
@@ -352,43 +354,50 @@ function MailBodyFrame({ html }: { html: string }) {
         );
         let h =
           scale < 1 && !supportsZoom ? Math.ceil(rawH * scale) : Math.ceil(rawH);
-        // Hard cap — prevents ResizeObserver feedback loops (welcome SVG/white canvas)
         h = Math.min(h + 4, 8000);
-        if (Math.abs(h - lastH) < 2 && Math.abs(frameW - lastW) < 1) return;
-        lastH = h;
         lastW = frameW;
-        iframe.style.height = `${h}px`;
+        pendingH = h;
+        return h;
       } finally {
         fitting = false;
       }
     };
 
+    const applyHeight = (h: number) => {
+      if (Math.abs(h - lastH) < 2) return;
+      lastH = h;
+      iframe.style.height = `${h}px`;
+      setFrameH(h);
+    };
+
+    const settle = () => {
+      if (settled) return;
+      settled = true;
+      const h = measure() ?? pendingH;
+      applyHeight(h);
+      setReady(true);
+    };
+
     const onLoad = () => {
-      fit();
+      measure();
       requestAnimationFrame(() => {
-        fit();
-        requestAnimationFrame(() => {
-          fit();
-          setReady(true);
-        });
+        measure();
+        requestAnimationFrame(settle);
       });
     };
 
     iframe.addEventListener("load", onLoad);
     if (iframe.contentDocument?.readyState === "complete") onLoad();
-    const t1 = window.setTimeout(fit, 50);
-    const t2 = window.setTimeout(fit, 250);
-    const t3 = window.setTimeout(() => {
-      fit();
-      setReady(true);
-    }, 800);
+    const t1 = window.setTimeout(() => measure(), 80);
+    const t2 = window.setTimeout(settle, 400);
     const ro =
       typeof ResizeObserver !== "undefined"
         ? new ResizeObserver((entries) => {
+            if (!settled) return;
             const w = entries[0]?.contentRect?.width ?? 0;
-            // Only re-fit on width changes — height changes from us must not loop
             if (Math.abs(w - lastW) < 1) return;
-            fit();
+            const h = measure();
+            if (h != null) applyHeight(h);
           })
         : null;
     if (wrapRef.current) ro?.observe(wrapRef.current);
@@ -396,7 +405,6 @@ function MailBodyFrame({ html }: { html: string }) {
       iframe.removeEventListener("load", onLoad);
       window.clearTimeout(t1);
       window.clearTimeout(t2);
-      window.clearTimeout(t3);
       ro?.disconnect();
     };
   }, [srcDoc]);
@@ -405,16 +413,20 @@ function MailBodyFrame({ html }: { html: string }) {
     <div
       ref={wrapRef}
       className={cn(
-        "relative w-full overflow-x-hidden overflow-y-visible rounded-[16px] border mx-auto",
+        "relative w-full overflow-x-hidden overflow-y-hidden rounded-[16px] border mx-auto",
         branded
           ? "border-white/15 shadow-[0_0_0_1px_rgba(255,255,255,0.04)]"
           : "border-white/8",
       )}
-      style={{ backgroundColor: ready && branded ? "#ffffff" : "#0c0d10" }}
+      style={{
+        backgroundColor: ready && branded ? "#ffffff" : "#0c0d10",
+        minHeight: frameH,
+        contain: "layout",
+      }}
     >
       {!ready && (
         <div
-          className="absolute inset-0 z-[1] flex items-center justify-center bg-[#0c0d10] min-h-[120px]"
+          className="absolute inset-0 z-[1] flex items-center justify-center bg-[#0c0d10]"
           aria-hidden
         >
           <div className="h-7 w-7 rounded-full border-2 border-white/10 border-t-[#0066ff] animate-spin" />
@@ -427,11 +439,11 @@ function MailBodyFrame({ html }: { html: string }) {
         srcDoc={srcDoc}
         className="w-full border-0 block"
         style={{
-          minHeight: 80,
+          height: frameH,
           backgroundColor: canvas,
           colorScheme: branded ? "light" : "dark",
           opacity: ready ? 1 : 0,
-          transition: "opacity 0.12s ease-out",
+          transition: "opacity 0.18s ease-out",
         }}
       />
     </div>
@@ -528,12 +540,14 @@ export default function MailApp() {
   } | null>(null);
   const detailCache = useRef<Map<string, { message: MessageDetail; thread: MessageDetail[] }>>(new Map());
   const openIdRef = useRef<string | null>(null);
+  const folderReqId = useRef(0);
   const [thread, setThread] = useState<MessageDetail[]>([]);
 
   const loadMessages = async (
     folderId: string,
     search = "",
   ): Promise<boolean> => {
+    const reqId = ++folderReqId.current;
     setLoadingMail(true);
     try {
       const u = new URL("/api/mail/messages", window.location.origin);
@@ -541,6 +555,8 @@ export default function MailApp() {
       if (search.trim()) u.searchParams.set("q", search.trim());
       const res = await fetch(u.toString(), { cache: "no-store" });
       const json = await res.json();
+      // Ignore stale responses after a quick folder switch
+      if (reqId !== folderReqId.current) return false;
       if (!json.ok) return false;
       setItems((json.data.messages as MailMessage[]) || []);
       setCounts((json.data.counts as FolderCounts) || {});
@@ -553,9 +569,10 @@ export default function MailApp() {
       detailCache.current.clear();
       return true;
     } catch {
+      if (reqId !== folderReqId.current) return false;
       return false;
     } finally {
-      setLoadingMail(false);
+      if (reqId === folderReqId.current) setLoadingMail(false);
     }
   };
 
@@ -1583,6 +1600,7 @@ export default function MailApp() {
     setDetail(null);
     setThread([]);
     setDetailLoading(false);
+    setItems([]); // don't flash previous folder while loading
     void loadMessages(id);
   };
 
@@ -1771,7 +1789,10 @@ export default function MailApp() {
                 type="button"
                 onClick={() => {
                   setFolder("all");
-                  // filter via query param by reloading with label — use dedicated state
+                  setOpenId(null);
+                  openIdRef.current = null;
+                  setItems([]);
+                  const reqId = ++folderReqId.current;
                   void (async () => {
                     setLoadingMail(true);
                     try {
@@ -1785,12 +1806,13 @@ export default function MailApp() {
                         cache: "no-store",
                       });
                       const json = await res.json();
+                      if (reqId !== folderReqId.current) return;
                       if (json.ok) {
                         setItems((json.data.messages as MailMessage[]) || []);
                         closeDrawer();
                       }
                     } finally {
-                      setLoadingMail(false);
+                      if (reqId === folderReqId.current) setLoadingMail(false);
                     }
                   })();
                 }}
@@ -2020,58 +2042,6 @@ export default function MailApp() {
                       >
                         <Settings size={16} className="text-white/55" />
                         Управление аккаунтом
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void (async () => {
-                            try {
-                              sessionStorage.removeItem(
-                                "pnk-mail-push-dismissed",
-                              );
-                            } catch {
-                              /* ignore */
-                            }
-                            const statusRes = await fetch("/api/push/status", {
-                              cache: "no-store",
-                            });
-                            const statusJson = await statusRes.json();
-                            if (!statusJson.ok) {
-                              showToast(
-                                statusJson.error?.message ||
-                                  "Нужна авторизация",
-                              );
-                              return;
-                            }
-                            if (!statusJson.data?.vapidLooksValid) {
-                              showToast(
-                                "VAPID ключ на сервере неверный или обрезан",
-                              );
-                              return;
-                            }
-                            if (!statusJson.data?.subscriptions) {
-                              showToast(
-                                "Сначала разрешите уведомления (баннер внизу)",
-                              );
-                              return;
-                            }
-                            const res = await fetch("/api/push/test", {
-                              method: "POST",
-                            });
-                            const json = await res.json();
-                            showToast(
-                              json.ok
-                                ? "Тестовое уведомление отправлено"
-                                : json.error?.message || "Не удалось отправить",
-                            );
-                          })();
-                          setProfileOpen(false);
-                        }}
-                        className="mt-2 w-full h-11 rounded-full bg-[#17191f] border border-white/12 hover:bg-[#1c1f27] transition-colors px-4 inline-flex items-center gap-3 text-[14px] font-[family-name:var(--font-manrope)]"
-                      >
-                        <Bell size={16} className="text-white/55" />
-                        Тест уведомления
                       </button>
 
                       <div className="mt-3 pt-2 flex items-center justify-center gap-2 text-[12px] text-white/35 font-[family-name:var(--font-manrope)]">
@@ -2426,11 +2396,22 @@ export default function MailApp() {
                 </div>
               ) : (
                 <ul className="space-y-2.5 pt-3 pb-20 md:pb-2 min-w-0">
-                  {visible.map((m) => {
+                  {visible.map((m, i) => {
                     const isSel = selected.has(m.id);
                     const isOpen = openId === m.id;
                     return (
-                      <li key={m.id} className="relative min-w-0">
+                      <motion.li
+                        key={m.id}
+                        className="relative min-w-0"
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{
+                          duration: 0.2,
+                          delay: Math.min(i, 10) * 0.025,
+                          ease: [0.22, 1, 0.36, 1],
+                        }}
+                        layout={false}
+                      >
                         <SwipeMailRow
                           id={m.id}
                           open={swipeOpenId === m.id}
@@ -2441,11 +2422,11 @@ export default function MailApp() {
                           <div
                             data-pressable
                             className={cn(
-                              "relative flex items-center gap-2.5 md:gap-2.5 px-2.5 md:px-2.5 h-[56px] md:h-[50px] cursor-pointer rounded-[14px] transition-colors overflow-hidden min-w-0 w-full",
+                              "relative flex items-center gap-2.5 md:gap-2.5 px-2.5 md:px-2.5 h-[56px] md:h-[50px] cursor-pointer rounded-[14px] transition-colors overflow-hidden min-w-0 w-full box-border",
                               isOpen
-                                ? "bg-[#0066ff]/25 outline outline-1 outline-[#0066ff]/40"
+                                ? "bg-[#0066ff]/25 ring-1 ring-inset ring-[#0066ff]/40"
                                 : isSel
-                                  ? "bg-[#0066ff]/30 outline outline-1 outline-[#0066ff]/50"
+                                  ? "bg-[#0066ff]/30 ring-1 ring-inset ring-[#0066ff]/50"
                                   : m.unread
                                     ? "bg-[#2a2d36] hover:bg-[#32363f]"
                                     : "bg-[#24262e] hover:bg-[#2a2d36]",
@@ -2546,7 +2527,7 @@ export default function MailApp() {
                             </div>
                           </div>
                         </SwipeMailRow>
-                      </li>
+                      </motion.li>
                     );
                   })}
                 </ul>
@@ -2554,8 +2535,16 @@ export default function MailApp() {
               </PullToRefresh>
               </div>
 
+              <AnimatePresence initial={false}>
               {openId && (
-                <div className="flex-1 min-h-0 flex flex-col md:min-w-0 px-2 pb-2 md:px-0 md:pr-3 md:pb-3">
+                <motion.div
+                  key={`reader-${openId}`}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 8 }}
+                  transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                  className="flex-1 min-h-0 flex flex-col md:min-w-0 px-2 pb-2 md:px-0 md:pr-3 md:pb-3"
+                >
                   <div className="flex-1 min-h-0 flex flex-col overflow-hidden rounded-[16px] bg-[#0c0d10] border border-white/10 mx-auto w-full">
                     <div className="shrink-0 flex items-center gap-2 px-3 md:px-5 h-12">
                       <button
@@ -2563,6 +2552,7 @@ export default function MailApp() {
                         className="md:hidden h-8 w-8 rounded-full flex items-center justify-center text-white/50 hover:bg-white/5"
                         onClick={() => {
                           setOpenId(null);
+                          openIdRef.current = null;
                           setDetail(null);
                           setThread([]);
                           setRecipientsOpen(false);
@@ -2571,7 +2561,7 @@ export default function MailApp() {
                       >
                         <X size={16} />
                       </button>
-                      <span className="flex-1 text-[13px] text-white/30 font-[family-name:var(--font-manrope)] truncate px-1">
+                      <span className="flex-1 min-w-0 text-[13px] text-white/30 font-[family-name:var(--font-manrope)] truncate px-1 leading-none self-center">
                         {detail?.subject || ""}
                       </span>
                       <button
@@ -2597,6 +2587,7 @@ export default function MailApp() {
                         className="h-8 w-8 rounded-full flex items-center justify-center text-white/40 hover:bg-white/5 hover:text-white"
                         onClick={() => {
                           setOpenId(null);
+                          openIdRef.current = null;
                           setDetail(null);
                           setThread([]);
                           setRecipientsOpen(false);
@@ -2785,8 +2776,9 @@ export default function MailApp() {
                       </div>
                     </div>
                   </div>
-                </div>
+                </motion.div>
               )}
+              </AnimatePresence>
             </div>
           </div>
         </main>
