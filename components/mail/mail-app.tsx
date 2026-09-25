@@ -285,8 +285,6 @@ function MailBodyFrame({ html }: { html: string }) {
   const branded = useMemo(() => isBrandedHtmlEmail(html || ""), [html]);
   const srcDoc = useMemo(() => prepareMailReaderSrcDoc(html), [html]);
   const [ready, setReady] = useState(false);
-  /** Reserved height so thread messages below don't jump while the iframe fits. */
-  const [frameH, setFrameH] = useState(140);
   const canvas = branded ? "#ffffff" : "#0c0d10";
 
   useEffect(() => {
@@ -297,15 +295,15 @@ function MailBodyFrame({ html }: { html: string }) {
     let fitting = false;
     let lastH = 0;
     let lastW = 0;
-    let settled = false;
-    let pendingH = 140;
+    let readyOnce = false;
+    const imgCleanups: Array<() => void> = [];
 
-    const measure = (): number | null => {
+    const fit = (opts?: { force?: boolean }) => {
       const doc = iframe.contentDocument;
       const body = doc?.body;
       const root = doc?.documentElement;
-      if (!doc || !body || !root) return null;
-      if (fitting) return null;
+      if (!doc || !body || !root) return;
+      if (fitting) return;
       fitting = true;
 
       try {
@@ -321,7 +319,7 @@ function MailBodyFrame({ html }: { html: string }) {
 
         const frameW =
           iframe.clientWidth || wrapRef.current?.clientWidth || 0;
-        if (!frameW) return null;
+        if (!frameW) return;
 
         let contentW = Math.max(root.scrollWidth, body.scrollWidth);
         body.querySelectorAll("table, img, pre").forEach((el) => {
@@ -354,57 +352,92 @@ function MailBodyFrame({ html }: { html: string }) {
         );
         let h =
           scale < 1 && !supportsZoom ? Math.ceil(rawH * scale) : Math.ceil(rawH);
+        // Hard cap — prevents ResizeObserver feedback loops
         h = Math.min(h + 4, 8000);
+
+        const widthChanged = Math.abs(frameW - lastW) >= 1;
+        // After first paint: only grow (images), or recalculate on width change.
+        // Avoid shrinking back to a tiny early measure.
+        if (
+          !opts?.force &&
+          readyOnce &&
+          !widthChanged &&
+          h < lastH - 2
+        ) {
+          return;
+        }
+        if (Math.abs(h - lastH) < 2 && !widthChanged) return;
+
+        lastH = h;
         lastW = frameW;
-        pendingH = h;
-        return h;
+        iframe.style.height = `${h}px`;
       } finally {
         fitting = false;
       }
     };
 
-    const applyHeight = (h: number) => {
-      if (Math.abs(h - lastH) < 2) return;
-      lastH = h;
-      iframe.style.height = `${h}px`;
-      setFrameH(h);
-    };
-
-    const settle = () => {
-      if (settled) return;
-      settled = true;
-      const h = measure() ?? pendingH;
-      applyHeight(h);
-      setReady(true);
+    const bindImages = () => {
+      const doc = iframe.contentDocument;
+      if (!doc) return;
+      doc.querySelectorAll("img").forEach((img) => {
+        if (img.complete) return;
+        const onImg = () => {
+          fit();
+          requestAnimationFrame(() => fit());
+        };
+        img.addEventListener("load", onImg);
+        img.addEventListener("error", onImg);
+        imgCleanups.push(() => {
+          img.removeEventListener("load", onImg);
+          img.removeEventListener("error", onImg);
+        });
+      });
     };
 
     const onLoad = () => {
-      measure();
+      fit({ force: true });
+      bindImages();
       requestAnimationFrame(() => {
-        measure();
-        requestAnimationFrame(settle);
+        fit({ force: true });
+        bindImages();
+        requestAnimationFrame(() => {
+          fit({ force: true });
+          if (!readyOnce) {
+            readyOnce = true;
+            setReady(true);
+          }
+        });
       });
     };
 
     iframe.addEventListener("load", onLoad);
     if (iframe.contentDocument?.readyState === "complete") onLoad();
-    const t1 = window.setTimeout(() => measure(), 80);
-    const t2 = window.setTimeout(settle, 400);
+
+    const timers = [50, 200, 500, 1200, 2500].map((ms) =>
+      window.setTimeout(() => {
+        fit();
+        bindImages();
+        if (!readyOnce && ms >= 500) {
+          readyOnce = true;
+          setReady(true);
+        }
+      }, ms),
+    );
+
     const ro =
       typeof ResizeObserver !== "undefined"
         ? new ResizeObserver((entries) => {
-            if (!settled) return;
             const w = entries[0]?.contentRect?.width ?? 0;
             if (Math.abs(w - lastW) < 1) return;
-            const h = measure();
-            if (h != null) applyHeight(h);
+            fit({ force: true });
           })
         : null;
     if (wrapRef.current) ro?.observe(wrapRef.current);
+
     return () => {
       iframe.removeEventListener("load", onLoad);
-      window.clearTimeout(t1);
-      window.clearTimeout(t2);
+      timers.forEach((t) => window.clearTimeout(t));
+      imgCleanups.forEach((fn) => fn());
       ro?.disconnect();
     };
   }, [srcDoc]);
@@ -413,20 +446,16 @@ function MailBodyFrame({ html }: { html: string }) {
     <div
       ref={wrapRef}
       className={cn(
-        "relative w-full overflow-x-hidden overflow-y-hidden rounded-[16px] border mx-auto",
+        "relative w-full overflow-x-hidden overflow-y-visible rounded-[16px] border mx-auto",
         branded
           ? "border-white/15 shadow-[0_0_0_1px_rgba(255,255,255,0.04)]"
           : "border-white/8",
       )}
-      style={{
-        backgroundColor: ready && branded ? "#ffffff" : "#0c0d10",
-        minHeight: frameH,
-        contain: "layout",
-      }}
+      style={{ backgroundColor: ready && branded ? "#ffffff" : "#0c0d10" }}
     >
       {!ready && (
         <div
-          className="absolute inset-0 z-[1] flex items-center justify-center bg-[#0c0d10]"
+          className="absolute inset-0 z-[1] flex items-center justify-center bg-[#0c0d10] min-h-[160px]"
           aria-hidden
         >
           <div className="h-7 w-7 rounded-full border-2 border-white/10 border-t-[#0066ff] animate-spin" />
@@ -439,11 +468,11 @@ function MailBodyFrame({ html }: { html: string }) {
         srcDoc={srcDoc}
         className="w-full border-0 block"
         style={{
-          height: frameH,
+          minHeight: 160,
           backgroundColor: canvas,
           colorScheme: branded ? "light" : "dark",
           opacity: ready ? 1 : 0,
-          transition: "opacity 0.18s ease-out",
+          transition: "opacity 0.15s ease-out",
         }}
       />
     </div>
