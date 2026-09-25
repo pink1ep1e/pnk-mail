@@ -2538,7 +2538,7 @@ export default function MailApp() {
               <AnimatePresence initial={false}>
               {openId && (
                 <motion.div
-                  key={`reader-${openId}`}
+                  key="mail-reader"
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 8 }}
@@ -2598,7 +2598,10 @@ export default function MailApp() {
                       </button>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto mail-scroll">
+                    <div
+                      className="flex-1 overflow-y-auto mail-scroll"
+                      key={`scroll-${openId}`}
+                    >
                       <div className="mx-auto w-full max-w-[680px] px-3 sm:px-6 md:px-8 pt-4 md:pt-6 pb-10">
                         {detailLoading && !detail?.bodyHtml ? (
                           <div className="space-y-6">
