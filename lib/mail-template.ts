@@ -89,14 +89,17 @@ const READER_DARK_CSS = `
   html, body {
     margin: 0;
     padding: 0;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
     background: #0c0d10 !important;
     color: rgba(255,255,255,0.90);
-    font-family: Manrope, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-family: "Segoe UI", Helvetica, Arial, sans-serif;
     font-size: 15px;
     line-height: 1.55;
     -webkit-font-smoothing: antialiased;
   }
-  body { padding: 4px 2px 12px; }
+  body { padding: 4px 2px 8px; }
   a {
     color: #4d9fff !important;
     text-decoration: underline !important;
@@ -172,6 +175,9 @@ const READER_LIGHT_CSS = `
   html, body {
     margin: 0 !important;
     padding: 0 !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
     background: #ffffff !important;
     color: #1a1a1a;
     font-family: "Segoe UI", Helvetica, Arial, sans-serif;
