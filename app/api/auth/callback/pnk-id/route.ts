@@ -68,6 +68,20 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(`${origin}/?error=auth`);
   }
 
+  // OAuth in an iframe cannot reliably read/write SameSite=lax vault cookies
+  // (add-account overlay). Bounce to the top window BEFORE exchanging the code.
+  if (req.headers.get("sec-fetch-dest") === "iframe") {
+    const topUrl = `${origin}${req.nextUrl.pathname}${req.nextUrl.search}`;
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/><script>try{window.top.location.replace(${JSON.stringify(topUrl)})}catch(e){location.replace(${JSON.stringify(topUrl)})}</script></head><body></body></html>`;
+    return new NextResponse(html, {
+      status: 200,
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-store",
+      },
+    });
+  }
+
   const expected = req.cookies.get(OAUTH_STATE_COOKIE)?.value;
   if (!stateOk(expected, state)) {
     const res = NextResponse.redirect(`${origin}/?error=state`);

@@ -796,10 +796,8 @@ export default function MailApp() {
 
   const addAccount = () => {
     setProfileOpen(false);
-    void (async () => {
-      const ok = await openAuthInOverlay(mailAuthAddAccountUrl());
-      if (!ok) window.location.href = mailAuthAddAccountUrl();
-    })();
+    // Must be top-level navigation — iframe OAuth cannot persist vault cookies
+    window.location.href = mailAuthAddAccountUrl();
   };
 
   const manageAccount = () => {
