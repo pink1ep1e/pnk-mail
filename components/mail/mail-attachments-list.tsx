@@ -47,7 +47,7 @@ export function MailAttachmentsList({
             <button
               type="button"
               onClick={() => downloadAttachment(a)}
-              className="w-full flex items-center gap-3 rounded-[12px] border border-[#0066ff]/30 bg-[#0066ff]/12 px-3 py-2.5 text-left hover:bg-[#0066ff]/18 transition-colors"
+              className="w-full flex items-center gap-3 rounded-[12px] border border-[#0066ff]/30 bg-[#0066ff]/12 px-3 py-2.5 text-left cursor-pointer hover:bg-[#0066ff]/18 transition-colors"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img

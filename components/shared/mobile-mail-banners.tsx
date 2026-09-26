@@ -3,7 +3,7 @@
 import { useInstallPrompt } from "@/components/shared/install-prompt";
 import { Bell, Plus } from "@/lib/icons";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -95,9 +95,50 @@ async function subscribePush(): Promise<{ ok: boolean; error?: string }> {
   return { ok: true };
 }
 
+function BannerCard({
+  icon,
+  title,
+  subtitle,
+  primary,
+  onLater,
+}: {
+  icon: ReactNode;
+  title: string;
+  subtitle: string;
+  primary: ReactNode;
+  onLater: () => void;
+}) {
+  return (
+    <div className="rounded-[14px] bg-[#24262e] px-3 py-3">
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#2a2d36] text-white/70">
+          {icon}
+        </div>
+        <div className="min-w-0 flex-1 pt-0.5">
+          <p className="text-[14px] font-semibold text-white font-[family-name:var(--font-manrope)] leading-snug">
+            {title}
+          </p>
+          <p className="mt-1 text-[12px] leading-snug text-white/40 font-[family-name:var(--font-manrope)]">
+            {subtitle}
+          </p>
+          <div className="mt-3 flex items-center gap-3">
+            {primary}
+            <button
+              type="button"
+              onClick={onLater}
+              className="h-8 px-1 text-[13px] text-white/40 font-[family-name:var(--font-manrope)] hover:text-white/70 cursor-pointer"
+            >
+              Позже
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /**
- * Compact mobile-only banners above the message list:
- * notifications + install to home screen.
+ * Mobile-only banners above the message list — same surface as mail rows.
  */
 export function MobileMailBanners({ enabled }: { enabled: boolean }) {
   const [mobile, setMobile] = useState(false);
@@ -250,84 +291,54 @@ export function MobileMailBanners({ enabled }: { enabled: boolean }) {
     }
   };
 
+  const primaryBtn =
+    "inline-flex h-8 items-center rounded-[10px] bg-[#0066ff] px-3.5 text-[13px] font-semibold text-white font-[family-name:var(--font-manrope)] cursor-pointer hover:bg-[#0052cc] disabled:opacity-60";
+
   return (
-    <div className="md:hidden shrink-0 px-2.5 pt-2 space-y-2">
+    <div className="md:hidden shrink-0 px-2.5 pt-2 space-y-2.5">
       {pushOpen && (
-        <div className="rounded-[14px] border border-white/10 bg-[#1a1c22] px-3 py-2.5">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-[#0066ff]/20 text-[#4d9fff]">
-              <Bell size={16} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-[13px] font-semibold font-[family-name:var(--font-manrope)] leading-tight">
-                Уведомления
-              </p>
-              <p className="mt-0.5 text-[11px] leading-snug text-white/45 font-[family-name:var(--font-manrope)] line-clamp-2">
-                {pushHint || "Новые письма даже когда приложение закрыто."}
-              </p>
-            </div>
-            <div className="flex shrink-0 items-center gap-1.5">
-              <button
-                type="button"
-                disabled={pushBusy || Notification.permission === "denied"}
-                onClick={() => void enablePush()}
-                className="h-8 px-3 rounded-[9px] bg-[#0066ff] text-[12px] font-semibold font-[family-name:var(--font-manrope)] disabled:opacity-60"
-              >
-                {pushBusy ? "…" : "Включить"}
-              </button>
-              <button
-                type="button"
-                onClick={dismissPush}
-                className="h-8 px-2.5 rounded-[9px] text-[12px] text-white/45 font-[family-name:var(--font-manrope)] hover:bg-white/5 hover:text-white/70"
-              >
-                Позже
-              </button>
-            </div>
-          </div>
-        </div>
+        <BannerCard
+          icon={<Bell size={18} />}
+          title="Включить уведомления"
+          subtitle={
+            pushHint || "Новые письма придут, даже когда приложение закрыто."
+          }
+          primary={
+            <button
+              type="button"
+              disabled={pushBusy || Notification.permission === "denied"}
+              onClick={() => void enablePush()}
+              className={primaryBtn}
+            >
+              {pushBusy ? "…" : "Включить"}
+            </button>
+          }
+          onLater={dismissPush}
+        />
       )}
 
       {installOpen && (
-        <div className="rounded-[14px] border border-white/10 bg-[#1a1c22] px-3 py-2.5">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-white/8 text-white/70">
-              <Plus size={16} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-[13px] font-semibold font-[family-name:var(--font-manrope)] leading-tight">
-                Установить приложение
-              </p>
-              <p className="mt-0.5 text-[11px] leading-snug text-white/45 font-[family-name:var(--font-manrope)]">
-                На экран «Домой» для быстрого доступа.
-              </p>
-            </div>
-            <div className="flex shrink-0 items-center gap-1.5">
-              {canPrompt ? (
-                <button
-                  type="button"
-                  onClick={() => void install()}
-                  className="h-8 px-3 rounded-[9px] bg-[#0066ff] text-[12px] font-semibold font-[family-name:var(--font-manrope)]"
-                >
-                  Установить
-                </button>
-              ) : (
-                <Link
-                  href="/install"
-                  className="h-8 px-3 rounded-[9px] bg-[#0066ff] text-[12px] font-semibold font-[family-name:var(--font-manrope)] inline-flex items-center"
-                >
-                  Как установить
-                </Link>
-              )}
+        <BannerCard
+          icon={<Plus size={18} />}
+          title="Установить приложение"
+          subtitle="Добавьте на экран «Домой» для быстрого доступа."
+          primary={
+            canPrompt ? (
               <button
                 type="button"
-                onClick={dismissInstall}
-                className="h-8 px-2.5 rounded-[9px] text-[12px] text-white/45 font-[family-name:var(--font-manrope)] hover:bg-white/5 hover:text-white/70"
+                onClick={() => void install()}
+                className={primaryBtn}
               >
-                Позже
+                Установить
               </button>
-            </div>
-          </div>
-        </div>
+            ) : (
+              <Link href="/install" className={primaryBtn}>
+                Как установить
+              </Link>
+            )
+          }
+          onLater={dismissInstall}
+        />
       )}
     </div>
   );
