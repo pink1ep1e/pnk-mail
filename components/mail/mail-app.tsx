@@ -533,6 +533,7 @@ export default function MailApp() {
   const [items, setItems] = useState<MailMessage[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
+  const [isMobileUi, setIsMobileUi] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [drawerPulling, setDrawerPulling] = useState(false);
   const drawerX = useMotionValue(-DRAWER_W);
@@ -905,6 +906,14 @@ export default function MailApp() {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [nameModal, nameModalBusy]);
+
+  useEffect(() => {
+    const sync = () =>
+      setIsMobileUi(window.matchMedia("(max-width: 767px)").matches);
+    sync();
+    window.addEventListener("resize", sync);
+    return () => window.removeEventListener("resize", sync);
+  }, []);
 
   // Mobile: pull folder drawer with the finger from the left edge
   useEffect(() => {
@@ -2402,12 +2411,15 @@ export default function MailApp() {
             </div>
 
             {/* Message list + reader */}
-            <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
+            <div className="relative flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
               <div
                 className={cn(
                   "flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden",
-                  openId && "hidden md:flex md:max-w-[50%] md:border-r md:border-white/8",
+                  // Desktop split: shrink list. Mobile: keep list under overlay (no blank flash).
+                  openId && "md:flex md:max-w-[50%] md:border-r md:border-white/8",
+                  openId && "max-md:pointer-events-none max-md:aria-hidden",
                 )}
+                aria-hidden={openId && isMobileUi ? true : undefined}
               >
               <MobileMailBanners enabled={Boolean(activeAccount)} />
               <PullToRefresh
@@ -2572,11 +2584,28 @@ export default function MailApp() {
               {openId && (
                 <motion.div
                   key="mail-reader"
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 8 }}
-                  transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-                  className="flex-1 min-h-0 flex flex-col md:min-w-0 px-2 pb-2 md:px-0 md:pr-3 md:pb-3"
+                  initial={
+                    isMobileUi
+                      ? { x: "100%" }
+                      : { opacity: 0, y: 10 }
+                  }
+                  animate={
+                    isMobileUi
+                      ? { x: 0 }
+                      : { opacity: 1, y: 0 }
+                  }
+                  exit={
+                    isMobileUi
+                      ? { x: "100%" }
+                      : { opacity: 0, y: 6 }
+                  }
+                  transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
+                  className={cn(
+                    "flex flex-col bg-[#0c0d10]",
+                    // Mobile: slide over the list (list stays mounted → no dark flash)
+                    "absolute inset-0 z-30 md:static md:z-auto md:flex-1 md:min-h-0 md:min-w-0",
+                    "px-2 pb-2 md:px-0 md:pr-3 md:pb-3",
+                  )}
                 >
                   <div className="flex-1 min-h-0 flex flex-col overflow-hidden rounded-[16px] bg-[#0c0d10] border border-white/10 mx-auto w-full">
                     <div className="shrink-0 flex items-center gap-2 px-3 md:px-5 h-12">

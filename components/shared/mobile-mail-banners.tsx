@@ -1,8 +1,7 @@
 "use client";
 
 import { useInstallPrompt } from "@/components/shared/install-prompt";
-import { Bell, Plus, X } from "@/lib/icons";
-import { cn } from "@/lib/utils";
+import { Bell, Plus } from "@/lib/icons";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -106,7 +105,6 @@ export function MobileMailBanners({ enabled }: { enabled: boolean }) {
   const [pushBusy, setPushBusy] = useState(false);
   const [pushHint, setPushHint] = useState<string | null>(null);
   const [installOpen, setInstallOpen] = useState(false);
-  const [iosTip, setIosTip] = useState(false);
   const { canPrompt, standalone, promptInstall } = useInstallPrompt();
 
   useEffect(() => {
@@ -146,7 +144,7 @@ export function MobileMailBanners({ enabled }: { enabled: boolean }) {
       if (isIos() && !isStandalonePwa()) {
         if (!cancelled) {
           setPushHint(
-            "На iPhone уведомления работают только из приложения на экране «Домой».",
+            "На iPhone — только из приложения на экране «Домой».",
           );
           setPushOpen(true);
         }
@@ -194,10 +192,7 @@ export function MobileMailBanners({ enabled }: { enabled: boolean }) {
     setPushHint(null);
     try {
       if (isIos() && !isStandalonePwa()) {
-        setIosTip(true);
-        setPushHint(
-          "Сначала установите приложение на экран «Домой», затем откройте его и включите уведомления.",
-        );
+        window.location.href = "/install";
         return;
       }
       const perm =
@@ -238,12 +233,10 @@ export function MobileMailBanners({ enabled }: { enabled: boolean }) {
   const install = async () => {
     if (canPrompt) {
       const ok = await promptInstall();
-      if (ok) setInstallOpen(false);
-      return;
-    }
-    if (isIos()) {
-      setIosTip(true);
-      return;
+      if (ok) {
+        setInstallOpen(false);
+        return;
+      }
     }
     window.location.href = "/install";
   };
@@ -261,36 +254,34 @@ export function MobileMailBanners({ enabled }: { enabled: boolean }) {
     <div className="md:hidden shrink-0 px-2.5 pt-2 space-y-2">
       {pushOpen && (
         <div className="rounded-[14px] border border-white/10 bg-[#1a1c22] px-3 py-2.5">
-          <div className="flex items-start gap-2.5">
-            <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-[#0066ff]/20 text-[#4d9fff]">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-[#0066ff]/20 text-[#4d9fff]">
               <Bell size={16} />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-[13px] font-semibold font-[family-name:var(--font-manrope)]">
-                Включить уведомления
+              <p className="text-[13px] font-semibold font-[family-name:var(--font-manrope)] leading-tight">
+                Уведомления
               </p>
-              <p className="mt-0.5 text-[12px] leading-snug text-white/45 font-[family-name:var(--font-manrope)]">
-                {pushHint ||
-                  "Новые письма придут даже когда приложение закрыто."}
+              <p className="mt-0.5 text-[11px] leading-snug text-white/45 font-[family-name:var(--font-manrope)] line-clamp-2">
+                {pushHint || "Новые письма даже когда приложение закрыто."}
               </p>
-              <div className="mt-2 flex gap-2">
-                <button
-                  type="button"
-                  disabled={pushBusy || Notification.permission === "denied"}
-                  onClick={() => void enablePush()}
-                  className="h-8 flex-1 rounded-[9px] bg-[#0066ff] text-[12px] font-semibold font-[family-name:var(--font-manrope)] disabled:opacity-60"
-                >
-                  {pushBusy ? "…" : "Включить"}
-                </button>
-                <button
-                  type="button"
-                  onClick={dismissPush}
-                  className="h-8 w-8 rounded-[9px] text-white/40 hover:bg-white/5 inline-flex items-center justify-center"
-                  aria-label="Скрыть"
-                >
-                  <X size={14} />
-                </button>
-              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <button
+                type="button"
+                disabled={pushBusy || Notification.permission === "denied"}
+                onClick={() => void enablePush()}
+                className="h-8 px-3 rounded-[9px] bg-[#0066ff] text-[12px] font-semibold font-[family-name:var(--font-manrope)] disabled:opacity-60"
+              >
+                {pushBusy ? "…" : "Включить"}
+              </button>
+              <button
+                type="button"
+                onClick={dismissPush}
+                className="h-8 px-2.5 rounded-[9px] text-[12px] text-white/45 font-[family-name:var(--font-manrope)] hover:bg-white/5 hover:text-white/70"
+              >
+                Позже
+              </button>
             </div>
           </div>
         </div>
@@ -298,48 +289,42 @@ export function MobileMailBanners({ enabled }: { enabled: boolean }) {
 
       {installOpen && (
         <div className="rounded-[14px] border border-white/10 bg-[#1a1c22] px-3 py-2.5">
-          <div className="flex items-start gap-2.5">
-            <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-white/8 text-white/70">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-white/8 text-white/70">
               <Plus size={16} />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-[13px] font-semibold font-[family-name:var(--font-manrope)]">
+              <p className="text-[13px] font-semibold font-[family-name:var(--font-manrope)] leading-tight">
                 Установить приложение
               </p>
-              <p className="mt-0.5 text-[12px] leading-snug text-white/45 font-[family-name:var(--font-manrope)]">
-                {iosTip
-                  ? "В Safari: Поделиться → На экран «Домой»."
-                  : canPrompt
-                    ? "Добавьте на экран «Домой» — откроется как приложение."
-                    : "Добавьте на экран «Домой» для быстрого доступа."}
+              <p className="mt-0.5 text-[11px] leading-snug text-white/45 font-[family-name:var(--font-manrope)]">
+                На экран «Домой» для быстрого доступа.
               </p>
-              <div className="mt-2 flex gap-2">
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5">
+              {canPrompt ? (
                 <button
                   type="button"
                   onClick={() => void install()}
-                  className="h-8 flex-1 rounded-[9px] bg-[#0066ff] text-[12px] font-semibold font-[family-name:var(--font-manrope)]"
+                  className="h-8 px-3 rounded-[9px] bg-[#0066ff] text-[12px] font-semibold font-[family-name:var(--font-manrope)]"
                 >
-                  {canPrompt ? "Установить" : isIos() ? "Как установить" : "Установить"}
+                  Установить
                 </button>
-                {!canPrompt && !isIos() && (
-                  <Link
-                    href="/install"
-                    className={cn(
-                      "h-8 px-3 rounded-[9px] text-[12px] text-white/50 inline-flex items-center font-[family-name:var(--font-manrope)] hover:bg-white/5",
-                    )}
-                  >
-                    Справка
-                  </Link>
-                )}
-                <button
-                  type="button"
-                  onClick={dismissInstall}
-                  className="h-8 w-8 rounded-[9px] text-white/40 hover:bg-white/5 inline-flex items-center justify-center"
-                  aria-label="Скрыть"
+              ) : (
+                <Link
+                  href="/install"
+                  className="h-8 px-3 rounded-[9px] bg-[#0066ff] text-[12px] font-semibold font-[family-name:var(--font-manrope)] inline-flex items-center"
                 >
-                  <X size={14} />
-                </button>
-              </div>
+                  Как установить
+                </Link>
+              )}
+              <button
+                type="button"
+                onClick={dismissInstall}
+                className="h-8 px-2.5 rounded-[9px] text-[12px] text-white/45 font-[family-name:var(--font-manrope)] hover:bg-white/5 hover:text-white/70"
+              >
+                Позже
+              </button>
             </div>
           </div>
         </div>
