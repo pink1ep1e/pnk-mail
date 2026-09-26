@@ -40,7 +40,7 @@ import { AppSplash } from "@/components/shared/app-splash";
 import { PushSubscribe } from "@/components/shared/push-subscribe";
 import { MobileMailBanners } from "@/components/shared/mobile-mail-banners";
 import { MailAttachmentsList } from "@/components/mail/mail-attachments-list";
-import { extractAttachmentsFromHtml } from "@/lib/mail-attachments";
+import { extractAttachmentsFromHtml, stripAttachmentsBlock } from "@/lib/mail-attachments";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { haptic } from "@/lib/haptic";
 import { prepareMailReaderSrcDoc, isBrandedHtmlEmail } from "@/lib/mail-template";
@@ -299,16 +299,16 @@ function MailBodyFrame({ html }: { html: string }) {
     let lastH = 0;
     let lastW = 0;
     let readyOnce = false;
+    let applyTimer = 0;
     const imgCleanups: Array<() => void> = [];
 
-    const fit = (opts?: { force?: boolean }) => {
+    const measure = (): number | null => {
       const doc = iframe.contentDocument;
       const body = doc?.body;
       const root = doc?.documentElement;
-      if (!doc || !body || !root) return;
-      if (fitting) return;
+      if (!doc || !body || !root) return null;
+      if (fitting) return null;
       fitting = true;
-
       try {
         body.style.transform = "";
         body.style.transformOrigin = "";
@@ -319,25 +319,19 @@ function MailBodyFrame({ html }: { html: string }) {
         body.style.overflowX = "visible";
         root.style.overflowY = "visible";
         body.style.overflowY = "visible";
-
-        const frameW =
-          iframe.clientWidth || wrapRef.current?.clientWidth || 0;
-        if (!frameW) return;
-
+        const frameW = iframe.clientWidth || wrapRef.current?.clientWidth || 0;
+        if (!frameW) return null;
         let contentW = Math.max(root.scrollWidth, body.scrollWidth);
         body.querySelectorAll("table, img, pre").forEach((el) => {
           contentW = Math.max(contentW, (el as HTMLElement).scrollWidth || 0);
         });
-
         let scale = 1;
         if (contentW > frameW + 2) {
           scale = Math.max(0.45, Math.min(1, (frameW - 2) / contentW));
         }
-
         const supportsZoom =
           typeof CSS !== "undefined" &&
           (CSS.supports?.("zoom", "0.5") || "zoom" in root.style);
-
         if (scale < 1 && supportsZoom) {
           (root.style as CSSStyleDeclaration & { zoom?: string }).zoom =
             String(scale);
@@ -346,7 +340,6 @@ function MailBodyFrame({ html }: { html: string }) {
           body.style.transform = `scale(${scale})`;
           body.style.width = `${100 / scale}%`;
         }
-
         const rawH = Math.max(
           root.scrollHeight,
           body.scrollHeight,
@@ -355,27 +348,37 @@ function MailBodyFrame({ html }: { html: string }) {
         );
         let h =
           scale < 1 && !supportsZoom ? Math.ceil(rawH * scale) : Math.ceil(rawH);
-        // Hard cap — prevents ResizeObserver feedback loops
         h = Math.min(h + 4, 8000);
-
-        const widthChanged = Math.abs(frameW - lastW) >= 1;
-        // After first paint: only grow (images), or recalculate on width change.
-        // Avoid shrinking back to a tiny early measure.
-        if (
-          !opts?.force &&
-          readyOnce &&
-          !widthChanged &&
-          h < lastH - 2
-        ) {
-          return;
-        }
-        if (Math.abs(h - lastH) < 2 && !widthChanged) return;
-
-        lastH = h;
         lastW = frameW;
-        iframe.style.height = `${h}px`;
+        return h;
       } finally {
         fitting = false;
+      }
+    };
+
+    const applyHeight = (h: number, force = false) => {
+      if (!force && readyOnce) {
+        if (h <= lastH + 24) return;
+      }
+      if (Math.abs(h - lastH) < 2 && !force) return;
+      lastH = h;
+      iframe.style.height = `${h}px`;
+    };
+
+    const scheduleApply = (force = false) => {
+      window.clearTimeout(applyTimer);
+      applyTimer = window.setTimeout(() => {
+        const h = measure();
+        if (h != null) applyHeight(h, force);
+      }, force ? 0 : 140);
+    };
+
+    const settle = () => {
+      const h = measure();
+      if (h != null) applyHeight(h, true);
+      if (!readyOnce) {
+        readyOnce = true;
+        setReady(true);
       }
     };
 
@@ -384,10 +387,7 @@ function MailBodyFrame({ html }: { html: string }) {
       if (!doc) return;
       doc.querySelectorAll("img").forEach((img) => {
         if (img.complete) return;
-        const onImg = () => {
-          fit();
-          requestAnimationFrame(() => fit());
-        };
+        const onImg = () => scheduleApply(false);
         img.addEventListener("load", onImg);
         img.addEventListener("error", onImg);
         imgCleanups.push(() => {
@@ -398,17 +398,14 @@ function MailBodyFrame({ html }: { html: string }) {
     };
 
     const onLoad = () => {
-      fit({ force: true });
       bindImages();
       requestAnimationFrame(() => {
-        fit({ force: true });
-        bindImages();
         requestAnimationFrame(() => {
-          fit({ force: true });
-          if (!readyOnce) {
-            readyOnce = true;
-            setReady(true);
-          }
+          settle();
+          window.setTimeout(() => {
+            bindImages();
+            scheduleApply(true);
+          }, 400);
         });
       });
     };
@@ -416,30 +413,20 @@ function MailBodyFrame({ html }: { html: string }) {
     iframe.addEventListener("load", onLoad);
     if (iframe.contentDocument?.readyState === "complete") onLoad();
 
-    const timers = [50, 200, 500, 1200, 2500].map((ms) =>
-      window.setTimeout(() => {
-        fit();
-        bindImages();
-        if (!readyOnce && ms >= 500) {
-          readyOnce = true;
-          setReady(true);
-        }
-      }, ms),
-    );
-
     const ro =
       typeof ResizeObserver !== "undefined"
         ? new ResizeObserver((entries) => {
+            if (!readyOnce) return;
             const w = entries[0]?.contentRect?.width ?? 0;
             if (Math.abs(w - lastW) < 1) return;
-            fit({ force: true });
+            scheduleApply(true);
           })
         : null;
     if (wrapRef.current) ro?.observe(wrapRef.current);
 
     return () => {
       iframe.removeEventListener("load", onLoad);
-      timers.forEach((t) => window.clearTimeout(t));
+      window.clearTimeout(applyTimer);
       imgCleanups.forEach((fn) => fn());
       ro?.disconnect();
     };
@@ -449,7 +436,7 @@ function MailBodyFrame({ html }: { html: string }) {
     <div
       ref={wrapRef}
       className={cn(
-        "relative w-full overflow-x-hidden overflow-y-visible rounded-[16px] border mx-auto",
+        "relative w-full overflow-x-hidden overflow-y-hidden rounded-[16px] border mx-auto",
         branded
           ? "border-white/15 shadow-[0_0_0_1px_rgba(255,255,255,0.04)]"
           : "border-white/8",
@@ -458,7 +445,7 @@ function MailBodyFrame({ html }: { html: string }) {
     >
       {!ready && (
         <div
-          className="absolute inset-0 z-[1] flex items-center justify-center bg-[#0c0d10] min-h-[160px]"
+          className="absolute inset-0 z-[1] flex items-center justify-center bg-[#0c0d10] min-h-[120px]"
           aria-hidden
         >
           <div className="h-7 w-7 rounded-full border-2 border-white/10 border-t-[#0066ff] animate-spin" />
@@ -471,7 +458,7 @@ function MailBodyFrame({ html }: { html: string }) {
         srcDoc={srcDoc}
         className="w-full border-0 block"
         style={{
-          minHeight: 160,
+          minHeight: 80,
           backgroundColor: canvas,
           colorScheme: branded ? "light" : "dark",
           opacity: ready ? 1 : 0,
@@ -2823,7 +2810,11 @@ export default function MailApp() {
                                           </div>
                                         )}
                                         {msg.bodyHtml ? (
-                                          <MailBodyFrame html={msg.bodyHtml} />
+                                          <MailBodyFrame
+                                            html={stripAttachmentsBlock(
+                                              msg.bodyHtml,
+                                            )}
+                                          />
                                         ) : (
                                           <div className="rounded-[12px] bg-white/[0.03] p-6 space-y-3 animate-pulse min-h-[80px]">
                                             <div className="h-3 rounded-md bg-white/[0.06] w-[90%]" />

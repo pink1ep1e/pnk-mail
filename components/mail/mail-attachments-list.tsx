@@ -1,18 +1,31 @@
 "use client";
 
 import { formatBytes, type MailAttachmentMeta } from "@/lib/mail-attachments";
-import { Paperclip } from "@/lib/icons";
+import { fileIconSrc } from "@/lib/file-icon";
 import { cn } from "@/lib/utils";
 
 function downloadAttachment(a: MailAttachmentMeta) {
-  const el = document.createElement("a");
-  el.href = a.href;
-  el.download = a.name || "file";
-  el.rel = "noopener";
-  el.target = "_blank";
-  document.body.appendChild(el);
-  el.click();
-  el.remove();
+  try {
+    if (a.href.startsWith("data:")) {
+      const el = document.createElement("a");
+      el.href = a.href;
+      el.download = a.name || "file";
+      document.body.appendChild(el);
+      el.click();
+      el.remove();
+      return;
+    }
+    const el = document.createElement("a");
+    el.href = a.href;
+    el.download = a.name || "file";
+    el.rel = "noopener";
+    el.target = "_blank";
+    document.body.appendChild(el);
+    el.click();
+    el.remove();
+  } catch {
+    window.open(a.href, "_blank", "noopener,noreferrer");
+  }
 }
 
 export function MailAttachmentsList({
@@ -36,9 +49,14 @@ export function MailAttachmentsList({
               onClick={() => downloadAttachment(a)}
               className="w-full flex items-center gap-3 rounded-[12px] border border-[#0066ff]/30 bg-[#0066ff]/12 px-3 py-2.5 text-left hover:bg-[#0066ff]/18 transition-colors"
             >
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-white/8 text-[#4d9fff]">
-                <Paperclip size={16} />
-              </span>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={fileIconSrc(a.name, a.type)}
+                alt=""
+                width={36}
+                height={36}
+                className="h-9 w-9 shrink-0 object-contain"
+              />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[14px] font-semibold text-white font-[family-name:var(--font-manrope)]">
                   {a.name}

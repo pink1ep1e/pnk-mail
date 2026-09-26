@@ -6,6 +6,7 @@ import {
   dataUrlToBase64Parts,
   formatBytes as formatAttachBytes,
 } from "@/lib/mail-attachments";
+import { fileIconSrc } from "@/lib/file-icon";
 import {
   AlignCenter,
   AlignLeft,
@@ -50,6 +51,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type DragEvent as ReactDragEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
   type RefObject,
@@ -792,6 +794,8 @@ export default function ComposeEditor({
   const [templates, setTemplates] = useState<SavedTemplate[]>([]);
   const [composeLabels, setComposeLabels] = useState<string[]>([]);
   const [attachments, setAttachments] = useState<AttachItem[]>([]);
+  const [fileDropOver, setFileDropOver] = useState(false);
+  const sendingRef = useRef(false);
   const [customSchedule, setCustomSchedule] = useState("");
   const [signatureHtml, setSignatureHtml] = useState("");
   const [bodyEmpty, setBodyEmpty] = useState(true);
@@ -1390,6 +1394,7 @@ export default function ComposeEditor({
   };
 
   const handleSend = () => {
+    if (sendingRef.current || sentFlash) return;
     let bodyHtml = editorRef.current?.innerHTML?.trim() || "";
     const draftChip = toRecipient(toDraft, allContacts, fromEmail, fromName);
     const merged = [
@@ -1451,6 +1456,7 @@ export default function ComposeEditor({
       hasAttachment: attachments.length > 0,
       attachments: apiAttachments.length ? apiAttachments : undefined,
     };
+    sendingRef.current = true;
     void (async () => {
       try {
         await onSend?.(payload);
@@ -1476,11 +1482,13 @@ export default function ComposeEditor({
         }
         window.setTimeout(() => {
           setSentFlash(false);
+          sendingRef.current = false;
           reset();
           setActiveDraftId(null);
           onClose();
         }, 700);
       } catch {
+        sendingRef.current = false;
         // Parent shows error; keep composer open
       }
     })();
@@ -1600,29 +1608,55 @@ export default function ComposeEditor({
 
   const addFiles = (files: File[]) => {
     for (const file of files) {
-      if (file.type.startsWith("image/") && file.size < 4_000_000) {
-        insertImageFile(file);
-        continue;
-      }
       if (file.size > 8_000_000) {
         onToast?.(`${file.name}: слишком большой файл (макс. 8 МБ)`);
         continue;
       }
       const reader = new FileReader();
       reader.onload = () => {
-        setAttachments((prev) => [
-          ...prev,
-          {
-            id: `${Date.now()}-${file.name}`,
-            name: file.name,
-            size: file.size,
-            type: file.type || "application/octet-stream",
-            dataUrl: String(reader.result || ""),
-          },
-        ]);
+        setAttachments((prev) => {
+          if (prev.some((x) => x.name === file.name && x.size === file.size)) {
+            return prev;
+          }
+          return [
+            ...prev,
+            {
+              id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}-${file.name}`,
+              name: file.name,
+              size: file.size,
+              type: file.type || "application/octet-stream",
+              dataUrl: String(reader.result || ""),
+            },
+          ];
+        });
+      };
+      reader.onerror = () => {
+        onToast?.(`${file.name}: не удалось прочитать файл`);
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  const onComposerDragOver = (e: ReactDragEvent) => {
+    if (![...e.dataTransfer.types].includes("Files")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setFileDropOver(true);
+  };
+
+  const onComposerDragLeave = (e: ReactDragEvent) => {
+    e.preventDefault();
+    const related = e.relatedTarget as Node | null;
+    if (related && (e.currentTarget as HTMLElement).contains(related)) return;
+    setFileDropOver(false);
+  };
+
+  const onComposerDrop = (e: ReactDragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setFileDropOver(false);
+    const files = Array.from(e.dataTransfer.files || []);
+    if (files.length) addFiles(files);
   };
 
   const openTemplateMenu = () => {
@@ -1778,7 +1812,18 @@ export default function ComposeEditor({
             minimized && "rounded-[20px]",
           )}
           style={winStyle}
+          onDragEnter={onComposerDragOver}
+          onDragOver={onComposerDragOver}
+          onDragLeave={onComposerDragLeave}
+          onDrop={onComposerDrop}
         >
+          {fileDropOver && (
+            <div className="pointer-events-none absolute inset-0 z-[80] flex items-center justify-center rounded-[inherit] bg-[#0066ff]/18 border-2 border-dashed border-[#4d9fff]">
+              <p className="rounded-[12px] bg-[#1a1c22]/95 px-4 py-2 text-[14px] font-semibold text-white">
+                Отпустите файлы, чтобы прикрепить
+              </p>
+            </div>
+          )}
           <div
             className={cn(
               "shrink-0 h-14 px-4 flex items-center gap-2",
@@ -2410,9 +2455,14 @@ export default function ComposeEditor({
                           key={a.id}
                           className="flex items-center gap-2.5 rounded-[12px] border border-white/10 bg-white/[0.04] px-3 py-2"
                         >
-                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-[#0066ff]/15 text-[#4d9fff]">
-                            <Paperclip size={14} />
-                          </span>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={fileIconSrc(a.name, a.type)}
+                            alt=""
+                            width={32}
+                            height={32}
+                            className="h-8 w-8 shrink-0 object-contain"
+                          />
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-[13px] text-white/85 font-[family-name:var(--font-manrope)]">
                               {a.name}
@@ -2736,7 +2786,7 @@ export default function ComposeEditor({
               <input
                 ref={fileRef}
                 type="file"
-                accept="image/*,*/*"
+                accept="*/*"
                 className="hidden"
                 multiple
                 onChange={(e) => {
