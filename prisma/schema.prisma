@@ -59,6 +59,7 @@ model Message {
 
   @@index([mailboxId, folder, createdAt])
   @@index([mailboxId, unread])
+  @@index([mailboxId, hasAttachment])
   @@index([mailboxId, threadId, createdAt])
   @@index([mailboxId, rfcMessageId])
   @@index([providerId])

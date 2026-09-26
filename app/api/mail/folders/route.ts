@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireActiveMailbox } from "@/lib/mail-auth";
+import { assertSameOrigin } from "@/lib/request-guard";
 
 export async function GET() {
   const auth = await requireActiveMailbox();
@@ -25,6 +26,14 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const origin = assertSameOrigin(req);
+  if (!origin.ok) {
+    return NextResponse.json(
+      { ok: false, error: { message: origin.message } },
+      { status: 403 },
+    );
+  }
+
   const auth = await requireActiveMailbox();
   if (!auth.ok) {
     return NextResponse.json(
@@ -62,6 +71,14 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const origin = assertSameOrigin(req);
+  if (!origin.ok) {
+    return NextResponse.json(
+      { ok: false, error: { message: origin.message } },
+      { status: 403 },
+    );
+  }
+
   const auth = await requireActiveMailbox();
   if (!auth.ok) {
     return NextResponse.json(

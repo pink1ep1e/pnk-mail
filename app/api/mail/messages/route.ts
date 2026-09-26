@@ -2,8 +2,25 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireActiveMailbox } from "@/lib/mail-auth";
 import type { FolderId } from "@/lib/mail-data";
-import { maybeSyncResendInbound } from "@/lib/mail-inbound";
+import { maybeSyncResendInbound, repairFalseSubjectThreads } from "@/lib/mail-inbound";
 import { groupMessagesIntoThreads, toListDto, attachPnkMailAvatars } from "@/lib/mail-store";
+import { assertSameOrigin } from "@/lib/request-guard";
+
+const LIST_SELECT = {
+  id: true,
+  folder: true,
+  fromName: true,
+  fromEmail: true,
+  subject: true,
+  preview: true,
+  unread: true,
+  hasAttachment: true,
+  createdAt: true,
+  deliveryStatus: true,
+  deliveryDetail: true,
+  threadId: true,
+  senderLogoUrl: true,
+} as const;
 
 export async function GET(req: NextRequest) {
   const auth = await requireActiveMailbox();
@@ -15,17 +32,20 @@ export async function GET(req: NextRequest) {
   }
 
   const folder = (req.nextUrl.searchParams.get("folder") || "inbox") as FolderId;
-  const q = (req.nextUrl.searchParams.get("q") || "").trim().toLowerCase();
+  const q = (req.nextUrl.searchParams.get("q") || "").trim();
   const labelId = (req.nextUrl.searchParams.get("label") || "").trim();
 
-  // Fallback when Resend webhook is missing/misconfigured: pull on inbox open
+  // Never block the list on Resend pull — sync in background; client soft-refreshes
+  let syncStarted = false;
   if (folder === "inbox" || folder === "all") {
-    try {
-      await maybeSyncResendInbound({ limit: 12, minIntervalMs: 20_000 });
-    } catch {
-      /* ignore — list still works */
-    }
+    syncStarted = true;
+    void maybeSyncResendInbound({ limit: 12, minIntervalMs: 20_000 }).catch(
+      () => {},
+    );
   }
+
+  // One-shot repair of old subject-only thread merges (cheap, capped)
+  void repairFalseSubjectThreads(auth.ctx.mailboxId).catch(() => {});
 
   const whereBase = { mailboxId: auth.ctx.mailboxId };
 
@@ -44,59 +64,38 @@ export async function GET(req: NextRequest) {
   const searchWhere = q
     ? {
         OR: [
-          { subject: { contains: q } },
-          { preview: { contains: q } },
-          { fromName: { contains: q } },
-          { fromEmail: { contains: q } },
-          { toAddresses: { contains: q } },
+          { subject: { contains: q, mode: "insensitive" as const } },
+          { preview: { contains: q, mode: "insensitive" as const } },
+          { fromName: { contains: q, mode: "insensitive" as const } },
+          { fromEmail: { contains: q, mode: "insensitive" as const } },
+          { toAddresses: { contains: q, mode: "insensitive" as const } },
         ],
       }
     : {};
 
+  // Match whole JSON string entries to avoid substring ID collisions
   const labelWhere = labelId
-    ? { labelIds: { contains: labelId } }
+    ? {
+        OR: [
+          { labelIds: { contains: `"${labelId}"` } },
+          { labelIds: { equals: `["${labelId}"]` } },
+        ],
+      }
     : {};
 
-  const rows = await prisma.message.findMany({
-    where: { ...whereBase, ...folderWhere, ...searchWhere, ...labelWhere },
-    orderBy: { createdAt: "desc" },
-    take: 200,
-  });
+  const listWhere = {
+    ...whereBase,
+    ...folderWhere,
+    ...searchWhere,
+    ...labelWhere,
+  };
 
-  const allForCounts = await prisma.message.groupBy({
-    by: ["folder", "unread"],
-    where: whereBase,
-    _count: { _all: true },
-  });
+  const attachWhere = {
+    mailboxId: auth.ctx.mailboxId,
+    hasAttachment: true,
+    NOT: { folder: { in: ["trash", "spam", "drafts"] } },
+  };
 
-  const counts: Record<string, { unread: number; total: number }> = {};
-  for (const row of allForCounts) {
-    const cur = counts[row.folder] ?? { unread: 0, total: 0 };
-    cur.total += row._count._all;
-    if (row.unread) cur.unread += row._count._all;
-    counts[row.folder] = cur;
-  }
-
-  const withAttach = await prisma.message.count({
-    where: {
-      mailboxId: auth.ctx.mailboxId,
-      hasAttachment: true,
-      NOT: { folder: { in: ["trash", "spam", "drafts"] } },
-    },
-  });
-  const withAttachUnread = await prisma.message.count({
-    where: {
-      mailboxId: auth.ctx.mailboxId,
-      hasAttachment: true,
-      unread: true,
-      NOT: { folder: { in: ["trash", "spam", "drafts"] } },
-    },
-  });
-  counts.attachments = { total: withAttach, unread: withAttachUnread };
-
-  // Stale Prisma client (before generate) may lack mailFolder/mailLabel
-  let customFolders: { id: string; name: string }[] = [];
-  let labels: { id: string; name: string; color: string }[] = [];
   const p = prisma as unknown as {
     mailFolder?: {
       findMany: (a: object) => Promise<{ id: string; name: string }[]>;
@@ -107,24 +106,52 @@ export async function GET(req: NextRequest) {
       >;
     };
   };
-  if (p.mailFolder && p.mailLabel) {
-    try {
-      const [f, l] = await Promise.all([
-        p.mailFolder.findMany({
-          where: { mailboxId: auth.ctx.mailboxId },
-          orderBy: { createdAt: "asc" },
-        }),
-        p.mailLabel.findMany({
-          where: { mailboxId: auth.ctx.mailboxId },
-          orderBy: { createdAt: "asc" },
-        }),
-      ]);
-      customFolders = f;
-      labels = l;
-    } catch (e) {
-      console.warn("mail folders/labels unavailable", e);
-    }
+
+  const [rows, allForCounts, withAttach, withAttachUnread, customFolders, labels] =
+    await Promise.all([
+      prisma.message.findMany({
+        where: listWhere,
+        orderBy: { createdAt: "desc" },
+        take: 200,
+        select: LIST_SELECT,
+      }),
+      prisma.message.groupBy({
+        by: ["folder", "unread"],
+        where: whereBase,
+        _count: { _all: true },
+      }),
+      prisma.message.count({ where: attachWhere }),
+      prisma.message.count({
+        where: { ...attachWhere, unread: true },
+      }),
+      p.mailFolder
+        ? p.mailFolder
+            .findMany({
+              where: { mailboxId: auth.ctx.mailboxId },
+              orderBy: { createdAt: "asc" },
+            })
+            .catch(() => [] as { id: string; name: string }[])
+        : Promise.resolve([] as { id: string; name: string }[]),
+      p.mailLabel
+        ? p.mailLabel
+            .findMany({
+              where: { mailboxId: auth.ctx.mailboxId },
+              orderBy: { createdAt: "asc" },
+            })
+            .catch(() => [] as { id: string; name: string; color: string }[])
+        : Promise.resolve(
+            [] as { id: string; name: string; color: string }[],
+          ),
+    ]);
+
+  const counts: Record<string, { unread: number; total: number }> = {};
+  for (const row of allForCounts) {
+    const cur = counts[row.folder] ?? { unread: 0, total: 0 };
+    cur.total += row._count._all;
+    if (row.unread) cur.unread += row._count._all;
+    counts[row.folder] = cur;
   }
+  counts.attachments = { total: withAttach, unread: withAttachUnread };
 
   const threaded =
     folder === "drafts" ? rows : groupMessagesIntoThreads(rows);
@@ -146,6 +173,8 @@ export async function GET(req: NextRequest) {
         id: auth.ctx.mailboxId,
         address: auth.ctx.email,
       },
+      /** Hint for client: background Resend sync may add mail shortly */
+      syncPending: syncStarted,
     },
   });
 }
@@ -164,6 +193,14 @@ type PatchAction =
   | "delete";
 
 export async function PATCH(req: NextRequest) {
+  const origin = assertSameOrigin(req);
+  if (!origin.ok) {
+    return NextResponse.json(
+      { ok: false, error: { message: origin.message } },
+      { status: 403 },
+    );
+  }
+
   const auth = await requireActiveMailbox();
   if (!auth.ok) {
     return NextResponse.json(

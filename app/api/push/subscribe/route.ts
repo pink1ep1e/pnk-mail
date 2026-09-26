@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireActiveMailbox } from "@/lib/mail-auth";
 import { prisma } from "@/lib/db";
 import { getVapidPublicKey } from "@/lib/web-push";
+import { assertSameOrigin } from "@/lib/request-guard";
 
 export const runtime = "nodejs";
 
@@ -12,6 +13,14 @@ type SubBody = {
 
 /** Save or refresh a Web Push subscription for the active mailbox. */
 export async function POST(req: NextRequest) {
+  const origin = assertSameOrigin(req);
+  if (!origin.ok) {
+    return NextResponse.json(
+      { ok: false, error: { message: origin.message } },
+      { status: 403 },
+    );
+  }
+
   if (!getVapidPublicKey()) {
     return NextResponse.json(
       { ok: false, error: { message: "VAPID не настроен" } },
@@ -71,6 +80,14 @@ export async function POST(req: NextRequest) {
 
 /** Remove a subscription (or all for this mailbox if no endpoint). */
 export async function DELETE(req: NextRequest) {
+  const origin = assertSameOrigin(req);
+  if (!origin.ok) {
+    return NextResponse.json(
+      { ok: false, error: { message: origin.message } },
+      { status: 403 },
+    );
+  }
+
   const auth = await requireActiveMailbox();
   if (!auth.ok) {
     return NextResponse.json(

@@ -298,9 +298,9 @@ function MailBodyFrame({ html }: { html: string }) {
     let fitting = false;
     let lastH = 0;
     let lastW = 0;
-    let locked = false;
-    let readyOnce = false;
+    let revealed = false;
     let applyTimer = 0;
+    let revealTimer = 0;
     const imgCleanups: Array<() => void> = [];
 
     const pendingImages = () => {
@@ -309,8 +309,11 @@ function MailBodyFrame({ html }: { html: string }) {
       return Array.from(doc.querySelectorAll("img")).some((img) => !img.complete);
     };
 
-    /** Collapse → measure natural content → avoid scrollHeight feedback loop. */
-    const measure = (): number | null => {
+    /**
+     * Collapse → natural scrollHeight (avoids feedback loop).
+     * Only call while iframe is still hidden — never after reveal.
+     */
+    const measureCollapsed = (): number | null => {
       const doc = iframe.contentDocument;
       const body = doc?.body;
       const root = doc?.documentElement;
@@ -333,7 +336,6 @@ function MailBodyFrame({ html }: { html: string }) {
           iframe.clientWidth || wrapRef.current?.clientWidth || 0;
         if (!frameW) return null;
 
-        // Collapse so scrollHeight reflects content, not previous iframe height
         iframe.style.height = "1px";
 
         let contentW = Math.max(root.scrollWidth, body.scrollWidth);
@@ -371,7 +373,6 @@ function MailBodyFrame({ html }: { html: string }) {
         lastW = frameW;
         return h;
       } finally {
-        // restore if measure failed mid-way (applyHeight will set final)
         if (!iframe.style.height || iframe.style.height === "1px") {
           iframe.style.height = prevH || "80px";
         }
@@ -380,35 +381,35 @@ function MailBodyFrame({ html }: { html: string }) {
     };
 
     const applyHeight = (h: number) => {
-      if (Math.abs(h - lastH) < 2) {
-        iframe.style.height = `${lastH || h}px`;
+      if (lastH > 0 && Math.abs(h - lastH) < 2) {
+        iframe.style.height = `${lastH}px`;
         return;
       }
       lastH = h;
       iframe.style.height = `${h}px`;
     };
 
-    const settle = () => {
-      const h = measure();
+    const reveal = () => {
+      if (revealed) return;
+      const h = measureCollapsed();
       if (h != null) applyHeight(h);
-      if (!readyOnce) {
-        readyOnce = true;
-        setReady(true);
-      }
-      // Plain text / no pending images: lock forever — no creeping remeasures
-      locked = !pendingImages();
+      revealed = true;
+      setReady(true);
     };
 
     const onImageSettled = () => {
-      if (locked) return;
+      if (revealed) return;
       window.clearTimeout(applyTimer);
       applyTimer = window.setTimeout(() => {
-        const h = measure();
-        if (h == null) return;
-        // Only grow for real image loads (ignore tiny noise)
-        if (h > lastH + 16) applyHeight(h);
-        if (!pendingImages()) locked = true;
-      }, 80);
+        if (revealed) return;
+        // Keep fitting under the spinner until images (or timeout) finish
+        const h = measureCollapsed();
+        if (h != null) applyHeight(h);
+        if (!pendingImages()) {
+          window.clearTimeout(revealTimer);
+          reveal();
+        }
+      }, 40);
     };
 
     const bindImages = () => {
@@ -430,7 +431,16 @@ function MailBodyFrame({ html }: { html: string }) {
       bindImages();
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          settle();
+          const h = measureCollapsed();
+          if (h != null) applyHeight(h);
+          if (!pendingImages()) {
+            reveal();
+            return;
+          }
+          // Broken/slow images: don't leave spinner forever
+          revealTimer = window.setTimeout(() => {
+            reveal();
+          }, 1400);
         });
       });
     };
@@ -441,10 +451,11 @@ function MailBodyFrame({ html }: { html: string }) {
     const ro =
       typeof ResizeObserver !== "undefined"
         ? new ResizeObserver((entries) => {
-            if (!readyOnce || locked) return;
+            // Only reflow width before first paint — never collapse after reveal
+            if (revealed) return;
             const w = entries[0]?.contentRect?.width ?? 0;
             if (Math.abs(w - lastW) < 2) return;
-            const h = measure();
+            const h = measureCollapsed();
             if (h != null) applyHeight(h);
           })
         : null;
@@ -453,6 +464,7 @@ function MailBodyFrame({ html }: { html: string }) {
     return () => {
       iframe.removeEventListener("load", onLoad);
       window.clearTimeout(applyTimer);
+      window.clearTimeout(revealTimer);
       imgCleanups.forEach((fn) => fn());
       ro?.disconnect();
     };
@@ -467,11 +479,14 @@ function MailBodyFrame({ html }: { html: string }) {
           ? "border-white/15 shadow-[0_0_0_1px_rgba(255,255,255,0.04)]"
           : "border-white/8",
       )}
-      style={{ backgroundColor: ready && branded ? "#ffffff" : "#0c0d10" }}
+      style={{
+        backgroundColor: ready && branded ? "#ffffff" : "#0c0d10",
+        minHeight: ready ? undefined : 160,
+      }}
     >
       {!ready && (
         <div
-          className="absolute inset-0 z-[1] flex items-center justify-center bg-[#0c0d10] min-h-[80px]"
+          className="absolute inset-0 z-[1] flex items-center justify-center bg-[#0c0d10] min-h-[160px]"
           aria-hidden
         >
           <div className="h-7 w-7 rounded-full border-2 border-white/10 border-t-[#0066ff] animate-spin" />
@@ -488,7 +503,8 @@ function MailBodyFrame({ html }: { html: string }) {
           backgroundColor: canvas,
           colorScheme: branded ? "light" : "dark",
           opacity: ready ? 1 : 0,
-          transition: "opacity 0.12s ease-out",
+          // Instant show at final height — no fade-while-growing
+          transition: "none",
         }}
       />
     </div>
@@ -592,9 +608,12 @@ export default function MailApp() {
   const loadMessages = async (
     folderId: string,
     search = "",
+    opts?: { soft?: boolean },
   ): Promise<boolean> => {
-    const reqId = ++folderReqId.current;
-    setLoadingMail(true);
+    const soft = Boolean(opts?.soft);
+    // Soft polls must not invalidate an in-flight hard load / folder switch
+    const reqId = soft ? folderReqId.current : ++folderReqId.current;
+    if (!soft) setLoadingMail(true);
     try {
       const u = new URL("/api/mail/messages", window.location.origin);
       u.searchParams.set("folder", folderId);
@@ -612,13 +631,21 @@ export default function MailApp() {
       if (Array.isArray(json.data.labels)) {
         setMailLabels(json.data.labels as MailLabelItem[]);
       }
-      detailCache.current.clear();
+      // Soft refresh keeps open-letter cache; hard refresh used to wipe it every time
+      if (!soft) detailCache.current.clear();
+
+      // Background Resend sync may finish shortly — one silent follow-up
+      if (json.data?.syncPending && !soft) {
+        window.setTimeout(() => {
+          void loadMessages(folderId, search, { soft: true });
+        }, 2500);
+      }
       return true;
     } catch {
       if (reqId !== folderReqId.current) return false;
       return false;
     } finally {
-      if (reqId === folderReqId.current) setLoadingMail(false);
+      if (!soft && reqId === folderReqId.current) setLoadingMail(false);
     }
   };
 
@@ -679,7 +706,7 @@ export default function MailApp() {
 
   useEffect(() => {
     if (!bootReady || progress < 100 || showApp) return;
-    const t = window.setTimeout(() => setShowApp(true), 220);
+    const t = window.setTimeout(() => setShowApp(true), 80);
     return () => window.clearTimeout(t);
   }, [bootReady, progress, showApp]);
 
@@ -846,21 +873,45 @@ export default function MailApp() {
         window.setTimeout(syncAppViewport, 300);
       });
     };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") onShow();
+    };
     window.addEventListener("pageshow", onShow);
     window.addEventListener("focus", onShow);
     window.addEventListener("resize", syncAppViewport);
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible") onShow();
-    });
+    document.addEventListener("visibilitychange", onVisibility);
     const vv = window.visualViewport;
     vv?.addEventListener("resize", syncAppViewport);
     return () => {
       window.removeEventListener("pageshow", onShow);
       window.removeEventListener("focus", onShow);
       window.removeEventListener("resize", syncAppViewport);
+      document.removeEventListener("visibilitychange", onVisibility);
       vv?.removeEventListener("resize", syncAppViewport);
     };
   }, []);
+
+  // Soft-poll inbox so new mail appears without manual refresh
+  useEffect(() => {
+    if (!showApp || !accounts.length) return;
+    const softRefresh = () => {
+      if (document.visibilityState !== "visible") return;
+      void loadMessages(folder, query, { soft: true });
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") softRefresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", softRefresh);
+    const iv = window.setInterval(softRefresh, 40_000);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", softRefresh);
+      window.clearInterval(iv);
+    };
+    // folder/query intentionally tracked so poll hits the open folder
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadMessages is stable enough via refs
+  }, [showApp, accounts.length, folder, query]);
 
   useEffect(() => {
     if (!idOverlayUrl && !idOverlayLoading) return;
@@ -1266,6 +1317,7 @@ export default function MailApp() {
       void loadMessages(folder);
       return false;
     }
+    // Folder-changing actions need a list refresh; read/unread already optimistic
     if (
       action === "trash" ||
       action === "spam" ||
@@ -1274,11 +1326,9 @@ export default function MailApp() {
       action === "restore" ||
       action === "delete" ||
       action === "label" ||
-      action === "unlabel" ||
-      action === "read" ||
-      action === "unread"
+      action === "unlabel"
     ) {
-      void loadMessages(folder);
+      void loadMessages(folder, "", { soft: true });
     }
     return true;
   };

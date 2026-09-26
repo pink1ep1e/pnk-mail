@@ -7,9 +7,18 @@ import {
   toListDto,
 } from "@/lib/mail-store";
 import { sanitizeMailHtml } from "@/lib/mail-template";
+import { assertSameOrigin } from "@/lib/request-guard";
 
 /** Create or update a draft. */
 export async function POST(req: NextRequest) {
+  const origin = assertSameOrigin(req);
+  if (!origin.ok) {
+    return NextResponse.json(
+      { ok: false, error: { message: origin.message } },
+      { status: 403 },
+    );
+  }
+
   const auth = await requireActiveMailbox();
   if (!auth.ok) {
     return NextResponse.json(

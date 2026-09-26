@@ -6,7 +6,7 @@ import {
 } from "@/lib/mail-delivery";
 import {
   deliverInbound,
-  fetchResendReceivedEmail,
+  deliverResendEmailById,
   normalizeInboundAddresses,
   parseInboundFrom,
 } from "@/lib/mail-inbound";
@@ -77,6 +77,11 @@ function verifySvix(
   body: string,
 ): boolean {
   try {
+    // Reject stale/replayed webhooks (>5 minutes)
+    const ts = Number(timestamp);
+    if (!Number.isFinite(ts) || Math.abs(Date.now() / 1000 - ts) > 300) {
+      return false;
+    }
     const key = secret.startsWith("whsec_")
       ? Buffer.from(secret.slice("whsec_".length), "base64")
       : Buffer.from(secret, "base64");
@@ -188,100 +193,27 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const full = await fetchResendReceivedEmail(emailId);
-      if (!full) {
-        console.warn(
-          "[inbound] receiving API failed — delivering from webhook metadata only",
-          emailId,
-        );
-      } else {
-        console.info("[inbound] receiving API ok", {
-          emailId,
-          from: full.from,
-          to: full.to,
-          received_for: full.received_for,
-          hasHtml: Boolean(full.html),
-          hasText: Boolean(full.text),
-        });
-      }
-
-      const from = parseInboundFrom(
-        full?.from ||
-          (full?.headers && typeof full.headers.from === "string"
-            ? full.headers.from
-            : "") ||
-          String(data.from || ""),
-      );
-
-      // Merge to + received_for — Resend often puts the real mailbox in received_for
-      const to = normalizeInboundAddresses([
-        ...(full?.to?.length ? full.to : []),
-        ...(full?.received_for?.length ? full.received_for : []),
-        ...(Array.isArray(data.to) ? data.to : []),
-        ...(Array.isArray(data.received_for) ? data.received_for : []),
-      ]);
-      const cc = normalizeInboundAddresses(
-        full?.cc?.length ? full.cc : data.cc,
-      );
-
-      if (!to.length) {
-        console.error("[inbound] no recipients after normalize", {
-          emailId,
-          dataTo: data.to,
-          dataReceivedFor: data.received_for,
-          fullTo: full?.to,
-          fullReceivedFor: full?.received_for,
-        });
-        return NextResponse.json(
-          { ok: false, error: { message: "no recipients" } },
-          { status: 422 },
-        );
-      }
-
-      const result = await deliverInbound({
-        fromName: from.name,
-        fromEmail: from.email,
-        to,
-        cc,
-        subject:
-          full?.subject ||
-          String(data.subject || "(без темы)"),
-        bodyHtml: full?.html || undefined,
-        bodyText:
-          full?.text ||
-          (!full?.html
-            ? `(письмо получено, тело недоступно)\nОт: ${from.email}\nТема: ${String(data.subject || "")}`
-            : undefined),
-        messageId:
-          full?.message_id ||
-          (typeof data.message_id === "string" ? data.message_id : null),
-        inReplyTo:
-          (full?.headers &&
-            (typeof full.headers["in-reply-to"] === "string"
-              ? full.headers["in-reply-to"]
-              : typeof full.headers["In-Reply-To"] === "string"
-                ? full.headers["In-Reply-To"]
-                : null)) ||
-          (typeof data.in_reply_to === "string" ? data.in_reply_to : null),
-        references:
-          (full?.headers &&
-            (typeof full.headers.references === "string"
-              ? full.headers.references
-              : typeof full.headers.References === "string"
-                ? full.headers.References
-                : null)) ||
-          (typeof data.references === "string" ? data.references : null),
-        hasAttachment: Array.isArray(full?.attachments)
-          ? full!.attachments!.length > 0
-          : Array.isArray(data.attachments)
-            ? data.attachments.length > 0
-            : false,
+      // Same path as auto-sync: full body + attachments (webhook used to skip attachments)
+      const result = await deliverResendEmailById(emailId, {
+        id: emailId,
+        from: typeof data.from === "string" ? data.from : undefined,
+        to: Array.isArray(data.to) ? data.to.map(String) : undefined,
+        cc: Array.isArray(data.cc) ? data.cc.map(String) : undefined,
+        received_for: Array.isArray(data.received_for)
+          ? data.received_for.map(String)
+          : undefined,
+        subject: typeof data.subject === "string" ? data.subject : undefined,
+        message_id:
+          typeof data.message_id === "string" ? data.message_id : null,
+        attachments: Array.isArray(data.attachments)
+          ? data.attachments
+          : undefined,
       });
 
       console.info("[inbound] delivered", result);
       return NextResponse.json({
         ok: true,
-        data: { provider: "resend", emailId, ...result },
+        data: { provider: "resend", ...result, emailId },
       });
     }
 

@@ -17,7 +17,8 @@ export async function ensureMailbox(ownerUserId: string, address: string) {
     if (existing.ownerUserId !== ownerUserId) {
       throw new Error("MAILBOX_OWNERSHIP_CONFLICT");
     }
-    await refreshWelcomeMessage(existing.id, normalized);
+    // Don't block every API call on welcome-template upgrade
+    void refreshWelcomeMessage(existing.id, normalized).catch(() => {});
     return existing;
   }
 

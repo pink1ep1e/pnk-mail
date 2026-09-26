@@ -10,7 +10,6 @@ import { extractLogoFromHtml } from "@/lib/sender-avatar";
 import {
   headerValue,
   normalizeRfcMessageId,
-  normalizeSubject,
   parseMessageIdList,
 } from "@/lib/mail-thread";
 import { getMailFromDomain } from "@/lib/mail-transport";
@@ -128,9 +127,32 @@ export async function deliverInbound(
             { threadId: `ext:${rfcMessageId.slice(0, 200)}` },
           ],
         },
-        select: { id: true },
+        select: { id: true, bodyHtml: true, hasAttachment: true },
       });
       if (dup) {
+        // Backfill attachments if sync/webhook previously skipped them
+        const incomingAttach = /data-pnk-attachments/i.test(bodyHtml);
+        const existingAttach = /data-pnk-attachments/i.test(dup.bodyHtml || "");
+        if (incomingAttach && !existingAttach) {
+          const wrap =
+            bodyHtml.match(
+              /<div[^>]*data-pnk-attachments-wrap[\s\S]*?<\/div>/i,
+            )?.[0] || "";
+          if (wrap) {
+            await prisma.message.update({
+              where: { id: dup.id },
+              data: {
+                bodyHtml: `${dup.bodyHtml || ""}${wrap}`,
+                hasAttachment: true,
+              },
+            });
+          }
+        } else if (payload.hasAttachment && !dup.hasAttachment) {
+          await prisma.message.update({
+            where: { id: dup.id },
+            data: { hasAttachment: true },
+          });
+        }
         skipped.push(address);
         continue;
       }
@@ -197,60 +219,72 @@ async function resolveInboundThreadId(params: {
   subject: string;
   fromEmail: string;
 }): Promise<string | null> {
-  const { mailboxId, replyIds, subject, fromEmail } = params;
+  const { mailboxId, replyIds } = params;
 
-  if (replyIds.length) {
-    const byRfc = await prisma.message.findFirst({
-      where: {
-        mailboxId,
-        OR: [
-          { rfcMessageId: { in: replyIds } },
-          { threadId: { in: replyIds.map((id) => `ext:${id.slice(0, 200)}`) } },
-        ],
-      },
-      orderBy: { createdAt: "asc" },
-      select: { id: true, threadId: true, rfcMessageId: true },
+  // Only RFC threading — never merge by subject alone (Gmail "привет" spam)
+  if (!replyIds.length) return null;
+
+  const byRfc = await prisma.message.findFirst({
+    where: {
+      mailboxId,
+      OR: [
+        { rfcMessageId: { in: replyIds } },
+        { threadId: { in: replyIds.map((id) => `ext:${id.slice(0, 200)}`) } },
+      ],
+    },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, threadId: true, rfcMessageId: true },
+  });
+  if (!byRfc) return null;
+
+  const key = byRfc.threadId || byRfc.id;
+  if (!byRfc.threadId) {
+    await prisma.message.update({
+      where: { id: byRfc.id },
+      data: { threadId: byRfc.id },
     });
-    if (byRfc) {
-      const key = byRfc.threadId || byRfc.id;
-      if (!byRfc.threadId) {
-        await prisma.message.update({
-          where: { id: byRfc.id },
-          data: { threadId: byRfc.id },
-        });
-      }
-      return key;
-    }
   }
+  return key;
+}
 
-  // Weak fallback: same normalized subject in last 60 days
-  const norm = normalizeSubject(subject);
-  if (norm.length >= 3) {
-    const recent = await prisma.message.findMany({
-      where: {
-        mailboxId,
-        createdAt: { gte: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000) },
-        NOT: { folder: { in: ["trash", "spam", "drafts"] } },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 80,
-      select: {
-        id: true,
-        threadId: true,
-        subject: true,
-        fromEmail: true,
-        toAddresses: true,
-      },
+/**
+ * Undo false merges from the old "same subject → one thread" heuristic.
+ * Root/new messages have no In-Reply-To but share a foreign threadId.
+ */
+const lastThreadRepairAt = new Map<string, number>();
+
+export async function repairFalseSubjectThreads(
+  mailboxId: string,
+): Promise<number> {
+  const now = Date.now();
+  const prev = lastThreadRepairAt.get(mailboxId) || 0;
+  if (now - prev < 60_000) return 0;
+  lastThreadRepairAt.set(mailboxId, now);
+
+  const rows = await prisma.message.findMany({
+    where: {
+      mailboxId,
+      OR: [{ inReplyTo: null }, { inReplyTo: "" }],
+      NOT: { threadId: null },
+    },
+    select: { id: true, threadId: true },
+    take: 500,
+  });
+  let fixed = 0;
+  for (const row of rows) {
+    if (!row.threadId || row.threadId === row.id) continue;
+    // Keep ext: keys that are this message's own external id form
+    if (row.threadId.startsWith("ext:")) continue;
+    await prisma.message.update({
+      where: { id: row.id },
+      data: { threadId: row.id },
     });
-    const hit = recent.find((m) => {
-      if (normalizeSubject(m.subject) !== norm) return false;
-      const involved = `${m.fromEmail} ${m.toAddresses}`.toLowerCase();
-      return involved.includes(fromEmail) || m.fromEmail === fromEmail;
-    });
-    if (hit) return hit.threadId || hit.id;
+    fixed += 1;
   }
-
-  return null;
+  if (fixed > 0) {
+    console.info("[inbound] repaired false subject threads", mailboxId, fixed);
+  }
+  return fixed;
 }
 
 function escapeHtml(s: string) {
@@ -291,11 +325,19 @@ export async function fetchResendAttachmentHtml(
         size?: number;
         content_type?: string;
         content_disposition?: string;
+        content_id?: string;
         download_url?: string;
       }>;
     };
     const list = Array.isArray(json.data) ? json.data : [];
-    if (!list.length) return { html: "", count: 0 };
+    // Real files only — skip CID inline images used in HTML bodies
+    const files = list.filter((a) => {
+      const disp = (a.content_disposition || "").toLowerCase();
+      const type = (a.content_type || "").toLowerCase();
+      if (disp === "inline" && type.startsWith("image/")) return false;
+      return Boolean(a.id || a.download_url || a.filename);
+    });
+    if (!files.length) return { html: "", count: 0 };
 
     const { buildAttachmentsHtml } = await import("@/lib/mail-attachments");
     const items: Array<{
@@ -305,48 +347,69 @@ export async function fetchResendAttachmentHtml(
       dataUrl: string;
     }> = [];
 
-    for (const a of list.slice(0, 10)) {
+    for (const a of files.slice(0, 10)) {
       const name = (a.filename || "файл").slice(0, 200);
       const type = a.content_type || "application/octet-stream";
-      // Skip huge files — keep a named stub with remote URL if present
-      if ((a.size || 0) > 7_000_000) {
-        if (a.download_url) {
-          items.push({
-            name,
-            size: a.size || 0,
-            type,
-            dataUrl: a.download_url,
-          });
+      let downloadUrl = a.download_url || "";
+
+      // Refresh signed URL via single-attachment endpoint when missing/stale
+      if (!downloadUrl && a.id) {
+        try {
+          const one = await fetch(
+            `https://api.resend.com/emails/receiving/${encodeURIComponent(emailId)}/attachments/${encodeURIComponent(a.id)}`,
+            {
+              headers: { Authorization: `Bearer ${key}` },
+              cache: "no-store",
+            },
+          );
+          if (one.ok) {
+            const meta = (await one.json()) as { download_url?: string };
+            downloadUrl = meta.download_url || "";
+          }
+        } catch (e) {
+          console.warn("[inbound] attachment meta refresh failed", name, e);
         }
+      }
+
+      if (!downloadUrl) {
+        console.warn("[inbound] attachment has no download_url", name, a.id);
         continue;
       }
-      if (!a.download_url) continue;
+
       try {
-        const fileRes = await fetch(a.download_url, { cache: "no-store" });
-        if (!fileRes.ok) continue;
+        const fileRes = await fetch(downloadUrl, { cache: "no-store" });
+        if (!fileRes.ok) {
+          console.warn(
+            "[inbound] attachment download HTTP",
+            fileRes.status,
+            name,
+          );
+          continue;
+        }
         const buf = Buffer.from(await fileRes.arrayBuffer());
+        // Over ~7MB keep remote URL (still downloadable until URL expires —
+        // prefer embedding when possible)
         if (buf.length > 7_000_000) {
           items.push({
             name,
             size: buf.length,
             type,
-            dataUrl: a.download_url,
+            dataUrl: downloadUrl,
           });
           continue;
         }
-        const b64 = buf.toString("base64");
         items.push({
           name,
           size: buf.length,
           type,
-          dataUrl: `data:${type};base64,${b64}`,
+          dataUrl: `data:${type};base64,${buf.toString("base64")}`,
         });
       } catch (e) {
         console.warn("[inbound] attachment download failed", name, e);
       }
     }
 
-    if (!items.length) return { html: "", count: list.length };
+    if (!items.length) return { html: "", count: files.length };
     return { html: buildAttachmentsHtml(items), count: items.length };
   } catch (e) {
     console.error("[inbound] attachments error", e);
@@ -481,23 +544,12 @@ export async function deliverResendEmailById(
     };
   }
 
-  const attMeta =
-    Array.isArray(full?.attachments) && full!.attachments!.length > 0
-      ? full!.attachments!
-      : Array.isArray(meta?.attachments)
-        ? meta!.attachments!
-        : [];
   let bodyHtml = full?.html || undefined;
-  let hasAttachment = attMeta.length > 0;
 
-  if (hasAttachment || !bodyHtml) {
-    const att = await fetchResendAttachmentHtml(emailId);
-    if (att.html) {
-      bodyHtml = `${bodyHtml || ""}${att.html}`;
-      hasAttachment = true;
-    } else if (att.count > 0) {
-      hasAttachment = true;
-    }
+  // Always ask Attachments API — Gmail files often missing from email.attachments meta
+  const att = await fetchResendAttachmentHtml(emailId);
+  if (att.html) {
+    bodyHtml = `${bodyHtml || ""}${att.html}`;
   }
 
   const result = await deliverInbound({
@@ -521,7 +573,7 @@ export async function deliverResendEmailById(
       headerValue(full?.headers, "references") ||
       headerValue(full?.headers, "References") ||
       null,
-    hasAttachment,
+    hasAttachment: Boolean(att.html),
   });
 
   return { emailId, from: from.email, to, ...result };
@@ -551,11 +603,26 @@ export async function maybeSyncResendInbound(opts?: {
     let delivered = 0;
     try {
       const list = await listResendReceivedEmails(opts?.limit ?? 15);
-      for (const item of list) {
-        if (!item?.id) continue;
-        const r = await deliverResendEmailById(item.id, item);
-        delivered += r.delivered.length;
-      }
+      const items = list.filter((item) => item?.id);
+      // Parallel pull with small concurrency — much faster than sequential
+      const concurrency = 3;
+      let cursor = 0;
+      const workers = Array.from(
+        { length: Math.min(concurrency, items.length) },
+        async () => {
+          while (cursor < items.length) {
+            const idx = cursor++;
+            const item = items[idx];
+            try {
+              const r = await deliverResendEmailById(item.id, item);
+              delivered += r.delivered.length;
+            } catch (e) {
+              console.error("[inbound/auto-sync] item failed", item.id, e);
+            }
+          }
+        },
+      );
+      await Promise.all(workers);
       if (delivered > 0) {
         console.info("[inbound/auto-sync] delivered", delivered);
       }

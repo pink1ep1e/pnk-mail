@@ -182,6 +182,16 @@ export function MobileMailBanners({ enabled }: { enabled: boolean }) {
         /* ignore */
       }
 
+      if (typeof Notification === "undefined") {
+        if (!cancelled) {
+          setPushHint(
+            "Уведомления в этом браузере недоступны. Установите приложение на экран «Домой».",
+          );
+          setPushOpen(true);
+        }
+        return;
+      }
+
       if (isIos() && !isStandalonePwa()) {
         if (!cancelled) {
           setPushHint(
@@ -234,6 +244,10 @@ export function MobileMailBanners({ enabled }: { enabled: boolean }) {
     try {
       if (isIos() && !isStandalonePwa()) {
         window.location.href = "/install";
+        return;
+      }
+      if (typeof Notification === "undefined") {
+        setPushHint("Уведомления недоступны в этом браузере");
         return;
       }
       const perm =
@@ -306,7 +320,11 @@ export function MobileMailBanners({ enabled }: { enabled: boolean }) {
           primary={
             <button
               type="button"
-              disabled={pushBusy || Notification.permission === "denied"}
+              disabled={
+                pushBusy ||
+                (typeof Notification !== "undefined" &&
+                  Notification.permission === "denied")
+              }
               onClick={() => void enablePush()}
               className={primaryBtn}
             >

@@ -1,12 +1,21 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { requireActiveMailbox } from "@/lib/mail-auth";
 import { getVapidPublicKey, notifyMailboxNewMail } from "@/lib/web-push";
 import { prisma } from "@/lib/db";
+import { assertSameOrigin } from "@/lib/request-guard";
 
 export const runtime = "nodejs";
 
 /** Send a test push to the active mailbox subscriptions. */
-export async function POST() {
+export async function POST(req: NextRequest) {
+  const origin = assertSameOrigin(req);
+  if (!origin.ok) {
+    return NextResponse.json(
+      { ok: false, error: { message: origin.message } },
+      { status: 403 },
+    );
+  }
+
   if (!getVapidPublicKey()) {
     return NextResponse.json(
       { ok: false, error: { message: "VAPID не настроен" } },

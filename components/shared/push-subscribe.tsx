@@ -105,6 +105,15 @@ export function PushSubscribe({
     let cancelled = false;
 
     const run = async () => {
+      // iOS Safari tab: API may be listed but broken — never touch without guard
+      if (typeof Notification === "undefined") {
+        if (!cancelled) {
+          setHint("Уведомления в этом браузере недоступны.");
+          setBanner(true);
+        }
+        return;
+      }
+
       // iOS: Web Push only in installed PWA
       const ios =
         /iPad|iPhone|iPod/.test(navigator.userAgent) ||
@@ -167,6 +176,10 @@ export function PushSubscribe({
     setBusy(true);
     setHint(null);
     try {
+      if (typeof Notification === "undefined") {
+        setHint("Уведомления недоступны в этом браузере");
+        return;
+      }
       const perm =
         Notification.permission === "granted"
           ? "granted"
@@ -228,7 +241,11 @@ export function PushSubscribe({
           <div className="mt-3 flex gap-2">
             <button
               type="button"
-              disabled={busy || Notification.permission === "denied"}
+              disabled={
+                busy ||
+                (typeof Notification !== "undefined" &&
+                  Notification.permission === "denied")
+              }
               onClick={() => void enable()}
               className="h-9 flex-1 rounded-[10px] bg-[#0066ff] text-[13px] font-semibold font-[family-name:var(--font-manrope)] hover:bg-[#0052cc] disabled:opacity-60"
             >
