@@ -3,6 +3,13 @@ import { Unbounded, Manrope } from "next/font/google";
 import { OfflineProvider } from "@/components/shared/offline-provider";
 import { InstallPrompt } from "@/components/shared/install-prompt";
 import { OFFLINE_ICON_DATA_URI } from "@/lib/offline-icon-datauri";
+import {
+  DEFAULT_DESCRIPTION,
+  DEFAULT_KEYWORDS,
+  SITE_NAME,
+  SITE_NAME_SHORT,
+  getSiteUrl,
+} from "@/lib/site";
 import "./globals.css";
 
 const unbounded = Unbounded({
@@ -19,12 +26,22 @@ const manrope = Manrope({
   display: "swap",
 });
 
+const siteUrl = getSiteUrl();
+
 export const metadata: Metadata = {
-  title: "pnk почта",
-  description:
-    "Быстрая и защищённая почта с крупным интерфейсом. Войдите по логину, QR или телефону.",
-  applicationName: "pnk Почта",
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: `${SITE_NAME} — электронная почта @pnkmail.ru`,
+    template: `%s · ${SITE_NAME}`,
+  },
+  description: DEFAULT_DESCRIPTION,
+  applicationName: SITE_NAME_SHORT,
   manifest: "/manifest.webmanifest",
+  keywords: DEFAULT_KEYWORDS,
+  authors: [{ name: SITE_NAME_SHORT, url: siteUrl }],
+  creator: SITE_NAME_SHORT,
+  publisher: SITE_NAME_SHORT,
+  category: "email",
   icons: {
     icon: [
       { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
@@ -33,11 +50,47 @@ export const metadata: Metadata = {
     ],
     apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
   },
-  keywords: ["pnk почта", "пнк почта", "электронная почта", "mail", "почта"],
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "pnk Почта",
+    title: SITE_NAME_SHORT,
+  },
+  formatDetection: {
+    telephone: false,
+    email: false,
+    address: false,
+  },
+  alternates: {
+    canonical: siteUrl,
+    languages: { "ru-RU": siteUrl },
+  },
+  openGraph: {
+    type: "website",
+    locale: "ru_RU",
+    url: siteUrl,
+    siteName: SITE_NAME_SHORT,
+    title: `${SITE_NAME} — электронная почта @pnkmail.ru`,
+    description: DEFAULT_DESCRIPTION,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: `${SITE_NAME} — электронная почта @pnkmail.ru`,
+    description: DEFAULT_DESCRIPTION,
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
+  },
+  verification: {
+    google: process.env.GOOGLE_SITE_VERIFICATION || undefined,
+    yandex: process.env.YANDEX_VERIFICATION || undefined,
   },
   other: {
     "mobile-web-app-capable": "yes",
@@ -67,7 +120,11 @@ const offlineBootScript = `(()=>{try{
   function go(){try{location.replace('/mail?_r='+Date.now())}catch(e){location.href='/mail?_r='+Date.now()}}
   if(navigator.onLine===false)show();
   window.addEventListener('offline',show);
-  window.addEventListener('online',function(){hide();go()});
+  window.addEventListener('online',function(){
+    if(boot.hidden)return;
+    hide();
+    go();
+  });
   if(btn)btn.addEventListener('click',function(){
     if(!navigator.onLine){btn.textContent='Сети всё ещё нет';setTimeout(function(){btn.textContent='Обновить страницу'},1200);return}
     go();

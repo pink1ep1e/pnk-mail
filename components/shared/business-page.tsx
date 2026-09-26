@@ -64,6 +64,9 @@ export default function BusinessPage() {
             data-aos="fade-up"
             className="relative z-10 max-w-[600px] py-10 lg:py-0"
           >
+            <p className="mb-3 text-[15px] md:text-[16px] font-semibold tracking-[-0.02em] text-white/80 font-[family-name:var(--font-manrope)]">
+              pnk почта · для бизнеса
+            </p>
             <h1 className="font-[family-name:var(--font-unbounded)] font-bold text-[36px] sm:text-[48px] md:text-[58px] lg:text-[62px] leading-[1.08] tracking-[-0.03em] text-white">
               Почта под ваш
               <br />

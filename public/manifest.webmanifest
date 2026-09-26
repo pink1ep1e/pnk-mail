@@ -2,7 +2,7 @@
   "id": "/",
   "name": "pnk Почта",
   "short_name": "pnk Почта",
-  "description": "Быстрая и защищённая почта pnk",
+  "description": "Быстрая российская электронная почта @pnkmail.ru — письма, вложения, веб и приложение",
   "start_url": "/mail",
   "scope": "/",
   "display": "standalone",
