@@ -64,10 +64,14 @@ const offlineBootScript = `(()=>{try{
   if(!boot)return;
   function show(){boot.hidden=false}
   function hide(){boot.hidden=true}
+  function go(){try{location.replace('/mail?_r='+Date.now())}catch(e){location.href='/mail?_r='+Date.now()}}
   if(navigator.onLine===false)show();
   window.addEventListener('offline',show);
-  window.addEventListener('online',hide);
-  if(btn)btn.addEventListener('click',function(){location.reload()});
+  window.addEventListener('online',function(){hide();go()});
+  if(btn)btn.addEventListener('click',function(){
+    if(!navigator.onLine){btn.textContent='Сети всё ещё нет';setTimeout(function(){btn.textContent='Обновить страницу'},1200);return}
+    go();
+  });
   if(window.matchMedia('(display-mode:standalone)').matches||window.navigator.standalone)document.documentElement.classList.add('standalone');
   if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{updateViaCache:'none'}).then(function(r){try{r.update()}catch(e){}}).catch(function(){});
 }catch(e){}})();`;
@@ -138,7 +142,8 @@ export default function RootLayout({
                 color: "rgba(255,255,255,0.45)",
               }}
             >
-              Проверьте подключение или выключите VPN и обновите страницу.
+              Проверьте подключение или выключите VPN и обновите страницу. Также
+              возможно, в вашем регионе действуют ограничения мобильной связи.
             </p>
             <button
               id="offline-boot-reload"
@@ -164,7 +169,7 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: offlineBootScript }} />
         <OfflineProvider>
           {children}
-          <InstallPrompt />
+          <InstallPrompt soft={false} />
         </OfflineProvider>
       </body>
     </html>

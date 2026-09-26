@@ -38,6 +38,9 @@ import { PullToRefresh } from "@/components/mail/pull-to-refresh";
 import { SwipeMailRow } from "@/components/mail/swipe-mail-row";
 import { AppSplash } from "@/components/shared/app-splash";
 import { PushSubscribe } from "@/components/shared/push-subscribe";
+import { MobileMailBanners } from "@/components/shared/mobile-mail-banners";
+import { MailAttachmentsList } from "@/components/mail/mail-attachments-list";
+import { extractAttachmentsFromHtml } from "@/lib/mail-attachments";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { haptic } from "@/lib/haptic";
 import { prepareMailReaderSrcDoc, isBrandedHtmlEmail } from "@/lib/mail-template";
@@ -2406,6 +2409,7 @@ export default function MailApp() {
                   openId && "hidden md:flex md:max-w-[50%] md:border-r md:border-white/8",
                 )}
               >
+              <MobileMailBanners enabled={Boolean(activeAccount)} />
               <PullToRefresh
                 disabled={Boolean(openId)}
                 onRefresh={async () => {
@@ -2797,6 +2801,11 @@ export default function MailApp() {
                                             <div className="h-3 rounded-md bg-white/[0.05] w-[72%]" />
                                           </div>
                                         )}
+                                        <MailAttachmentsList
+                                          items={extractAttachmentsFromHtml(
+                                            msg.bodyHtml || "",
+                                          )}
+                                        />
                                       </div>
                                     </div>
                                   );
@@ -2847,6 +2856,8 @@ export default function MailApp() {
           labelIds,
           remindNoReply,
           notifyDelivery,
+          hasAttachment,
+          attachments,
         }) => {
           setSendError("");
           const replyToId = composeDraft?.replyToId || undefined;
@@ -2862,6 +2873,8 @@ export default function MailApp() {
               replyToId,
               labelIds,
               notifyDelivery,
+              hasAttachment,
+              attachments,
             }),
           });
           const json = await res.json();
@@ -3029,7 +3042,10 @@ export default function MailApp() {
           )}
         </div>
       )}
-      <PushSubscribe enabled={Boolean(activeAccount)} />
+      <PushSubscribe
+        enabled={Boolean(activeAccount)}
+        className="hidden md:block"
+      />
     </div>
   );
 }

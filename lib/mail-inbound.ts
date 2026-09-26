@@ -157,7 +157,10 @@ export async function deliverInbound(
         bodyText,
         senderLogoUrl: senderLogoUrl || undefined,
         unread: true,
-        hasAttachment: Boolean(payload.hasAttachment),
+        hasAttachment:
+          Boolean(payload.hasAttachment) ||
+          /data-pnk-attachments/i.test(bodyHtml) ||
+          /download=/i.test(bodyHtml),
         threadId: threadId || undefined,
         rfcMessageId: rfcMessageId || undefined,
         inReplyTo: inReplyTo || undefined,
@@ -256,6 +259,99 @@ function escapeHtml(s: string) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+/** List attachments for a received Resend email and build embeddable HTML. */
+export async function fetchResendAttachmentHtml(
+  emailId: string,
+): Promise<{ html: string; count: number }> {
+  const key = process.env.RESEND_API_KEY;
+  if (!key || !emailId) return { html: "", count: 0 };
+
+  try {
+    const res = await fetch(
+      `https://api.resend.com/emails/receiving/${encodeURIComponent(emailId)}/attachments`,
+      {
+        headers: { Authorization: `Bearer ${key}` },
+        cache: "no-store",
+      },
+    );
+    if (!res.ok) {
+      console.error(
+        "[inbound] list attachments failed",
+        res.status,
+        await res.text(),
+      );
+      return { html: "", count: 0 };
+    }
+    const json = (await res.json()) as {
+      data?: Array<{
+        id: string;
+        filename?: string;
+        size?: number;
+        content_type?: string;
+        content_disposition?: string;
+        download_url?: string;
+      }>;
+    };
+    const list = Array.isArray(json.data) ? json.data : [];
+    if (!list.length) return { html: "", count: 0 };
+
+    const { buildAttachmentsHtml } = await import("@/lib/mail-attachments");
+    const items: Array<{
+      name: string;
+      size: number;
+      type: string;
+      dataUrl: string;
+    }> = [];
+
+    for (const a of list.slice(0, 10)) {
+      const name = (a.filename || "файл").slice(0, 200);
+      const type = a.content_type || "application/octet-stream";
+      // Skip huge files — keep a named stub with remote URL if present
+      if ((a.size || 0) > 7_000_000) {
+        if (a.download_url) {
+          items.push({
+            name,
+            size: a.size || 0,
+            type,
+            dataUrl: a.download_url,
+          });
+        }
+        continue;
+      }
+      if (!a.download_url) continue;
+      try {
+        const fileRes = await fetch(a.download_url, { cache: "no-store" });
+        if (!fileRes.ok) continue;
+        const buf = Buffer.from(await fileRes.arrayBuffer());
+        if (buf.length > 7_000_000) {
+          items.push({
+            name,
+            size: buf.length,
+            type,
+            dataUrl: a.download_url,
+          });
+          continue;
+        }
+        const b64 = buf.toString("base64");
+        items.push({
+          name,
+          size: buf.length,
+          type,
+          dataUrl: `data:${type};base64,${b64}`,
+        });
+      } catch (e) {
+        console.warn("[inbound] attachment download failed", name, e);
+      }
+    }
+
+    if (!items.length) return { html: "", count: list.length };
+    return { html: buildAttachmentsHtml(items), count: items.length };
+  } catch (e) {
+    console.error("[inbound] attachments error", e);
+    return { html: "", count: 0 };
+  }
 }
 
 /** Fetch full received email from Resend Receiving API. */
@@ -385,13 +481,32 @@ export async function deliverResendEmailById(
     };
   }
 
+  const attMeta =
+    Array.isArray(full?.attachments) && full!.attachments!.length > 0
+      ? full!.attachments!
+      : Array.isArray(meta?.attachments)
+        ? meta!.attachments!
+        : [];
+  let bodyHtml = full?.html || undefined;
+  let hasAttachment = attMeta.length > 0;
+
+  if (hasAttachment || !bodyHtml) {
+    const att = await fetchResendAttachmentHtml(emailId);
+    if (att.html) {
+      bodyHtml = `${bodyHtml || ""}${att.html}`;
+      hasAttachment = true;
+    } else if (att.count > 0) {
+      hasAttachment = true;
+    }
+  }
+
   const result = await deliverInbound({
     fromName: from.name,
     fromEmail: from.email,
     to,
     cc,
     subject: full?.subject || meta?.subject || "(без темы)",
-    bodyHtml: full?.html || undefined,
+    bodyHtml,
     bodyText:
       full?.text ||
       (!full?.html
@@ -406,11 +521,7 @@ export async function deliverResendEmailById(
       headerValue(full?.headers, "references") ||
       headerValue(full?.headers, "References") ||
       null,
-    hasAttachment: Array.isArray(full?.attachments)
-      ? full!.attachments!.length > 0
-      : Array.isArray(meta?.attachments)
-        ? meta!.attachments!.length > 0
-        : false,
+    hasAttachment,
   });
 
   return { emailId, from: from.email, to, ...result };

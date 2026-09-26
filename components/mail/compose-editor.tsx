@@ -2,6 +2,11 @@
 
 import { cn } from "@/lib/utils";
 import {
+  buildAttachmentsHtml,
+  dataUrlToBase64Parts,
+  formatBytes as formatAttachBytes,
+} from "@/lib/mail-attachments";
+import {
   AlignCenter,
   AlignLeft,
   AlignRight,
@@ -81,6 +86,12 @@ type ComposeEditorProps = {
     labelIds?: string[];
     remindNoReply?: boolean;
     notifyDelivery?: boolean;
+    hasAttachment?: boolean;
+    attachments?: Array<{
+      filename: string;
+      content: string;
+      contentType: string;
+    }>;
   }) => void | Promise<void>;
   onSaveDraft?: (payload: {
     id?: string | null;
@@ -162,9 +173,7 @@ function saveComposePrefs(p: { autocomplete: boolean; subjectHint: boolean }) {
 }
 
 function formatBytes(n: number) {
-  if (n < 1024) return `${n} Б`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} КБ`;
-  return `${(n / (1024 * 1024)).toFixed(1)} МБ`;
+  return formatAttachBytes(n);
 }
 
 type RecipientChip = {
@@ -1412,14 +1421,24 @@ export default function ComposeEditor({
     if (!finalSubject) finalSubject = "(без темы)";
 
     if (attachments.length) {
-      const list = attachments
-        .map(
-          (a) =>
-            `<li><a href="${a.dataUrl}" download="${a.name}" style="color:#4d9fff;">${a.name}</a> <span style="color:rgba(255,255,255,0.45);">(${formatBytes(a.size)})</span></li>`,
-        )
-        .join("");
-      bodyHtml += `<hr style="border:none;border-top:1px solid rgba(255,255,255,0.12);margin:16px 0;" /><p style="color:rgba(255,255,255,0.55);font-size:13px;">Вложения</p><ul>${list}</ul>`;
+      bodyHtml += buildAttachmentsHtml(attachments);
     }
+
+    const apiAttachments = attachments
+      .map((a) => {
+        const parts = dataUrlToBase64Parts(a.dataUrl);
+        if (!parts) return null;
+        return {
+          filename: a.name,
+          content: parts.content,
+          contentType: a.type || parts.contentType,
+        };
+      })
+      .filter(Boolean) as Array<{
+      filename: string;
+      content: string;
+      contentType: string;
+    }>;
 
     const payload = {
       to: unique.join(", "),
@@ -1429,6 +1448,8 @@ export default function ComposeEditor({
       labelIds: composeLabels.length ? composeLabels : undefined,
       remindNoReply,
       notifyDelivery,
+      hasAttachment: attachments.length > 0,
+      attachments: apiAttachments.length ? apiAttachments : undefined,
     };
     void (async () => {
       try {
@@ -2380,18 +2401,29 @@ export default function ComposeEditor({
                     </div>
                   )}
                   {attachments.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="space-y-1.5">
+                      <p className="text-[12px] text-white/40 font-[family-name:var(--font-manrope)]">
+                        Вложения · {attachments.length}
+                      </p>
                       {attachments.map((a) => (
-                        <span
+                        <div
                           key={a.id}
-                          className="h-7 pl-2.5 pr-1 rounded-[8px] bg-white/6 text-[12px] text-white/75 inline-flex items-center gap-1.5"
+                          className="flex items-center gap-2.5 rounded-[12px] border border-white/10 bg-white/[0.04] px-3 py-2"
                         >
-                          <Paperclip size={12} className="opacity-50" />
-                          <span className="max-w-[140px] truncate">{a.name}</span>
-                          <span className="text-white/35">{formatBytes(a.size)}</span>
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-[#0066ff]/15 text-[#4d9fff]">
+                            <Paperclip size={14} />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-[13px] text-white/85 font-[family-name:var(--font-manrope)]">
+                              {a.name}
+                            </p>
+                            <p className="text-[11px] text-white/35 font-[family-name:var(--font-manrope)]">
+                              {formatBytes(a.size)}
+                            </p>
+                          </div>
                           <button
                             type="button"
-                            className="h-5 w-5 rounded-[6px] hover:bg-white/10 inline-flex items-center justify-center"
+                            className="h-7 w-7 rounded-[8px] hover:bg-white/10 inline-flex items-center justify-center text-white/40"
                             onClick={() =>
                               setAttachments((prev) =>
                                 prev.filter((x) => x.id !== a.id),
@@ -2399,9 +2431,9 @@ export default function ComposeEditor({
                             }
                             aria-label="Убрать вложение"
                           >
-                            <X size={12} />
+                            <X size={13} />
                           </button>
-                        </span>
+                        </div>
                       ))}
                     </div>
                   )}

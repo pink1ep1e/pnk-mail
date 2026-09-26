@@ -55,13 +55,18 @@ export async function POST(req: NextRequest) {
     replyToId?: string;
     labelIds?: string[];
     hasAttachment?: boolean;
+    attachments?: Array<{
+      filename?: string;
+      content?: string;
+      contentType?: string;
+    }>;
   };
 
   const toList = parseAddressList(body.to || "");
   const ccList = parseAddressList(body.cc || "");
   const subject = (body.subject || "").trim().slice(0, 500) || "(без темы)";
   const rawHtml = (body.bodyHtml || "").trim() || "<p></p>";
-  if (rawHtml.length > 200_000) {
+  if (rawHtml.length > 6_000_000) {
     return NextResponse.json(
       { ok: false, error: { message: "Слишком большое письмо" } },
       { status: 400 },
@@ -71,6 +76,26 @@ export async function POST(req: NextRequest) {
   const bodyText = htmlToText(bodyHtml);
   const preview = htmlToPreview(bodyHtml);
   const outboundHtml = outboundMailHtml(bodyHtml);
+
+  const fileAttachments = (Array.isArray(body.attachments) ? body.attachments : [])
+    .filter(
+      (a) =>
+        a &&
+        typeof a.filename === "string" &&
+        a.filename.trim() &&
+        typeof a.content === "string" &&
+        a.content.length > 0 &&
+        a.content.length < 12_000_000,
+    )
+    .slice(0, 8)
+    .map((a) => ({
+      filename: String(a.filename).slice(0, 200),
+      content: String(a.content),
+      contentType:
+        typeof a.contentType === "string" && a.contentType
+          ? a.contentType.slice(0, 120)
+          : "application/octet-stream",
+    }));
 
   if (!toList.length) {
     return NextResponse.json(
@@ -146,8 +171,10 @@ export async function POST(req: NextRequest) {
     : [];
   const hasAttachment =
     Boolean(body.hasAttachment) ||
+    fileAttachments.length > 0 ||
     /<img\b/i.test(bodyHtml) ||
-    /download=/i.test(bodyHtml);
+    /download=/i.test(bodyHtml) ||
+    /data-pnk-attachments/i.test(bodyHtml);
 
   const sent = await prisma.message.create({
     data: {
@@ -258,6 +285,7 @@ export async function POST(req: NextRequest) {
           pnk_mb: auth.ctx.mailboxId,
         },
         headers,
+        attachments: fileAttachments.length ? fileAttachments : undefined,
       });
       if (!result.ok) {
         transportWarning = result.error;

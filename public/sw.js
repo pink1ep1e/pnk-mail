@@ -1,5 +1,5 @@
 /* Fast offline fallback + Web Push for pnk Почта PWA */
-const CACHE = "pnk-mail-offline-v8";
+const CACHE = "pnk-mail-offline-v9";
 const OFFLINE_URL = "/offline.html";
 const PRECACHE = [
   OFFLINE_URL,
@@ -7,7 +7,7 @@ const PRECACHE = [
   "/favicon-32.png",
   "/apple-touch-icon.png",
 ];
-const NET_TIMEOUT_MS = 2000;
+const NET_TIMEOUT_MS = 8000;
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

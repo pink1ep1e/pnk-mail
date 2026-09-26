@@ -46,6 +46,12 @@ const EMAIL_ATTRS = [
   "coords",
   "aria-hidden",
   "aria-label",
+  "download",
+  "data-pnk-attachments",
+  "data-pnk-attachments-wrap",
+  "data-name",
+  "data-size",
+  "data-type",
 ];
 
 /** Allow safe HTML + email layout attributes (tables/bgcolor/align). */
@@ -54,11 +60,14 @@ export function sanitizeMailHtml(html: string, wholeDocument = false): string {
     USE_PROFILES: { html: true },
     WHOLE_DOCUMENT: wholeDocument,
     FORBID_TAGS: ["iframe", "object", "embed", "form", "input", "script", "base"],
-    ALLOW_DATA_ATTR: false,
+    ALLOW_DATA_ATTR: true,
     ADD_TAGS: wholeDocument
       ? ["html", "head", "body", "meta", "style", "title", "link", "center", "font"]
       : ["style", "center", "font"],
     ADD_ATTR: EMAIL_ATTRS,
+    // Keep data: URLs for in-app attachment downloads + cid: for inline images
+    ALLOWED_URI_REGEXP:
+      /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp|data):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
   });
 }
 
@@ -289,8 +298,11 @@ const URL_IN_TEXT_RE =
 
 function normalizeHref(href: string): string | null {
   const raw = href.trim().replace(/^['"]|['"]$/g, "");
-  if (!raw || /^javascript:/i.test(raw) || /^data:/i.test(raw)) return null;
-  if (/^(https?:|mailto:|tel:)/i.test(raw)) return raw;
+  if (!raw || /^javascript:/i.test(raw)) return null;
+  // Keep data: for attachment downloads embedded in mail HTML
+  if (/^data:/i.test(raw)) return raw;
+  if (/^(https?:|mailto:|tel:|cid:)/i.test(raw)) return raw;
+  if (raw.startsWith("/") || raw.startsWith("#")) return raw;
   if (/^\/\//.test(raw)) return `https:${raw}`;
   if (/^www\./i.test(raw)) return `https://${raw}`;
   if (/^[a-z0-9.-]+\.[a-z]{2,}([/:?#].*)?$/i.test(raw)) return `https://${raw}`;
@@ -316,14 +328,27 @@ function linkifyBareUrls(html: string): string {
 function ensureClickableLinks(html: string): string {
   return html.replace(/<a\b([^>]*)>/gi, (_m, attrs: string) => {
     let next = attrs;
-    const hrefMatch = next.match(/\bhref\s*=\s*(["']?)([^"'>\s]*)\1/i);
-    if (!hrefMatch) return `<a${attrs}>`;
-    const normalized = normalizeHref(hrefMatch[2] || "");
+    // Quoted href (needed for long data: URLs)
+    const quoted = next.match(/\bhref\s*=\s*(["'])([\s\S]*?)\1/i);
+    const bare = !quoted
+      ? next.match(/\bhref\s*=\s*([^\s>]+)/i)
+      : null;
+    const rawHref = quoted?.[2] ?? bare?.[1] ?? "";
+    if (/^data:/i.test(rawHref.trim())) {
+      // Leave attachment data-URLs untouched (download works from parent UI)
+      return `<a${attrs}>`;
+    }
+    const normalized = normalizeHref(rawHref);
     if (!normalized) {
       next = next.replace(/\bhref\s*=\s*(["']?)([^"'>\s]*)\1/i, 'href="#"');
+    } else if (quoted) {
+      next = next.replace(
+        /\bhref\s*=\s*(["'])([\s\S]*?)\1/i,
+        `href="${escapeHtml(normalized)}"`,
+      );
     } else {
       next = next.replace(
-        /\bhref\s*=\s*(["']?)([^"'>\s]*)\1/i,
+        /\bhref\s*=\s*([^\s>]+)/i,
         `href="${escapeHtml(normalized)}"`,
       );
     }

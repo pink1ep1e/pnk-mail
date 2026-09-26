@@ -19,6 +19,12 @@ export type OutboundMail = {
   tags?: Record<string, string>;
   /** Extra SMTP/RFC headers (In-Reply-To, References, Message-ID, …) */
   headers?: Record<string, string>;
+  /** Base64 file attachments (Resend / SES) */
+  attachments?: Array<{
+    filename: string;
+    content: string;
+    contentType?: string;
+  }>;
 };
 
 export type TransportResult =
@@ -71,6 +77,15 @@ async function sendResend(mail: OutboundMail): Promise<TransportResult> {
       ...(mail.headers && Object.keys(mail.headers).length
         ? { headers: mail.headers }
         : {}),
+      ...(mail.attachments?.length
+        ? {
+            attachments: mail.attachments.map((a) => ({
+              filename: a.filename,
+              content: a.content,
+              content_type: a.contentType,
+            })),
+          }
+        : {}),
     }),
   });
 
@@ -116,6 +131,11 @@ async function sendSesSmtp(mail: OutboundMail): Promise<TransportResult> {
       text: mail.bodyText,
       headers: mail.headers,
       messageId: mail.headers?.["Message-ID"]?.replace(/^<|>$/g, ""),
+      attachments: mail.attachments?.map((a) => ({
+        filename: a.filename,
+        content: Buffer.from(a.content, "base64"),
+        contentType: a.contentType,
+      })),
     });
 
     return { ok: true, providerId: info.messageId };
