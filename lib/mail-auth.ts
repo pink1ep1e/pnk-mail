@@ -21,6 +21,10 @@ export async function requireActiveMailbox(): Promise<
   if (!active) {
     return { ok: false, status: 401, message: "Активный аккаунт не найден" };
   }
+  // Refresh-only session is still valid (access refreshed on /api/auth/session)
+  if (!active.accessToken && !active.refreshToken) {
+    return { ok: false, status: 401, message: "Нужна авторизация" };
+  }
 
   try {
     const mailbox = await ensureMailbox(

@@ -8,6 +8,7 @@ import {
   readVault,
   type MailSessionUser,
 } from "@/lib/mail-session";
+import { ensureVaultTokens } from "@/lib/oauth-tokens";
 
 async function fetchUserinfo(
   token: string,
@@ -41,48 +42,76 @@ async function fetchUserinfo(
 }
 
 export async function GET() {
-  const vault = await readVault();
-  const token = await getAccessToken();
+  let vault = await readVault();
+  const tokenHint = await getAccessToken();
 
-  if (!token && !vault) {
+  if (!tokenHint && !vault) {
     return NextResponse.json({ ok: false, data: { user: null, accounts: [] } });
   }
 
   try {
-    // Fast path: vault alone is enough to open mail (don't block on ID)
+    let cookiesChanged = false;
+    let expiresIn = 3600;
+
     if (vault && Object.keys(vault.accounts).length > 0) {
-      // Return vault immediately with public avatar URLs; enrich names in background path
+      const ensured = await ensureVaultTokens(vault);
+      vault = ensured.vault;
+      cookiesChanged = ensured.changed;
+      expiresIn = ensured.expiresIn;
+
       let accounts = listAccountsFromVault(vault).map((a) => ({
         ...a,
-        // Guarantee avatar URL even if cookie profile had null
         avatarUrl: a.avatarUrl || `${PNK_ID_URL}/api/public/avatar/${a.id}`,
       }));
       const active = accounts.find((a) => a.active) || accounts[0];
 
       const activeToken =
-        (active && vault.accounts[active.id]?.accessToken) || token || null;
+        (active && vault.accounts[active.id]?.accessToken) || tokenHint || null;
       let user: MailSessionUser | null = null;
       if (activeToken) {
         user = await fetchUserinfo(activeToken);
-        if (user?.id && vault.accounts[user.id]) {
-          const profile = profileFromUser(user);
-          vault.accounts[user.id] = {
-            ...vault.accounts[user.id],
-            profile: {
-              ...vault.accounts[user.id].profile,
-              ...profile,
-              // Never wipe avatar with null from a sparse userinfo payload
-              avatarUrl:
-                profile.avatarUrl ||
-                vault.accounts[user.id].profile.avatarUrl ||
-                `${PNK_ID_URL}/api/public/avatar/${user.id}`,
+        // Stale access → one refresh retry
+        if (!user && vault.accounts[active.id]?.refreshToken) {
+          const retry = await ensureVaultTokens({
+            ...vault,
+            accounts: {
+              ...vault.accounts,
+              [active.id]: {
+                ...vault.accounts[active.id],
+                accessToken: "", // force refresh
+              },
             },
-          };
-          accounts = listAccountsFromVault(vault);
+          });
+          if (retry.changed) {
+            vault = retry.vault;
+            cookiesChanged = true;
+            expiresIn = retry.expiresIn;
+            const fresh = vault.accounts[active.id]?.accessToken;
+            if (fresh) user = await fetchUserinfo(fresh);
+          }
+        }
+        if (user?.id && vault.accounts[user.id]) {
+          const u = user;
+          const profile = profileFromUser(u);
+          // Enrich response only — don't Set-Cookie on every poll (nginx header limit)
+          accounts = listAccountsFromVault(vault).map((a) =>
+            a.id === u.id
+              ? {
+                  ...a,
+                  ...profile,
+                  avatarUrl:
+                    profile.avatarUrl ||
+                    a.avatarUrl ||
+                    `${PNK_ID_URL}/api/public/avatar/${u.id}`,
+                  active: a.active,
+                }
+              : a,
+          );
         }
       }
 
       const account = accounts.find((a) => a.active) || accounts[0];
+      // Stay logged-in from vault even if ID is briefly unreachable
       const res = NextResponse.json({
         ok: Boolean(account),
         data: {
@@ -91,11 +120,14 @@ export async function GET() {
           accounts,
         },
       });
-      applyActiveCookies(res, vault);
+      // Only Set-Cookie when tokens/profiles actually changed (avoids nginx 502 spam)
+      if (cookiesChanged && vault) {
+        applyActiveCookies(res, vault, expiresIn);
+      }
       return res;
     }
 
-    const user = token ? await fetchUserinfo(token) : null;
+    const user = tokenHint ? await fetchUserinfo(tokenHint) : null;
     if (!user) {
       return NextResponse.json({
         ok: false,
@@ -117,7 +149,6 @@ export async function GET() {
       },
     });
   } catch {
-    // Last resort: still open mail from vault if present
     if (vault && Object.keys(vault.accounts).length > 0) {
       const accounts = listAccountsFromVault(vault);
       const account = accounts.find((a) => a.active) || accounts[0];

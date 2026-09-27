@@ -161,6 +161,11 @@ npm run db:seed
 server {
   server_name pnkmail.ru www.pnkmail.ru;
   client_max_body_size 20m;
+  # Multi-account Set-Cookie can exceed default 4k → 502 on login/switch
+  proxy_buffer_size 32k;
+  proxy_buffers 8 32k;
+  proxy_busy_buffers_size 64k;
+  large_client_header_buffers 4 32k;
   location / {
     proxy_pass http://127.0.0.1:3000;
     proxy_http_version 1.1;

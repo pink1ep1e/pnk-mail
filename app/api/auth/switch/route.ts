@@ -5,6 +5,7 @@ import {
   readVault,
   readVaultFromRequest,
 } from "@/lib/mail-session";
+import { ensureVaultTokens, refreshAccessToken } from "@/lib/oauth-tokens";
 import { assertSameOrigin } from "@/lib/request-guard";
 
 export async function POST(req: NextRequest) {
@@ -25,7 +26,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const vault = readVaultFromRequest(req) || (await readVault());
+  let vault = readVaultFromRequest(req) || (await readVault());
   if (!vault?.accounts[accountId]) {
     return NextResponse.json(
       { ok: false, error: { message: "Аккаунт не найден" } },
@@ -33,7 +34,33 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const next = { ...vault, activeId: accountId };
+  let next = { ...vault, activeId: accountId };
+  const target = next.accounts[accountId];
+  let expiresIn = 3600;
+
+  // Inactive cookies store refresh only — mint access before activating
+  if (!target.accessToken && target.refreshToken) {
+    const refreshed = await refreshAccessToken(target.refreshToken);
+    if (refreshed) {
+      next = {
+        ...next,
+        accounts: {
+          ...next.accounts,
+          [accountId]: {
+            ...target,
+            accessToken: refreshed.accessToken,
+            refreshToken: refreshed.refreshToken,
+          },
+        },
+      };
+      expiresIn = refreshed.expiresIn;
+    }
+  } else {
+    const ensured = await ensureVaultTokens(next);
+    next = ensured.vault;
+    expiresIn = ensured.expiresIn;
+  }
+
   const res = NextResponse.json({
     ok: true,
     data: {
@@ -41,6 +68,6 @@ export async function POST(req: NextRequest) {
       accounts: listAccountsFromVault(next),
     },
   });
-  applyActiveCookies(res, next);
+  applyActiveCookies(res, next, expiresIn);
   return res;
 }

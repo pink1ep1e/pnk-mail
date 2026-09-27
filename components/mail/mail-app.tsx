@@ -652,24 +652,39 @@ export default function MailApp() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      try {
-        const res = await fetch("/api/auth/session", { cache: "no-store" });
-        const json = await res.json();
-        if (cancelled) return;
+      const applySession = async (json: {
+        ok?: boolean;
+        data?: { account?: MailAccount; accounts?: MailAccount[] };
+      }) => {
         if (!json.ok || !json.data?.account) {
           window.location.href = mailAuthStartUrl("login");
+          return false;
+        }
+        const list = json.data.accounts?.length
+          ? json.data.accounts
+          : [{ ...json.data.account, active: true }];
+        setAccounts(list.map(withAccountAvatar));
+        await loadMessages("inbox");
+        if (cancelled) return false;
+        setBootReady(true);
+        return true;
+      };
+
+      try {
+        let res = await fetch("/api/auth/session", { cache: "no-store" });
+        // Transient nginx/upstream 502 must not wipe a valid session
+        if (res.status >= 500) {
+          await new Promise((r) => setTimeout(r, 800));
+          if (cancelled) return;
+          res = await fetch("/api/auth/session", { cache: "no-store" });
+        }
+        if (!res.ok) {
+          if (!cancelled) window.location.href = mailAuthStartUrl("login");
           return;
         }
-
-        const list = (json.data.accounts as MailAccount[] | undefined)?.length
-          ? (json.data.accounts as MailAccount[])
-          : [{ ...(json.data.account as MailAccount), active: true }];
-
-        setAccounts(list.map(withAccountAvatar));
-        // Session is enough to enter mail; a messages API blip must not bounce to login
-        await loadMessages("inbox");
+        const json = await res.json();
         if (cancelled) return;
-        setBootReady(true);
+        await applySession(json);
       } catch {
         if (!cancelled) window.location.href = mailAuthStartUrl("login");
       }

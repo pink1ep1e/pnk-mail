@@ -146,8 +146,9 @@ function decodeMeta(raw: string | undefined): MailMeta | null {
   }
 }
 
-function encodeTokens(pair: TokenPair) {
-  return signPayload(b64encode(JSON.stringify(pair)));
+/** Inactive account cookie: refresh only (access JWT doubles header size → nginx 502). */
+function encodeRefreshOnly(refreshToken: string) {
+  return signPayload(b64encode(JSON.stringify({ r: refreshToken })));
 }
 
 function decodeTokens(raw: string | undefined): TokenPair | null {
@@ -155,11 +156,16 @@ function decodeTokens(raw: string | undefined): TokenPair | null {
   try {
     const payload = verifySignedPayload(raw) ?? (raw.includes(".") ? null : raw);
     if (!payload) return null;
-    const parsed = JSON.parse(b64decode(payload)) as TokenPair;
-    if (!parsed?.accessToken) return null;
+    const parsed = JSON.parse(b64decode(payload)) as TokenPair & {
+      r?: string;
+    };
+    const refresh = parsed.refreshToken || parsed.r || "";
+    const access = parsed.accessToken || "";
+    // Refresh-only is valid (access refreshed on demand)
+    if (!access && !refresh) return null;
     return {
-      accessToken: parsed.accessToken,
-      refreshToken: parsed.refreshToken || "",
+      accessToken: access,
+      refreshToken: refresh,
     };
   } catch {
     return null;
@@ -186,6 +192,19 @@ function getCookie(
   return source.get(name)?.value;
 }
 
+function slimProfile(p: MailAccountProfile): MailAccountProfile {
+  // Drop avatar URL from cookie — regenerable from id (saves header bytes)
+  return {
+    id: p.id,
+    name: p.name,
+    email: p.email,
+    color: p.color,
+    initial: p.initial,
+    login: p.login,
+    avatarUrl: null,
+  };
+}
+
 function buildVaultFromCookies(
   source: { get(name: string): { value: string } | undefined },
 ): MailVault | null {
@@ -194,19 +213,24 @@ function buildVaultFromCookies(
     const accounts: Record<string, MailVaultAccount> = {};
     for (const profile of meta.profiles) {
       let tokens = decodeTokens(getCookie(source, tokenCookieName(profile.id)));
-      // Active account: tokens live in MAIL_ACCESS / MAIL_REFRESH (avoids huge duplicate cookies)
-      if (!tokens && profile.id === meta.activeId) {
-        const access = getCookie(source, MAIL_ACCESS_COOKIE);
-        if (access) {
+      // Active account: tokens in MAIL_ACCESS / MAIL_REFRESH (no duplicate pnk_mt_*)
+      if (profile.id === meta.activeId) {
+        const access = getCookie(source, MAIL_ACCESS_COOKIE) || "";
+        const refresh = getCookie(source, MAIL_REFRESH_COOKIE) || "";
+        // Keep session alive on refresh alone after access cookie/JWT expires
+        if (access || refresh) {
           tokens = {
-            accessToken: access,
-            refreshToken: getCookie(source, MAIL_REFRESH_COOKIE) || "",
+            accessToken: access || tokens?.accessToken || "",
+            refreshToken: refresh || tokens?.refreshToken || "",
           };
         }
       }
       if (!tokens) continue;
       accounts[profile.id] = {
-        profile,
+        profile: {
+          ...profile,
+          avatarUrl: resolveAvatarUrl(profile.id, profile.avatarUrl),
+        },
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
       };
@@ -249,19 +273,22 @@ export function upsertVaultAccount(
   };
 }
 
+/**
+ * Write auth cookies. Keep payloads small — nginx defaults ~4k proxy buffers;
+ * fat Set-Cookie on callback/session → intermittent 502 and "random" logouts.
+ */
 export function applyActiveCookies(
   res: NextResponse,
   vault: MailVault,
-  expiresIn = 3600,
+  _expiresIn = 3600,
 ) {
   const active = vault.accounts[vault.activeId];
   if (!active) return;
 
+  // Cookie lifetime ≠ JWT lifetime. Persist 30d; refresh JWT via refresh_token.
   const longLived = sessionCookieOptions(30 * 24 * 60 * 60);
-  const shortLived = sessionCookieOptions(expiresIn);
 
-  // Active tokens once — do NOT also stuff the same JWTs into pnk_mt_* (nginx 502 on big headers)
-  res.cookies.set(MAIL_ACCESS_COOKIE, active.accessToken, shortLived);
+  res.cookies.set(MAIL_ACCESS_COOKIE, active.accessToken || "", longLived);
   res.cookies.set(
     MAIL_REFRESH_COOKIE,
     active.refreshToken || "",
@@ -270,29 +297,23 @@ export function applyActiveCookies(
 
   const meta: MailMeta = {
     activeId: vault.activeId,
-    profiles: Object.values(vault.accounts).map((a) => ({
-      ...a.profile,
-      avatarUrl: idPublicAvatarUrl(a.profile.id),
-    })),
+    profiles: Object.values(vault.accounts).map((a) => slimProfile(a.profile)),
   };
   res.cookies.set(MAIL_META_COOKIE, encodeMeta(meta), longLived);
 
-  // Inactive accounts only (switch-account support)
+  // Inactive: refresh token ONLY (no access JWT duplicate)
   for (const account of Object.values(vault.accounts)) {
     if (account.profile.id === vault.activeId) {
-      // Clear any previous bulky duplicate for the active id
       res.cookies.set(tokenCookieName(account.profile.id), "", {
         ...sessionCookieOptions(0),
         maxAge: 0,
       });
       continue;
     }
+    if (!account.refreshToken) continue;
     res.cookies.set(
       tokenCookieName(account.profile.id),
-      encodeTokens({
-        accessToken: account.accessToken,
-        refreshToken: account.refreshToken,
-      }),
+      encodeRefreshOnly(account.refreshToken),
       longLived,
     );
   }
