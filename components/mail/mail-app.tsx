@@ -2513,7 +2513,7 @@ export default function MailApp() {
                   exit={{ x: "104%", opacity: 0.6 }}
                   transition={readerPanelAnim ? READER_SPRING : READER_SNAP}
                   className={cn(
-                    "z-20 flex flex-col overflow-hidden rounded-[16px] border border-white/10 bg-[#111318] will-change-transform",
+                    "z-20 flex flex-col overflow-hidden rounded-[16px] bg-[#111318] will-change-transform",
                     // Mobile: full inset card from the right. Desktop: right half, left edge fixed via width
                     "absolute inset-2",
                     "md:inset-auto md:top-3 md:bottom-3 md:right-3 md:w-[calc(50%-15px)]",
