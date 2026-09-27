@@ -291,7 +291,14 @@ function SenderAvatar({
   );
 }
 
-function MailBodyFrame({ html }: { html: string }) {
+function MailBodyFrame({
+  html,
+  layoutReady = true,
+}: {
+  html: string;
+  /** False while the reader panel is still sliding in — avoid measuring mid-animation. */
+  layoutReady?: boolean;
+}) {
   const ref = useRef<HTMLIFrameElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const branded = useMemo(() => isBrandedHtmlEmail(html || ""), [html]);
@@ -302,7 +309,7 @@ function MailBodyFrame({ html }: { html: string }) {
   useEffect(() => {
     setReady(false);
     const iframe = ref.current;
-    if (!iframe) return;
+    if (!iframe || !layoutReady) return;
 
     let fitting = false;
     let lastH = 0;
@@ -310,6 +317,7 @@ function MailBodyFrame({ html }: { html: string }) {
     let revealed = false;
     let applyTimer = 0;
     let revealTimer = 0;
+    let stableTimer = 0;
     const imgCleanups: Array<() => void> = [];
 
     const pendingImages = () => {
@@ -320,7 +328,7 @@ function MailBodyFrame({ html }: { html: string }) {
 
     /**
      * Collapse → natural scrollHeight (avoids feedback loop).
-     * Only call while iframe is still hidden — never after reveal.
+     * Prefer measuring only when the wrap has a real width.
      */
     const measureCollapsed = (): number | null => {
       const doc = iframe.contentDocument;
@@ -343,9 +351,18 @@ function MailBodyFrame({ html }: { html: string }) {
 
         const frameW =
           iframe.clientWidth || wrapRef.current?.clientWidth || 0;
-        if (!frameW) return null;
+        // Mid-slide / collapsed panel → bogus fit-to-width (the "thin bar" bug)
+        if (frameW < 120) return null;
 
-        iframe.style.height = "1px";
+        // Measure with a real height first (avoid 1px flash / squash)
+        iframe.style.height = "auto";
+        const naturalProbe = Math.max(
+          root.scrollHeight,
+          body.scrollHeight,
+          48,
+        );
+        // Temporary height for accurate scrollWidth of wide tables
+        iframe.style.height = `${Math.min(naturalProbe, 4000)}px`;
 
         let contentW = Math.max(root.scrollWidth, body.scrollWidth);
         body.querySelectorAll("table, img, pre").forEach((el) => {
@@ -353,8 +370,8 @@ function MailBodyFrame({ html }: { html: string }) {
         });
 
         let scale = 1;
-        if (contentW > frameW + 2) {
-          scale = Math.max(0.45, Math.min(1, (frameW - 2) / contentW));
+        if (contentW > frameW + 8) {
+          scale = Math.max(0.55, Math.min(1, (frameW - 4) / contentW));
         }
 
         const supportsZoom =
@@ -378,12 +395,12 @@ function MailBodyFrame({ html }: { html: string }) {
         );
         let h =
           scale < 1 && !supportsZoom ? Math.ceil(rawH * scale) : Math.ceil(rawH);
-        h = Math.min(h + 2, 8000);
+        h = Math.min(Math.max(h + 2, 48), 8000);
         lastW = frameW;
         return h;
       } finally {
         if (!iframe.style.height || iframe.style.height === "1px") {
-          iframe.style.height = prevH || "80px";
+          iframe.style.height = prevH || "120px";
         }
         fitting = false;
       }
@@ -402,19 +419,18 @@ function MailBodyFrame({ html }: { html: string }) {
       if (revealed) return;
       const h = measureCollapsed();
       if (h != null) applyHeight(h);
+      // Don't reveal a collapsed probe height
+      if (h != null && h < 40) return;
       revealed = true;
       setReady(true);
     };
 
     const onImageSettled = () => {
-      if (revealed) return;
       window.clearTimeout(applyTimer);
       applyTimer = window.setTimeout(() => {
-        if (revealed) return;
-        // Keep fitting under the spinner until images (or timeout) finish
         const h = measureCollapsed();
         if (h != null) applyHeight(h);
-        if (!pendingImages()) {
+        if (!revealed && !pendingImages()) {
           window.clearTimeout(revealTimer);
           reveal();
         }
@@ -446,7 +462,6 @@ function MailBodyFrame({ html }: { html: string }) {
             reveal();
             return;
           }
-          // Broken/slow images: don't leave spinner forever
           revealTimer = window.setTimeout(() => {
             reveal();
           }, 1400);
@@ -460,12 +475,18 @@ function MailBodyFrame({ html }: { html: string }) {
     const ro =
       typeof ResizeObserver !== "undefined"
         ? new ResizeObserver((entries) => {
-            // Only reflow width before first paint — never collapse after reveal
-            if (revealed) return;
             const w = entries[0]?.contentRect?.width ?? 0;
-            if (Math.abs(w - lastW) < 2) return;
-            const h = measureCollapsed();
-            if (h != null) applyHeight(h);
+            if (w < 120) return;
+            if (Math.abs(w - lastW) < 4) return;
+            window.clearTimeout(stableTimer);
+            // Debounce until layout width settles (open animation / split pane)
+            stableTimer = window.setTimeout(() => {
+              const h = measureCollapsed();
+              if (h != null) {
+                applyHeight(h);
+                if (!revealed) reveal();
+              }
+            }, 80);
           })
         : null;
     if (wrapRef.current) ro?.observe(wrapRef.current);
@@ -474,10 +495,11 @@ function MailBodyFrame({ html }: { html: string }) {
       iframe.removeEventListener("load", onLoad);
       window.clearTimeout(applyTimer);
       window.clearTimeout(revealTimer);
+      window.clearTimeout(stableTimer);
       imgCleanups.forEach((fn) => fn());
       ro?.disconnect();
     };
-  }, [srcDoc]);
+  }, [srcDoc, layoutReady]);
 
   return (
     <div
@@ -493,7 +515,7 @@ function MailBodyFrame({ html }: { html: string }) {
         minHeight: ready ? undefined : 160,
       }}
     >
-      {!ready && (
+      {(!ready || !layoutReady) && (
         <div
           className="absolute inset-0 z-[1] flex items-center justify-center bg-[#0c0d10] min-h-[160px]"
           aria-hidden
@@ -505,14 +527,13 @@ function MailBodyFrame({ html }: { html: string }) {
         ref={ref}
         title="Письмо"
         sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
-        srcDoc={srcDoc}
+        srcDoc={layoutReady ? srcDoc : undefined}
         className="w-full border-0 block"
         style={{
           minHeight: 48,
           backgroundColor: canvas,
           colorScheme: branded ? "light" : "dark",
-          opacity: ready ? 1 : 0,
-          // Instant show at final height — no fade-while-growing
+          opacity: ready && layoutReady ? 1 : 0,
           transition: "none",
         }}
       />
@@ -591,6 +612,8 @@ export default function MailApp() {
   const [readerPanelAnim, setReaderPanelAnim] = useState(true);
   /** Sync flag so the first paint of open/close never uses a stale anim mode. */
   const readerPanelAnimRef = useRef(true);
+  /** True after open spring finishes (or immediately on letter switch) — gates iframe measure. */
+  const [readerLayoutReady, setReaderLayoutReady] = useState(false);
   const [swipeOpenId, setSwipeOpenId] = useState<string | null>(null);
   const [detail, setDetail] = useState<MessageDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -1576,6 +1599,7 @@ export default function MailApp() {
   const closeReader = () => {
     readerPanelAnimRef.current = true;
     setReaderPanelAnim(true);
+    setReaderLayoutReady(false);
     setOpenId(null);
     openIdRef.current = null;
     setDetail(null);
@@ -1611,6 +1635,8 @@ export default function MailApp() {
     // Panel spring only when first opening / closing — never when hopping letters
     readerPanelAnimRef.current = !alreadyOpen;
     setReaderPanelAnim(!alreadyOpen);
+    // Switch: layout already settled. First open: wait for spring onAnimationComplete
+    setReaderLayoutReady(alreadyOpen);
 
     openIdRef.current = id;
     setOpenId(id);
@@ -1708,6 +1734,13 @@ export default function MailApp() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- open once after boot
   }, [bootReady, showApp]);
+
+  // Failsafe: never leave letter body stuck behind layoutReady=false
+  useEffect(() => {
+    if (!openId || readerLayoutReady) return;
+    const t = window.setTimeout(() => setReaderLayoutReady(true), 700);
+    return () => window.clearTimeout(t);
+  }, [openId, readerLayoutReady]);
 
   const prefetchMessage = (id: string) => {
     if (detailCache.current.has(id)) return;
@@ -2694,12 +2727,15 @@ export default function MailApp() {
                   key="mail-reader"
                   initial={
                     readerPanelAnimRef.current
-                      ? { x: "104%", opacity: 0.55, scale: 0.985 }
+                      ? { x: "104%", opacity: 0.6 }
                       : false
                   }
-                  animate={{ x: 0, opacity: 1, scale: 1 }}
-                  exit={{ x: "104%", opacity: 0.55, scale: 0.985 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  exit={{ x: "104%", opacity: 0.6 }}
                   transition={readerPanelAnim ? READER_SPRING : READER_SNAP}
+                  onAnimationComplete={() => {
+                    if (openIdRef.current) setReaderLayoutReady(true);
+                  }}
                   className={cn(
                     "z-30 flex flex-col overflow-hidden rounded-[16px] border border-white/10 bg-[#111318] will-change-transform",
                     // Mobile: full inset card from the right. Desktop: right half, left edge fixed via width
@@ -2898,6 +2934,7 @@ export default function MailApp() {
                                             html={stripAttachmentsBlock(
                                               msg.bodyHtml,
                                             )}
+                                            layoutReady={readerLayoutReady}
                                           />
                                         ) : (
                                           <div className="rounded-[12px] bg-white/[0.03] p-6 space-y-3 animate-pulse min-h-[80px]">
