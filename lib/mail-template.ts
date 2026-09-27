@@ -86,24 +86,23 @@ export function isFullHtmlDocument(html: string): boolean {
 
 /** Dark reader chrome for plain / simple messages. */
 const READER_DARK_CSS = `
-  html, body {
+  :host, .pnk-mail-root {
+    display: block;
+    width: 100%;
+  }
+  .pnk-mail-root {
     margin: 0;
-    padding: 0;
-    width: 100% !important;
-    height: 100% !important;
-    min-height: 100% !important;
-    max-height: none !important;
-    background: #0c0d10 !important;
+    padding: 14px 16px 18px;
+    background: #0c0d10;
     color: rgba(255,255,255,0.90);
     font-family: "Segoe UI", Helvetica, Arial, sans-serif;
     font-size: 15px;
     line-height: 1.55;
     -webkit-font-smoothing: antialiased;
-    overflow: auto;
-    overflow-x: hidden;
+    overflow: visible;
     box-sizing: border-box;
   }
-  body { padding: 12px 14px 16px; }
+  .pnk-mail-root *, .pnk-mail-root *::before, .pnk-mail-root *::after { box-sizing: border-box; }
   a {
     color: #4d9fff !important;
     text-decoration: underline !important;
@@ -151,9 +150,9 @@ const READER_DARK_CSS = `
     color: rgba(255,255,255,0.48) !important;
     margin-bottom: 0.35em !important;
   }
-  body > br:first-child,
-  body > div:empty:first-child,
-  body > p:empty:first-child {
+  .pnk-mail-root > br:first-child,
+  .pnk-mail-root > div:empty:first-child,
+  .pnk-mail-root > p:empty:first-child {
     display: none !important;
   }
   table { border-collapse: collapse; max-width: 100%; }
@@ -175,25 +174,25 @@ const READER_DARK_CSS = `
  * Avoid height:auto on all images — spacer GIFs hold table layouts together.
  */
 const READER_LIGHT_CSS = `
-  :root { color-scheme: light; }
-  html, body {
-    margin: 0 !important;
-    padding: 0 !important;
-    width: 100% !important;
-    height: 100% !important;
-    min-height: 100% !important;
-    max-height: none !important;
-    background: #ffffff !important;
+  :host, .pnk-mail-root {
+    display: block;
+    width: 100%;
+  }
+  .pnk-mail-root {
+    margin: 0;
+    padding: 0;
+    background: #ffffff;
     color: #1a1a1a;
     font-family: "Segoe UI", Helvetica, Arial, sans-serif;
     font-size: 15px;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
-    overflow: auto;
+    overflow: visible;
     overflow-x: hidden;
+    width: 100%;
     box-sizing: border-box;
   }
-  *, *::before, *::after { box-sizing: border-box; }
+  .pnk-mail-root *, .pnk-mail-root *::before, .pnk-mail-root *::after { box-sizing: border-box; }
   img, video {
     max-width: 100% !important;
   }
@@ -383,39 +382,7 @@ function ensureClickableLinks(html: string): string {
  * Plain replies → dark canvas.
  */
 export function prepareMailReaderSrcDoc(html: string): string {
-  const raw = (html || "").trim() || "<p></p>";
-  const branded = isBrandedHtmlEmail(raw);
-  const cleaned = isFullHtmlDocument(raw)
-    ? sanitizeMailHtml(raw, true)
-    : sanitizeMailHtml(raw, false);
-  const trimmed = isFullHtmlDocument(cleaned)
-    ? cleaned.replace(
-        /<body([^>]*)>([\s\S]*?)<\/body>/i,
-        (_m, attrs: string, body: string) =>
-          `<body${attrs}>${trimLeadingEmptyMarkup(body)}</body>`,
-      )
-    : trimLeadingEmptyMarkup(cleaned);
-
-  let safe = ensureClickableLinks(linkifyBareUrls(trimmed));
-  if (!branded) {
-    safe = lightenDarkTextColors(safe);
-  }
-
-  const css = branded ? READER_LIGHT_CSS : READER_DARK_CSS;
-
-  if (isFullHtmlDocument(safe)) {
-    if (/<head[\s>]/i.test(safe)) {
-      return safe.replace(
-        /<head([^>]*)>/i,
-        `<head$1><meta name="color-scheme" content="${branded ? "light" : "dark"}"/><style data-pnk-reader>${css}</style>`,
-      );
-    }
-    return safe.replace(
-      /<html([^>]*)>/i,
-      `<html$1><head><meta charset="utf-8"/><meta name="color-scheme" content="${branded ? "light" : "dark"}"/><style data-pnk-reader>${css}</style></head>`,
-    );
-  }
-
+  const { branded, css, bodyHtml, headStyles } = prepareMailReaderParts(html);
   return `<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -423,9 +390,49 @@ export function prepareMailReaderSrcDoc(html: string): string {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="color-scheme" content="${branded ? "light" : "dark"}" />
   <style data-pnk-reader>${css}</style>
+  ${headStyles}
 </head>
-<body>${safe}</body>
+<body class="pnk-mail-root">${bodyHtml}</body>
 </html>`;
+}
+
+/** Sanitize + extract body/CSS for Shadow DOM (no iframe, page scroll only). */
+export function prepareMailReaderParts(html: string): {
+  branded: boolean;
+  css: string;
+  bodyHtml: string;
+  headStyles: string;
+} {
+  const raw = (html || "").trim() || "<p></p>";
+  const branded = isBrandedHtmlEmail(raw);
+  const cleaned = isFullHtmlDocument(raw)
+    ? sanitizeMailHtml(raw, true)
+    : sanitizeMailHtml(raw, false);
+
+  let headStyles = "";
+  let bodyHtml = cleaned;
+
+  if (isFullHtmlDocument(cleaned)) {
+    const styles = [
+      ...cleaned.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi),
+    ].map((m) => m[1]);
+    headStyles = styles.map((s) => `<style>${s}</style>`).join("");
+    const bodyMatch = cleaned.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+    bodyHtml = bodyMatch ? bodyMatch[1] : cleaned;
+  }
+
+  bodyHtml = trimLeadingEmptyMarkup(bodyHtml);
+  bodyHtml = ensureClickableLinks(linkifyBareUrls(bodyHtml));
+  if (!branded) {
+    bodyHtml = lightenDarkTextColors(bodyHtml);
+  }
+
+  return {
+    branded,
+    css: branded ? READER_LIGHT_CSS : READER_DARK_CSS,
+    bodyHtml,
+    headStyles,
+  };
 }
 
 /**

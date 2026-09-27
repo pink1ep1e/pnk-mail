@@ -43,7 +43,7 @@ import { MailAttachmentsList } from "@/components/mail/mail-attachments-list";
 import { extractAttachmentsFromHtml, hasVisibleMailBody, stripAttachmentsBlock } from "@/lib/mail-attachments";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { haptic } from "@/lib/haptic";
-import { prepareMailReaderSrcDoc, isBrandedHtmlEmail } from "@/lib/mail-template";
+import { prepareMailReaderParts } from "@/lib/mail-template";
 import Image from "next/image";
 import Link from "next/link";
 import { AnimatePresence, animate, motion, useMotionValue, useTransform, type PanInfo } from "motion/react";
@@ -292,51 +292,42 @@ function SenderAvatar({
 }
 
 function MailBodyFrame({ html }: { html: string }) {
-  const branded = useMemo(() => isBrandedHtmlEmail(html || ""), [html]);
-  const srcDoc = useMemo(() => prepareMailReaderSrcDoc(html), [html]);
-  const [ready, setReady] = useState(false);
-  const canvas = branded ? "#ffffff" : "#0c0d10";
+  const hostRef = useRef<HTMLDivElement>(null);
+  const parts = useMemo(() => prepareMailReaderParts(html), [html]);
 
   useEffect(() => {
-    setReady(false);
-  }, [srcDoc]);
+    const host = hostRef.current;
+    if (!host) return;
+    const shadow = host.shadowRoot ?? host.attachShadow({ mode: "open" });
+    shadow.innerHTML = `${parts.headStyles}<style data-pnk-reader>${parts.css}</style><div class="pnk-mail-root">${parts.bodyHtml}</div>`;
 
-  // CSS-sized iframe — no JS height probing (that caused the squash → expand bug)
+    // Open links from shadow in a new tab (no iframe navigation)
+    const onClick = (e: Event) => {
+      const t = e.target as HTMLElement | null;
+      const a = t?.closest?.("a") as HTMLAnchorElement | null;
+      if (!a?.href) return;
+      const href = a.getAttribute("href") || "";
+      if (!href || href.startsWith("#")) return;
+      e.preventDefault();
+      window.open(a.href, "_blank", "noopener,noreferrer");
+    };
+    shadow.addEventListener("click", onClick);
+    return () => shadow.removeEventListener("click", onClick);
+  }, [parts]);
+
   return (
     <div
       className={cn(
-        "relative w-full overflow-hidden rounded-[16px] border",
-        branded
+        "relative w-full overflow-x-hidden rounded-[16px] border",
+        parts.branded
           ? "border-white/15 shadow-[0_0_0_1px_rgba(255,255,255,0.04)]"
           : "border-white/8",
       )}
       style={{
-        backgroundColor: canvas,
-        // Adaptive viewport fill — stable from first paint
-        height: "clamp(220px, 52vh, 720px)",
+        backgroundColor: parts.branded ? "#ffffff" : "#0c0d10",
       }}
     >
-      {!ready && (
-        <div
-          className="absolute inset-0 z-[1] flex items-center justify-center"
-          style={{ backgroundColor: canvas }}
-          aria-hidden
-        >
-          <div className="h-7 w-7 rounded-full border-2 border-white/10 border-t-[#0066ff] animate-spin" />
-        </div>
-      )}
-      <iframe
-        title="Письмо"
-        sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
-        srcDoc={srcDoc}
-        onLoad={() => setReady(true)}
-        className="absolute inset-0 h-full w-full border-0 block"
-        style={{
-          backgroundColor: canvas,
-          colorScheme: branded ? "light" : "dark",
-          opacity: ready ? 1 : 0,
-        }}
-      />
+      <div ref={hostRef} className="w-full min-w-0" />
     </div>
   );
 }
