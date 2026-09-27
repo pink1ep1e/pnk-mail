@@ -61,33 +61,33 @@ export function MailAttachmentsList({
                 type="button"
                 onClick={() => downloadAttachment(a)}
                 title={`${a.name}${a.size > 0 ? ` · ${formatBytes(a.size)}` : ""}`}
-                className="group w-[108px] text-left cursor-pointer"
+                className="group w-[120px] sm:w-[128px] text-left cursor-pointer"
               >
                 <span
                   className={cn(
                     "relative flex aspect-square w-full items-center justify-center overflow-hidden",
-                    "rounded-[16px] border border-white/10 bg-[#1a1c24]",
-                    "group-hover:border-[#0066ff]/45 group-hover:bg-[#1e2230] transition-colors",
+                    "rounded-[18px] border border-white/12 bg-[#12141a]",
+                    "group-hover:border-[#0066ff]/45 group-hover:bg-[#161a24] transition-colors",
                   )}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={fileIconSrc(a.name, a.type)}
                     alt=""
-                    width={48}
-                    height={48}
-                    className="h-12 w-12 object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.35)]"
+                    width={56}
+                    height={56}
+                    className="h-14 w-14 object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.35)]"
                   />
-                  <span className="absolute left-2 bottom-2 rounded-[6px] bg-black/55 px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-white/90 font-[family-name:var(--font-manrope)] backdrop-blur-[2px]">
+                  <span className="absolute left-2 bottom-2 rounded-[6px] bg-[#0066ff]/90 px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-white font-[family-name:var(--font-manrope)]">
                     {badge}
                   </span>
                 </span>
-                <span className="mt-1.5 block truncate px-0.5 text-[12px] font-medium text-white/80 font-[family-name:var(--font-manrope)]">
+                <span className="mt-2 block truncate px-0.5 text-[13px] font-semibold text-white/90 font-[family-name:var(--font-manrope)]">
                   {a.name}
                 </span>
                 {a.size > 0 && (
-                  <span className="block truncate px-0.5 text-[11px] text-white/35 font-[family-name:var(--font-manrope)]">
-                    {formatBytes(a.size)}
+                  <span className="block truncate px-0.5 text-[11px] text-white/40 font-[family-name:var(--font-manrope)]">
+                    {formatBytes(a.size)} · скачать
                   </span>
                 )}
               </button>

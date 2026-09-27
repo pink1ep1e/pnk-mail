@@ -301,7 +301,6 @@ function MailBodyFrame({ html }: { html: string }) {
     const shadow = host.shadowRoot ?? host.attachShadow({ mode: "open" });
     shadow.innerHTML = `${parts.headStyles}<style data-pnk-reader>${parts.css}</style><div class="pnk-mail-root">${parts.bodyHtml}</div>`;
 
-    // Open links from shadow in a new tab (no iframe navigation)
     const onClick = (e: Event) => {
       const t = e.target as HTMLElement | null;
       const a = t?.closest?.("a") as HTMLAnchorElement | null;
@@ -315,17 +314,14 @@ function MailBodyFrame({ html }: { html: string }) {
     return () => shadow.removeEventListener("click", onClick);
   }, [parts]);
 
+  // Plain text: no nested dark frame (looks empty). Branded HTML keeps light sheet.
+  if (!parts.branded) {
+    return <div ref={hostRef} className="w-full min-w-0 mt-1" />;
+  }
+
   return (
     <div
-      className={cn(
-        "relative w-full overflow-x-hidden rounded-[16px] border",
-        parts.branded
-          ? "border-white/15 shadow-[0_0_0_1px_rgba(255,255,255,0.04)]"
-          : "border-white/8",
-      )}
-      style={{
-        backgroundColor: parts.branded ? "#ffffff" : "#0c0d10",
-      }}
+      className="relative w-full overflow-x-hidden rounded-[14px] border border-white/12 bg-white shadow-[0_0_0_1px_rgba(255,255,255,0.04)]"
     >
       <div ref={hostRef} className="w-full min-w-0" />
     </div>
@@ -2561,17 +2557,19 @@ export default function MailApp() {
                       </button>
                     </div>
 
-                    <div className="flex-1 min-h-0 overflow-y-auto mail-scroll">
+                    <div className="flex-1 min-h-0 overflow-y-auto mail-scroll flex flex-col">
                       {detailLoading && !detail?.bodyHtml ? (
-                        <div className="h-full min-h-[240px] flex flex-col items-center justify-center gap-3 px-6">
+                        <div className="flex-1 min-h-[240px] flex flex-col items-center justify-center gap-3 px-6">
                           <div className="h-8 w-8 rounded-full border-2 border-white/10 border-t-[#0066ff] animate-spin" />
                           <p className="text-[13px] text-white/35 font-[family-name:var(--font-manrope)]">
                             Загрузка письма…
                           </p>
                         </div>
                       ) : (
-                      <div className="mx-auto w-full max-w-[680px] px-3 sm:px-6 md:px-8 pt-4 md:pt-6 pb-10">
-                            <h2 className="text-[24px] md:text-[28px] font-bold tracking-[-0.035em] leading-[1.2] text-white font-[family-name:var(--font-unbounded)]">
+                        <>
+                      <div className="flex-1 px-3 sm:px-5 md:px-6 pt-3 md:pt-4 pb-4">
+                        <article className="mx-auto w-full max-w-[680px] rounded-[20px] bg-[#1a1c24] border border-white/[0.07] px-4 sm:px-5 md:px-6 pt-5 pb-5 md:pt-6 md:pb-6 shadow-[0_8px_32px_rgba(0,0,0,0.25)]">
+                            <h2 className="text-[22px] md:text-[26px] font-bold tracking-[-0.035em] leading-[1.25] text-white font-[family-name:var(--font-unbounded)]">
                               {detail?.subject || "…"}
                             </h2>
                             {thread.length > 1 && (
@@ -2580,19 +2578,25 @@ export default function MailApp() {
                               </p>
                             )}
 
-                            <div className="mt-6 space-y-0">
+                            <div className="mt-5 space-y-0">
                               {(thread.length > 0 ? thread : detail ? [detail] : []).map(
                                 (msg, idx, list) => {
                                   const isLast = idx === list.length - 1;
+                                  const attaches = extractAttachmentsFromHtml(
+                                    msg.bodyHtml || "",
+                                  );
+                                  const showBody =
+                                    Boolean(msg.bodyHtml) &&
+                                    hasVisibleMailBody(msg.bodyHtml || "");
                                   return (
                                     <div
                                       key={msg.id}
                                       className={cn(
-                                        "pt-5",
-                                        idx > 0 && "border-t border-white/8",
+                                        "pt-4",
+                                        idx > 0 && "border-t border-white/8 mt-1",
                                       )}
                                     >
-                                      <div className="flex items-start gap-3.5">
+                                      <div className="flex items-start gap-3">
                                         <SenderAvatar
                                           from={msg.from || "?"}
                                           fromEmail={msg.fromEmail}
@@ -2604,17 +2608,17 @@ export default function MailApp() {
                                             msg.avatarUrl,
                                             accounts,
                                           )}
-                                          size={44}
+                                          size={40}
                                         />
 
                                         <div className="min-w-0 flex-1 pt-0.5">
                                           <div className="flex items-start justify-between gap-3">
                                             <div className="min-w-0">
                                               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                                <span className="text-[15px] font-semibold text-white font-[family-name:var(--font-manrope)]">
+                                                <span className="text-[14px] font-semibold text-white font-[family-name:var(--font-manrope)]">
                                                   {msg.from || "—"}
                                                 </span>
-                                                <span className="text-[13px] text-white/40 font-[family-name:var(--font-manrope)]">
+                                                <span className="text-[12px] text-white/40 font-[family-name:var(--font-manrope)]">
                                                   {msg.fromEmail || ""}
                                                 </span>
                                                 {msg.folder === "sent" ? (
@@ -2632,7 +2636,7 @@ export default function MailApp() {
                                                   onClick={() =>
                                                     setRecipientsOpen((v) => !v)
                                                   }
-                                                  className="mt-1.5 inline-flex items-center gap-1 text-[13px] text-white/35 hover:text-white/60 font-[family-name:var(--font-manrope)] transition-colors"
+                                                  className="mt-1 inline-flex items-center gap-1 text-[12px] text-white/35 hover:text-white/60 font-[family-name:var(--font-manrope)] transition-colors"
                                                 >
                                                   {(() => {
                                                     const nList = [
@@ -2692,7 +2696,7 @@ export default function MailApp() {
                                               )}
                                             </div>
 
-                                            <span className="shrink-0 text-[13px] text-white/30 font-[family-name:var(--font-manrope)] tabular-nums pt-1">
+                                            <span className="shrink-0 text-[12px] text-white/30 font-[family-name:var(--font-manrope)] tabular-nums pt-1">
                                               {msg.time || ""}
                                             </span>
                                           </div>
@@ -2701,28 +2705,20 @@ export default function MailApp() {
 
                                       <div
                                         className={cn(
-                                          "mt-2.5 relative",
-                                          !isLast && "pb-4",
+                                          "mt-4 relative",
+                                          !isLast && "pb-3",
                                         )}
                                       >
-                                        {msg.bodyHtml &&
-                                        hasVisibleMailBody(msg.bodyHtml) ? (
+                                        {showBody ? (
                                           <MailBodyFrame
                                             html={stripAttachmentsBlock(
-                                              msg.bodyHtml,
+                                              msg.bodyHtml || "",
                                             )}
                                           />
                                         ) : null}
                                         <MailAttachmentsList
-                                          items={extractAttachmentsFromHtml(
-                                            msg.bodyHtml || "",
-                                          )}
-                                          className={
-                                            msg.bodyHtml &&
-                                            hasVisibleMailBody(msg.bodyHtml)
-                                              ? "mt-3"
-                                              : "mt-0"
-                                          }
+                                          items={attaches}
+                                          className={showBody ? "mt-4" : "mt-1"}
                                         />
                                       </div>
                                     </div>
@@ -2730,7 +2726,28 @@ export default function MailApp() {
                                 },
                               )}
                             </div>
+                        </article>
                       </div>
+
+                      <div className="shrink-0 border-t border-white/[0.06] bg-[#14161c] px-4 md:px-6 py-3 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void replySelected()}
+                          className="h-10 flex-1 sm:flex-none sm:min-w-[140px] px-4 rounded-[12px] bg-[#0066ff] text-white text-[14px] font-semibold font-[family-name:var(--font-manrope)] inline-flex items-center justify-center gap-2 hover:bg-[#0052cc]"
+                        >
+                          <Reply size={16} />
+                          Ответить
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void forwardSelected()}
+                          className="h-10 flex-1 sm:flex-none sm:min-w-[140px] px-4 rounded-[12px] bg-white/[0.06] text-white/80 text-[14px] font-medium font-[family-name:var(--font-manrope)] inline-flex items-center justify-center gap-2 hover:bg-white/[0.1] hover:text-white"
+                        >
+                          <Forward size={16} />
+                          Переслать
+                        </button>
+                      </div>
+                        </>
                       )}
                     </div>
                 </motion.div>

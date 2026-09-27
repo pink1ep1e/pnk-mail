@@ -92,15 +92,16 @@ const READER_DARK_CSS = `
   }
   .pnk-mail-root {
     margin: 0;
-    padding: 14px 16px 18px;
-    background: #0c0d10;
-    color: rgba(255,255,255,0.90);
-    font-family: "Segoe UI", Helvetica, Arial, sans-serif;
-    font-size: 15px;
-    line-height: 1.55;
+    padding: 4px 2px 8px;
+    background: transparent;
+    color: rgba(255,255,255,0.92);
+    font-family: "Manrope", "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.65;
     -webkit-font-smoothing: antialiased;
     overflow: visible;
     box-sizing: border-box;
+    min-height: 1.5em;
   }
   .pnk-mail-root *, .pnk-mail-root *::before, .pnk-mail-root *::after { box-sizing: border-box; }
   a {
