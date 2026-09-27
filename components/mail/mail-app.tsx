@@ -2389,9 +2389,9 @@ export default function MailApp() {
                             className={cn(
                               "relative flex items-center gap-2.5 md:gap-2.5 px-2.5 md:px-2.5 h-[56px] md:h-[50px] cursor-pointer rounded-[14px] overflow-hidden min-w-0 w-full box-border",
                               isOpen
-                                ? "bg-[#0066ff]/25 ring-1 ring-inset ring-[#0066ff]/40"
+                                ? "bg-[#0066ff]/25"
                                 : isSel
-                                  ? "bg-[#0066ff]/30 ring-1 ring-inset ring-[#0066ff]/50"
+                                  ? "bg-[#0066ff]/30"
                                   : m.unread
                                     ? "bg-[#2a2d36] hover:bg-[#32363f]"
                                     : "bg-[#24262e] hover:bg-[#2a2d36]",
