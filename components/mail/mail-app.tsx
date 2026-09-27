@@ -1799,7 +1799,7 @@ export default function MailApp() {
   return (
     <div className="mail-app-shell w-full max-w-[100vw] bg-[#0c0d10] text-white flex flex-col overflow-hidden overscroll-none touch-pan-y">
       {/* Site header strip — buttons from landing header */}
-      <header className="shrink-0 z-30 border-b border-white/5 bg-[#0c0d10]">
+      <header className="shrink-0 z-50 border-b border-white/5 bg-[#0c0d10]">
         <div className="h-14 md:h-16 px-3 md:px-5 flex items-center gap-2 md:gap-4">
           <button
             type="button"
@@ -1881,7 +1881,7 @@ export default function MailApp() {
                 aria-hidden={!profileOpen}
                 tabIndex={profileOpen ? 0 : -1}
                 className={cn(
-                  "fixed inset-0 z-40 bg-black/50 transition-opacity duration-150 ease-out",
+                  "fixed inset-0 z-[60] bg-black/50 transition-opacity duration-150 ease-out",
                   profileOpen
                     ? "opacity-100"
                     : "opacity-0 pointer-events-none",
@@ -1899,7 +1899,7 @@ export default function MailApp() {
                       exit={{ opacity: 0, y: -3, scale: 0.99 }}
                       transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
                       style={{ transformOrigin: "calc(100% - 16px) 0%" }}
-                      className="absolute right-0 top-[calc(100%+10px)] w-[min(calc(100vw-32px),340px)] rounded-[22px] bg-[#22252e] border border-white/22 shadow-[0_16px_48px_rgba(0,0,0,0.75),0_0_0_1px_rgba(255,255,255,0.06)] p-3 z-50"
+                      className="absolute right-0 top-[calc(100%+10px)] w-[min(calc(100vw-32px),340px)] rounded-[22px] bg-[#22252e] border border-white/22 shadow-[0_16px_48px_rgba(0,0,0,0.75),0_0_0_1px_rgba(255,255,255,0.06)] p-3 z-[70]"
                     >
                       <div className="rounded-[14px] bg-[#17191f] border border-white/10 overflow-hidden mb-2">
                         <div className="flex items-center gap-3 px-3 py-3">
@@ -2513,7 +2513,7 @@ export default function MailApp() {
                   exit={{ x: "104%", opacity: 0.6 }}
                   transition={readerPanelAnim ? READER_SPRING : READER_SNAP}
                   className={cn(
-                    "z-30 flex flex-col overflow-hidden rounded-[16px] border border-white/10 bg-[#111318] will-change-transform",
+                    "z-20 flex flex-col overflow-hidden rounded-[16px] border border-white/10 bg-[#111318] will-change-transform",
                     // Mobile: full inset card from the right. Desktop: right half, left edge fixed via width
                     "absolute inset-2",
                     "md:inset-auto md:top-3 md:bottom-3 md:right-3 md:w-[calc(50%-15px)]",
