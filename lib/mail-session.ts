@@ -280,8 +280,10 @@ export function upsertVaultAccount(
 export function applyActiveCookies(
   res: NextResponse,
   vault: MailVault,
-  _expiresIn = 3600,
+  /** @deprecated cookie maxAge is always 30d; JWT lifetime handled via refresh */
+  _expiresIn?: number,
 ) {
+  void _expiresIn;
   const active = vault.accounts[vault.activeId];
   if (!active) return;
 

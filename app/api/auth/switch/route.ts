@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let vault = readVaultFromRequest(req) || (await readVault());
+  const vault = readVaultFromRequest(req) || (await readVault());
   if (!vault?.accounts[accountId]) {
     return NextResponse.json(
       { ok: false, error: { message: "Аккаунт не найден" } },
