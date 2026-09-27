@@ -65,6 +65,15 @@ const folderIcons: Partial<Record<FolderId, typeof Inbox>> = {
 type CustomFolder = { id: string; name: string };
 type MailLabelItem = { id: string; name: string; color: string };
 
+/** Motion spring for open/close of the letter panel (not used when switching letters). */
+const READER_SPRING = {
+  type: "spring" as const,
+  stiffness: 420,
+  damping: 38,
+  mass: 0.82,
+};
+const READER_SNAP = { type: "tween" as const, duration: 0 };
+
 type MailAccount = {
   id: string;
   name: string;
@@ -580,6 +589,8 @@ export default function MailApp() {
   const [openId, setOpenId] = useState<string | null>(null);
   /** Animate list↔reader only when opening/closing the panel — not when switching letters. */
   const [readerPanelAnim, setReaderPanelAnim] = useState(true);
+  /** Sync flag so the first paint of open/close never uses a stale anim mode. */
+  const readerPanelAnimRef = useRef(true);
   const [swipeOpenId, setSwipeOpenId] = useState<string | null>(null);
   const [detail, setDetail] = useState<MessageDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -1563,6 +1574,7 @@ export default function MailApp() {
   };
 
   const closeReader = () => {
+    readerPanelAnimRef.current = true;
     setReaderPanelAnim(true);
     setOpenId(null);
     openIdRef.current = null;
@@ -1596,7 +1608,8 @@ export default function MailApp() {
     const switching = alreadyOpen && openIdRef.current !== id;
     const cached = detailCache.current.get(id);
 
-    // Panel slide only when first opening (or later closing) — never when hopping letters
+    // Panel spring only when first opening / closing — never when hopping letters
+    readerPanelAnimRef.current = !alreadyOpen;
     setReaderPanelAnim(!alreadyOpen);
 
     openIdRef.current = id;
@@ -2491,22 +2504,29 @@ export default function MailApp() {
               <motion.div
                 className={cn(
                   "absolute inset-0 flex flex-col overflow-hidden min-h-0 min-w-0",
-                  "md:top-3 md:bottom-3 md:left-3",
+                  "md:top-3 md:bottom-3 md:left-3 md:right-auto",
                   openId && "max-md:pointer-events-none max-md:aria-hidden",
                 )}
                 aria-hidden={openId && isMobileUi ? true : undefined}
                 initial={false}
-                animate={{
-                  // Desktop: list slides left + shrinks as the letter arrives from the right
-                  right: isMobileUi ? 0 : openId ? "calc(50% + 6px)" : 12,
-                  x: openId ? (isMobileUi ? "-14%" : -20) : 0,
-                  opacity: isMobileUi && openId ? 0.35 : 1,
-                }}
-                transition={
-                  readerPanelAnim
-                    ? { duration: 0.32, ease: [0.22, 1, 0.36, 1] }
-                    : { duration: 0 }
+                animate={
+                  isMobileUi
+                    ? {
+                        // Mobile: list stays put; letter covers from the right
+                        width: "100%",
+                        x: 0,
+                        opacity: openId ? 0.32 : 1,
+                      }
+                    : {
+                        // Desktop: left edge fixed — width shrinks so free space opens on the RIGHT
+                        width: openId
+                          ? "calc(50% - 15px)"
+                          : "calc(100% - 24px)",
+                        x: 0,
+                        opacity: 1,
+                      }
                 }
+                transition={readerPanelAnim ? READER_SPRING : READER_SNAP}
               >
               <MobileMailBanners enabled={Boolean(activeAccount)} />
               <PullToRefresh
@@ -2535,12 +2555,13 @@ export default function MailApp() {
                       <motion.li
                         key={m.id}
                         className="relative min-w-0"
-                        initial={{ opacity: 0, y: 8 }}
+                        initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{
-                          duration: 0.2,
-                          delay: Math.min(i, 10) * 0.025,
-                          ease: [0.22, 1, 0.36, 1],
+                          type: "spring",
+                          stiffness: 480,
+                          damping: 36,
+                          delay: Math.min(i, 8) * 0.02,
                         }}
                         layout={false}
                       >
@@ -2554,7 +2575,7 @@ export default function MailApp() {
                           <div
                             data-pressable
                             className={cn(
-                              "relative flex items-center gap-2.5 md:gap-2.5 px-2.5 md:px-2.5 h-[56px] md:h-[50px] cursor-pointer rounded-[14px] transition-colors overflow-hidden min-w-0 w-full box-border",
+                              "relative flex items-center gap-2.5 md:gap-2.5 px-2.5 md:px-2.5 h-[56px] md:h-[50px] cursor-pointer rounded-[14px] overflow-hidden min-w-0 w-full box-border",
                               isOpen
                                 ? "bg-[#0066ff]/25 ring-1 ring-inset ring-[#0066ff]/40"
                                 : isSel
@@ -2671,19 +2692,19 @@ export default function MailApp() {
               {openId && (
                 <motion.div
                   key="mail-reader"
-                  initial={readerPanelAnim ? { x: "100%" } : false}
-                  animate={{ x: 0 }}
-                  exit={{ x: "100%" }}
-                  transition={
-                    readerPanelAnim
-                      ? { duration: 0.32, ease: [0.22, 1, 0.36, 1] }
-                      : { duration: 0 }
+                  initial={
+                    readerPanelAnimRef.current
+                      ? { x: "104%", opacity: 0.55, scale: 0.985 }
+                      : false
                   }
+                  animate={{ x: 0, opacity: 1, scale: 1 }}
+                  exit={{ x: "104%", opacity: 0.55, scale: 0.985 }}
+                  transition={readerPanelAnim ? READER_SPRING : READER_SNAP}
                   className={cn(
-                    "z-30 flex flex-col overflow-hidden rounded-[16px] border border-white/10 bg-[#111318]",
-                    // Mobile: inset card. Desktop: half panel, padded from parent edges
+                    "z-30 flex flex-col overflow-hidden rounded-[16px] border border-white/10 bg-[#111318] will-change-transform",
+                    // Mobile: full inset card from the right. Desktop: right half, left edge fixed via width
                     "absolute inset-2",
-                    "md:inset-auto md:top-3 md:bottom-3 md:right-3 md:left-[calc(50%+6px)]",
+                    "md:inset-auto md:top-3 md:bottom-3 md:right-3 md:w-[calc(50%-15px)]",
                   )}
                 >
                     <div className="shrink-0 flex items-center gap-2 px-3 md:px-5 h-12">
