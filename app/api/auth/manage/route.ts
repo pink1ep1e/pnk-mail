@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PNK_ID_CLIENT_ID, PNK_ID_URL, mailAuthStartUrl } from "@/lib/id-auth";
+import {
+  PNK_ID_CLIENT_ID,
+  PNK_ID_URL,
+  getServerPnkIdUrl,
+  mailAuthStartUrl,
+} from "@/lib/id-auth";
 import { getMailClientSecret } from "@/lib/mail-secrets";
 import {
   applyActiveCookies,
@@ -21,7 +26,7 @@ async function buildResumeUrl(req: NextRequest): Promise<
     return { ok: false, loginUrl: startLogin.toString() };
   }
 
-  const handoffRes = await fetch(`${PNK_ID_URL}/api/auth/handoff`, {
+  const handoffRes = await fetch(`${getServerPnkIdUrl()}/api/auth/handoff`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -39,6 +44,7 @@ async function buildResumeUrl(req: NextRequest): Promise<
   }
 
   const code = String(handoffJson.data.code);
+  // Browser must open public ID host (not 127.0.0.1)
   const resume = new URL(`${PNK_ID_URL}/api/auth/resume`);
   resume.searchParams.set("code", code);
   // embed=1 hints ID to avoid breaking out of iframe / chrome

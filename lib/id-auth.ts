@@ -5,6 +5,20 @@ export const PNK_ID_URL =
     process.env.NEXT_PUBLIC_PNK_ID_URL?.replace(/\/$/, "")) ||
   "http://localhost:3100";
 
+/**
+ * Server-side calls to pnk-id (token / userinfo).
+ * Prefer loopback so the VPS doesn't hairpin through nginx (hang → 502).
+ */
+export function getServerPnkIdUrl(): string {
+  const internal = process.env.PNK_ID_INTERNAL_URL?.replace(/\/$/, "");
+  if (internal) return internal;
+  // Same-host production default
+  if (process.env.NODE_ENV === "production") {
+    return "http://127.0.0.1:3100";
+  }
+  return PNK_ID_URL;
+}
+
 export const PNK_ID_CLIENT_ID = "pnk-mail";
 
 export const MAIL_OAUTH_REDIRECT =

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { PNK_ID_URL } from "@/lib/id-auth";
+import { PNK_ID_URL, getServerPnkIdUrl } from "@/lib/id-auth";
 import {
   applyActiveCookies,
   getAccessToken,
@@ -16,7 +16,7 @@ async function fetchUserinfo(
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const res = await fetch(`${PNK_ID_URL}/api/oauth/userinfo`, {
+    const res = await fetch(`${getServerPnkIdUrl()}/api/oauth/userinfo`, {
       headers: { Authorization: `Bearer ${token}` },
       cache: "no-store",
       signal: ctrl.signal,

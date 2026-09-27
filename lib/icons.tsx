@@ -121,7 +121,7 @@ function makeIcon(paths: readonly StreamlinePath[]) {
         height={size}
         viewBox="0 0 14 14"
         fill="none"
-        className={cn("shrink-0", className)}
+        className={cn("block shrink-0", className)}
         aria-hidden
       >
         {paths.map((p, i) => (

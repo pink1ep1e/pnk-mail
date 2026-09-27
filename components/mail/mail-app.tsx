@@ -2472,15 +2472,20 @@ export default function MailApp() {
             </div>
 
             {/* Message list + reader */}
-            <div className="relative flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
-              <div
+            <div className="relative flex-1 min-h-0 overflow-hidden">
+              <motion.div
                 className={cn(
-                  "flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden",
-                  // Desktop split: shrink list. Mobile: keep list under overlay (no blank flash).
-                  openId && "md:flex md:max-w-[50%] md:border-r md:border-white/8",
+                  "absolute inset-0 flex flex-col overflow-hidden min-h-0 min-w-0",
+                  "md:top-3 md:bottom-3 md:left-3",
                   openId && "max-md:pointer-events-none max-md:aria-hidden",
                 )}
                 aria-hidden={openId && isMobileUi ? true : undefined}
+                initial={false}
+                animate={{
+                  // Desktop: list shrinks/expands together with the letter panel
+                  right: isMobileUi ? 0 : openId ? "calc(50% + 6px)" : 12,
+                }}
+                transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
               >
               <MobileMailBanners enabled={Boolean(activeAccount)} />
               <PullToRefresh
@@ -2639,7 +2644,7 @@ export default function MailApp() {
                 </ul>
               )}
               </PullToRefresh>
-              </div>
+              </motion.div>
 
               <AnimatePresence initial={false}>
               {openId && (
@@ -2648,27 +2653,26 @@ export default function MailApp() {
                   initial={
                     isMobileUi
                       ? { x: "100%" }
-                      : { opacity: 0, y: 10 }
+                      : { opacity: 0, x: 28 }
                   }
                   animate={
                     isMobileUi
                       ? { x: 0 }
-                      : { opacity: 1, y: 0 }
+                      : { opacity: 1, x: 0 }
                   }
                   exit={
                     isMobileUi
                       ? { x: "100%" }
-                      : { opacity: 0, y: 6 }
+                      : { opacity: 0, x: 28 }
                   }
-                  transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
+                  transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
                   className={cn(
-                    "flex flex-col bg-[#0c0d10]",
-                    // Mobile: slide over the list (list stays mounted → no dark flash)
-                    "absolute inset-0 z-30 md:static md:z-auto md:flex-1 md:min-h-0 md:min-w-0",
-                    "px-2 pb-2 md:px-0 md:pr-3 md:pb-3",
+                    "z-30 flex flex-col overflow-hidden rounded-[16px] border border-white/10 bg-[#111318]",
+                    // Mobile: inset card. Desktop: half panel, padded from parent edges
+                    "absolute inset-2",
+                    "md:inset-auto md:top-3 md:bottom-3 md:right-3 md:left-[calc(50%+6px)]",
                   )}
                 >
-                  <div className="flex-1 min-h-0 flex flex-col overflow-hidden rounded-[16px] bg-[#0c0d10] border border-white/10 mx-auto w-full">
                     <div className="shrink-0 flex items-center gap-2 px-3 md:px-5 h-12">
                       <button
                         type="button"
@@ -2722,7 +2726,7 @@ export default function MailApp() {
                     </div>
 
                     <div
-                      className="flex-1 overflow-y-auto mail-scroll"
+                      className="flex-1 min-h-0 overflow-y-auto mail-scroll"
                       key={`scroll-${openId}`}
                     >
                       <div className="mx-auto w-full max-w-[680px] px-3 sm:px-6 md:px-8 pt-4 md:pt-6 pb-10">
@@ -2879,7 +2883,7 @@ export default function MailApp() {
                                         )}
                                       >
                                         {detailLoading && isLast && (
-                                          <div className="absolute inset-0 z-10 rounded-[12px] bg-[#0c0d10]/50 flex items-center justify-center">
+                                          <div className="absolute inset-0 z-10 rounded-[12px] bg-[#111318]/50 flex items-center justify-center">
                                             <div className="h-8 w-8 rounded-full border-2 border-white/10 border-t-[#0066ff] animate-spin" />
                                           </div>
                                         )}
@@ -2910,7 +2914,6 @@ export default function MailApp() {
                         )}
                       </div>
                     </div>
-                  </div>
                 </motion.div>
               )}
               </AnimatePresence>

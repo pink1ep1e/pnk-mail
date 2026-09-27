@@ -514,9 +514,9 @@ function ToolBtn({
       }}
       className={cn(
         "relative shrink-0 inline-flex items-center justify-center gap-1 select-none",
-        "h-8 rounded-[8px] transition-[background-color,color,transform] duration-100",
-        "active:scale-[0.94] touch-manipulation",
-        wide ? "px-2.5 min-w-8" : "w-8",
+        "h-8 w-8 rounded-[8px] transition-[background-color,color,transform] duration-100",
+        "active:scale-[0.94] touch-manipulation leading-none",
+        wide && "!w-auto px-2.5 min-w-8",
         pressed
           ? "bg-[#0066ff]/25 text-[#7eb6ff]"
           : "text-white/50 hover:bg-white/[0.06] hover:text-white/90",
@@ -524,7 +524,9 @@ function ToolBtn({
         className,
       )}
     >
-      {children}
+      <span className="inline-flex items-center justify-center leading-none [&>svg]:block">
+        {children}
+      </span>
       {accent ? (
         <span
           className="absolute bottom-[3px] left-1/2 -translate-x-1/2 h-[2px] w-3.5 rounded-full"
@@ -2494,7 +2496,7 @@ export default function ComposeEditor({
                 <button
                   type="button"
                   onClick={handleSend}
-                  className="h-11 px-5 rounded-[12px] bg-[#0066ff] text-white font-semibold text-[15px] hover:bg-[#0052cc] transition-colors shrink-0 shadow-none"
+                  className="h-11 px-5 rounded-[12px] bg-[#0066ff] text-white font-semibold text-[15px] hover:bg-[#0052cc] transition-colors shrink-0 shadow-none inline-flex items-center justify-center"
                 >
                   {sentFlash ? "Отправлено" : "Отправить"}
                 </button>
