@@ -24,6 +24,7 @@ import {
   Link2,
   List,
   ListOrdered,
+  Loader2,
   Maximize2,
   Minimize2,
   MoreHorizontal,
@@ -792,6 +793,7 @@ export default function ComposeEditor({
     null,
   );
   const [sentFlash, setSentFlash] = useState(false);
+  const [sending, setSending] = useState(false);
   const [statusFlash, setStatusFlash] = useState("");
   const [templates, setTemplates] = useState<SavedTemplate[]>([]);
   const [composeLabels, setComposeLabels] = useState<string[]>([]);
@@ -1396,7 +1398,7 @@ export default function ComposeEditor({
   };
 
   const handleSend = () => {
-    if (sendingRef.current || sentFlash) return;
+    if (sendingRef.current || sending || sentFlash) return;
     let bodyHtml = editorRef.current?.innerHTML?.trim() || "";
     const draftChip = toRecipient(toDraft, allContacts, fromEmail, fromName);
     const merged = [
@@ -1459,10 +1461,12 @@ export default function ComposeEditor({
       attachments: apiAttachments.length ? apiAttachments : undefined,
     };
     sendingRef.current = true;
+    setSending(true);
     void (async () => {
       try {
         await onSend?.(payload);
         setSentFlash(true);
+        setSending(false);
         if (notifyDelivery) onToast?.("Будем следить за доставкой");
         if (remindNoReply) onToast?.("Напомним, если не будет ответа");
         if (activeDraftId) {
@@ -1491,6 +1495,7 @@ export default function ComposeEditor({
         }, 700);
       } catch {
         sendingRef.current = false;
+        setSending(false);
         // Parent shows error; keep composer open
       }
     })();
@@ -2496,9 +2501,23 @@ export default function ComposeEditor({
                 <button
                   type="button"
                   onClick={handleSend}
-                  className="h-11 px-5 rounded-[12px] bg-[#0066ff] text-white font-semibold text-[15px] hover:bg-[#0052cc] transition-colors shrink-0 shadow-none inline-flex items-center justify-center"
+                  disabled={sending || sentFlash}
+                  aria-busy={sending}
+                  className={cn(
+                    "h-11 px-5 rounded-[12px] bg-[#0066ff] text-white font-semibold text-[15px] shrink-0 shadow-none inline-flex items-center justify-center gap-2",
+                    sending || sentFlash
+                      ? "opacity-90 cursor-not-allowed"
+                      : "hover:bg-[#0052cc]",
+                  )}
                 >
-                  {sentFlash ? "Отправлено" : "Отправить"}
+                  {sending && (
+                    <Loader2 size={16} className="animate-spin shrink-0" />
+                  )}
+                  {sentFlash
+                    ? "Отправлено"
+                    : sending
+                      ? "Отправка…"
+                      : "Отправить"}
                 </button>
 
                 <ToolBtn
