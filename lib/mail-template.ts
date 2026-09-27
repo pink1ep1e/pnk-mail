@@ -89,8 +89,9 @@ const READER_DARK_CSS = `
   html, body {
     margin: 0;
     padding: 0;
-    height: auto !important;
-    min-height: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 100% !important;
     max-height: none !important;
     background: #0c0d10 !important;
     color: rgba(255,255,255,0.90);
@@ -98,8 +99,11 @@ const READER_DARK_CSS = `
     font-size: 15px;
     line-height: 1.55;
     -webkit-font-smoothing: antialiased;
+    overflow: auto;
+    overflow-x: hidden;
+    box-sizing: border-box;
   }
-  body { padding: 4px 2px 8px; }
+  body { padding: 12px 14px 16px; }
   a {
     color: #4d9fff !important;
     text-decoration: underline !important;
@@ -175,8 +179,9 @@ const READER_LIGHT_CSS = `
   html, body {
     margin: 0 !important;
     padding: 0 !important;
-    height: auto !important;
-    min-height: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 100% !important;
     max-height: none !important;
     background: #ffffff !important;
     color: #1a1a1a;
@@ -184,8 +189,8 @@ const READER_LIGHT_CSS = `
     font-size: 15px;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
+    overflow: auto;
     overflow-x: hidden;
-    width: 100% !important;
     box-sizing: border-box;
   }
   *, *::before, *::after { box-sizing: border-box; }

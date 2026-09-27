@@ -40,7 +40,7 @@ import { AppSplash } from "@/components/shared/app-splash";
 import { PushSubscribe } from "@/components/shared/push-subscribe";
 import { MobileMailBanners } from "@/components/shared/mobile-mail-banners";
 import { MailAttachmentsList } from "@/components/mail/mail-attachments-list";
-import { extractAttachmentsFromHtml, stripAttachmentsBlock } from "@/lib/mail-attachments";
+import { extractAttachmentsFromHtml, hasVisibleMailBody, stripAttachmentsBlock } from "@/lib/mail-attachments";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { haptic } from "@/lib/haptic";
 import { prepareMailReaderSrcDoc, isBrandedHtmlEmail } from "@/lib/mail-template";
@@ -291,16 +291,7 @@ function SenderAvatar({
   );
 }
 
-function MailBodyFrame({
-  html,
-  layoutReady = true,
-}: {
-  html: string;
-  /** False while the reader panel is still sliding in — avoid measuring mid-animation. */
-  layoutReady?: boolean;
-}) {
-  const ref = useRef<HTMLIFrameElement>(null);
-  const wrapRef = useRef<HTMLDivElement>(null);
+function MailBodyFrame({ html }: { html: string }) {
   const branded = useMemo(() => isBrandedHtmlEmail(html || ""), [html]);
   const srcDoc = useMemo(() => prepareMailReaderSrcDoc(html), [html]);
   const [ready, setReady] = useState(false);
@@ -308,233 +299,42 @@ function MailBodyFrame({
 
   useEffect(() => {
     setReady(false);
-    const iframe = ref.current;
-    if (!iframe || !layoutReady) return;
+  }, [srcDoc]);
 
-    let fitting = false;
-    let lastH = 0;
-    let lastW = 0;
-    let revealed = false;
-    let applyTimer = 0;
-    let revealTimer = 0;
-    let stableTimer = 0;
-    const imgCleanups: Array<() => void> = [];
-
-    const pendingImages = () => {
-      const doc = iframe.contentDocument;
-      if (!doc) return false;
-      return Array.from(doc.querySelectorAll("img")).some((img) => !img.complete);
-    };
-
-    /**
-     * Collapse → natural scrollHeight (avoids feedback loop).
-     * Prefer measuring only when the wrap has a real width.
-     */
-    const measureCollapsed = (): number | null => {
-      const doc = iframe.contentDocument;
-      const body = doc?.body;
-      const root = doc?.documentElement;
-      if (!doc || !body || !root) return null;
-      if (fitting) return null;
-      fitting = true;
-      const prevH = iframe.style.height;
-      try {
-        body.style.transform = "";
-        body.style.transformOrigin = "";
-        body.style.width = "";
-        body.style.height = "";
-        (root.style as CSSStyleDeclaration & { zoom?: string }).zoom = "";
-        root.style.overflowX = "hidden";
-        body.style.overflowX = "hidden";
-        root.style.overflowY = "hidden";
-        body.style.overflowY = "hidden";
-
-        const frameW =
-          iframe.clientWidth || wrapRef.current?.clientWidth || 0;
-        // Mid-slide / collapsed panel → bogus fit-to-width (the "thin bar" bug)
-        if (frameW < 120) return null;
-
-        // Measure with a real height first (avoid 1px flash / squash)
-        iframe.style.height = "auto";
-        const naturalProbe = Math.max(
-          root.scrollHeight,
-          body.scrollHeight,
-          48,
-        );
-        // Temporary height for accurate scrollWidth of wide tables
-        iframe.style.height = `${Math.min(naturalProbe, 4000)}px`;
-
-        let contentW = Math.max(root.scrollWidth, body.scrollWidth);
-        body.querySelectorAll("table, img, pre").forEach((el) => {
-          contentW = Math.max(contentW, (el as HTMLElement).scrollWidth || 0);
-        });
-
-        let scale = 1;
-        if (contentW > frameW + 8) {
-          scale = Math.max(0.55, Math.min(1, (frameW - 4) / contentW));
-        }
-
-        const supportsZoom =
-          typeof CSS !== "undefined" &&
-          (CSS.supports?.("zoom", "0.5") || "zoom" in root.style);
-
-        if (scale < 1 && supportsZoom) {
-          (root.style as CSSStyleDeclaration & { zoom?: string }).zoom =
-            String(scale);
-        } else if (scale < 1) {
-          body.style.transformOrigin = "top left";
-          body.style.transform = `scale(${scale})`;
-          body.style.width = `${100 / scale}%`;
-        }
-
-        const rawH = Math.max(
-          root.scrollHeight,
-          body.scrollHeight,
-          body.offsetHeight,
-          48,
-        );
-        let h =
-          scale < 1 && !supportsZoom ? Math.ceil(rawH * scale) : Math.ceil(rawH);
-        h = Math.min(Math.max(h + 2, 48), 8000);
-        lastW = frameW;
-        return h;
-      } finally {
-        if (!iframe.style.height || iframe.style.height === "1px") {
-          iframe.style.height = prevH || "120px";
-        }
-        fitting = false;
-      }
-    };
-
-    const applyHeight = (h: number) => {
-      if (lastH > 0 && Math.abs(h - lastH) < 2) {
-        iframe.style.height = `${lastH}px`;
-        return;
-      }
-      lastH = h;
-      iframe.style.height = `${h}px`;
-    };
-
-    const reveal = () => {
-      if (revealed) return;
-      const h = measureCollapsed();
-      if (h != null) applyHeight(h);
-      // Don't reveal a collapsed probe height
-      if (h != null && h < 40) return;
-      revealed = true;
-      setReady(true);
-    };
-
-    const onImageSettled = () => {
-      window.clearTimeout(applyTimer);
-      applyTimer = window.setTimeout(() => {
-        const h = measureCollapsed();
-        if (h != null) applyHeight(h);
-        if (!revealed && !pendingImages()) {
-          window.clearTimeout(revealTimer);
-          reveal();
-        }
-      }, 40);
-    };
-
-    const bindImages = () => {
-      const doc = iframe.contentDocument;
-      if (!doc) return;
-      doc.querySelectorAll("img").forEach((img) => {
-        if (img.complete) return;
-        const onImg = () => onImageSettled();
-        img.addEventListener("load", onImg);
-        img.addEventListener("error", onImg);
-        imgCleanups.push(() => {
-          img.removeEventListener("load", onImg);
-          img.removeEventListener("error", onImg);
-        });
-      });
-    };
-
-    const onLoad = () => {
-      bindImages();
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          const h = measureCollapsed();
-          if (h != null) applyHeight(h);
-          if (!pendingImages()) {
-            reveal();
-            return;
-          }
-          revealTimer = window.setTimeout(() => {
-            reveal();
-          }, 1400);
-        });
-      });
-    };
-
-    iframe.addEventListener("load", onLoad);
-    if (iframe.contentDocument?.readyState === "complete") onLoad();
-
-    const ro =
-      typeof ResizeObserver !== "undefined"
-        ? new ResizeObserver((entries) => {
-            const w = entries[0]?.contentRect?.width ?? 0;
-            if (w < 120) return;
-            if (Math.abs(w - lastW) < 4) return;
-            window.clearTimeout(stableTimer);
-            // Debounce until layout width settles (open animation / split pane)
-            stableTimer = window.setTimeout(() => {
-              const h = measureCollapsed();
-              if (h != null) {
-                applyHeight(h);
-                if (!revealed) reveal();
-              }
-            }, 80);
-          })
-        : null;
-    if (wrapRef.current) ro?.observe(wrapRef.current);
-
-    return () => {
-      iframe.removeEventListener("load", onLoad);
-      window.clearTimeout(applyTimer);
-      window.clearTimeout(revealTimer);
-      window.clearTimeout(stableTimer);
-      imgCleanups.forEach((fn) => fn());
-      ro?.disconnect();
-    };
-  }, [srcDoc, layoutReady]);
-
+  // CSS-sized iframe — no JS height probing (that caused the squash → expand bug)
   return (
     <div
-      ref={wrapRef}
       className={cn(
-        "relative w-full overflow-x-hidden overflow-y-hidden rounded-[16px] border mx-auto",
+        "relative w-full overflow-hidden rounded-[16px] border",
         branded
           ? "border-white/15 shadow-[0_0_0_1px_rgba(255,255,255,0.04)]"
           : "border-white/8",
       )}
       style={{
-        backgroundColor: ready && branded ? "#ffffff" : "#0c0d10",
-        minHeight: ready ? undefined : 160,
+        backgroundColor: canvas,
+        // Adaptive viewport fill — stable from first paint
+        height: "clamp(220px, 52vh, 720px)",
       }}
     >
-      {(!ready || !layoutReady) && (
+      {!ready && (
         <div
-          className="absolute inset-0 z-[1] flex items-center justify-center bg-[#0c0d10] min-h-[160px]"
+          className="absolute inset-0 z-[1] flex items-center justify-center"
+          style={{ backgroundColor: canvas }}
           aria-hidden
         >
           <div className="h-7 w-7 rounded-full border-2 border-white/10 border-t-[#0066ff] animate-spin" />
         </div>
       )}
       <iframe
-        ref={ref}
         title="Письмо"
         sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
-        srcDoc={layoutReady ? srcDoc : undefined}
-        className="w-full border-0 block"
+        srcDoc={srcDoc}
+        onLoad={() => setReady(true)}
+        className="absolute inset-0 h-full w-full border-0 block"
         style={{
-          minHeight: 48,
           backgroundColor: canvas,
           colorScheme: branded ? "light" : "dark",
-          opacity: ready && layoutReady ? 1 : 0,
-          transition: "none",
+          opacity: ready ? 1 : 0,
         }}
       />
     </div>
@@ -612,8 +412,6 @@ export default function MailApp() {
   const [readerPanelAnim, setReaderPanelAnim] = useState(true);
   /** Sync flag so the first paint of open/close never uses a stale anim mode. */
   const readerPanelAnimRef = useRef(true);
-  /** True after open spring finishes (or immediately on letter switch) — gates iframe measure. */
-  const [readerLayoutReady, setReaderLayoutReady] = useState(false);
   const [swipeOpenId, setSwipeOpenId] = useState<string | null>(null);
   const [detail, setDetail] = useState<MessageDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -1599,7 +1397,6 @@ export default function MailApp() {
   const closeReader = () => {
     readerPanelAnimRef.current = true;
     setReaderPanelAnim(true);
-    setReaderLayoutReady(false);
     setOpenId(null);
     openIdRef.current = null;
     setDetail(null);
@@ -1635,8 +1432,6 @@ export default function MailApp() {
     // Panel spring only when first opening / closing — never when hopping letters
     readerPanelAnimRef.current = !alreadyOpen;
     setReaderPanelAnim(!alreadyOpen);
-    // Switch: layout already settled. First open: wait for spring onAnimationComplete
-    setReaderLayoutReady(alreadyOpen);
 
     openIdRef.current = id;
     setOpenId(id);
@@ -1734,13 +1529,6 @@ export default function MailApp() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- open once after boot
   }, [bootReady, showApp]);
-
-  // Failsafe: never leave letter body stuck behind layoutReady=false
-  useEffect(() => {
-    if (!openId || readerLayoutReady) return;
-    const t = window.setTimeout(() => setReaderLayoutReady(true), 700);
-    return () => window.clearTimeout(t);
-  }, [openId, readerLayoutReady]);
 
   const prefetchMessage = (id: string) => {
     if (detailCache.current.has(id)) return;
@@ -2733,9 +2521,6 @@ export default function MailApp() {
                   animate={{ x: 0, opacity: 1 }}
                   exit={{ x: "104%", opacity: 0.6 }}
                   transition={readerPanelAnim ? READER_SPRING : READER_SNAP}
-                  onAnimationComplete={() => {
-                    if (openIdRef.current) setReaderLayoutReady(true);
-                  }}
                   className={cn(
                     "z-30 flex flex-col overflow-hidden rounded-[16px] border border-white/10 bg-[#111318] will-change-transform",
                     // Mobile: full inset card from the right. Desktop: right half, left edge fixed via width
@@ -2929,23 +2714,24 @@ export default function MailApp() {
                                           !isLast && "pb-4",
                                         )}
                                       >
-                                        {msg.bodyHtml ? (
+                                        {msg.bodyHtml &&
+                                        hasVisibleMailBody(msg.bodyHtml) ? (
                                           <MailBodyFrame
                                             html={stripAttachmentsBlock(
                                               msg.bodyHtml,
                                             )}
-                                            layoutReady={readerLayoutReady}
                                           />
-                                        ) : (
-                                          <div className="rounded-[12px] bg-white/[0.03] p-6 space-y-3 animate-pulse min-h-[80px]">
-                                            <div className="h-3 rounded-md bg-white/[0.06] w-[90%]" />
-                                            <div className="h-3 rounded-md bg-white/[0.05] w-[72%]" />
-                                          </div>
-                                        )}
+                                        ) : null}
                                         <MailAttachmentsList
                                           items={extractAttachmentsFromHtml(
                                             msg.bodyHtml || "",
                                           )}
+                                          className={
+                                            msg.bodyHtml &&
+                                            hasVisibleMailBody(msg.bodyHtml)
+                                              ? "mt-3"
+                                              : "mt-0"
+                                          }
                                         />
                                       </div>
                                     </div>

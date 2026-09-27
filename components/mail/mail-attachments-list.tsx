@@ -1,7 +1,7 @@
 "use client";
 
 import { formatBytes, type MailAttachmentMeta } from "@/lib/mail-attachments";
-import { fileIconSrc } from "@/lib/file-icon";
+import { fileExt, fileIconSrc } from "@/lib/file-icon";
 import { cn } from "@/lib/utils";
 
 function downloadAttachment(a: MailAttachmentMeta) {
@@ -28,6 +28,17 @@ function downloadAttachment(a: MailAttachmentMeta) {
   }
 }
 
+function typeBadge(name: string, mime?: string): string {
+  const ext = fileExt(name);
+  if (ext) return ext.toUpperCase().slice(0, 5);
+  const t = (mime || "").toLowerCase();
+  if (t.includes("pdf")) return "PDF";
+  if (t.startsWith("image/")) return "IMG";
+  if (t.startsWith("video/")) return "VIDEO";
+  if (t.startsWith("audio/")) return "AUDIO";
+  return "FILE";
+}
+
 export function MailAttachmentsList({
   items,
   className,
@@ -37,38 +48,52 @@ export function MailAttachmentsList({
 }) {
   if (!items.length) return null;
   return (
-    <div className={cn("mt-4 space-y-2", className)}>
-      <p className="text-[13px] text-white/45 font-[family-name:var(--font-manrope)] font-semibold">
+    <div className={cn(className)}>
+      <p className="mb-2.5 text-[13px] text-white/45 font-[family-name:var(--font-manrope)] font-semibold leading-none">
         Вложения · {items.length}
       </p>
-      <ul className="space-y-1.5">
-        {items.map((a) => (
-          <li key={a.id}>
-            <button
-              type="button"
-              onClick={() => downloadAttachment(a)}
-              className="w-full flex items-center gap-3 rounded-[12px] border border-[#0066ff]/30 bg-[#0066ff]/12 px-3 py-2.5 text-left cursor-pointer hover:bg-[#0066ff]/18 transition-colors"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={fileIconSrc(a.name, a.type)}
-                alt=""
-                width={36}
-                height={36}
-                className="h-9 w-9 shrink-0 object-contain"
-              />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[14px] font-semibold text-white font-[family-name:var(--font-manrope)]">
+      <ul className="flex flex-wrap gap-2.5 m-0 p-0 list-none">
+        {items.map((a) => {
+          const badge = typeBadge(a.name, a.type);
+          return (
+            <li key={a.id} className="m-0 p-0">
+              <button
+                type="button"
+                onClick={() => downloadAttachment(a)}
+                title={`${a.name}${a.size > 0 ? ` · ${formatBytes(a.size)}` : ""}`}
+                className="group w-[108px] text-left cursor-pointer"
+              >
+                <span
+                  className={cn(
+                    "relative flex aspect-square w-full items-center justify-center overflow-hidden",
+                    "rounded-[16px] border border-white/10 bg-[#1a1c24]",
+                    "group-hover:border-[#0066ff]/45 group-hover:bg-[#1e2230] transition-colors",
+                  )}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={fileIconSrc(a.name, a.type)}
+                    alt=""
+                    width={48}
+                    height={48}
+                    className="h-12 w-12 object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.35)]"
+                  />
+                  <span className="absolute left-2 bottom-2 rounded-[6px] bg-black/55 px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-white/90 font-[family-name:var(--font-manrope)] backdrop-blur-[2px]">
+                    {badge}
+                  </span>
+                </span>
+                <span className="mt-1.5 block truncate px-0.5 text-[12px] font-medium text-white/80 font-[family-name:var(--font-manrope)]">
                   {a.name}
                 </span>
-                <span className="block text-[12px] text-white/40 font-[family-name:var(--font-manrope)]">
-                  {a.size > 0 ? `${formatBytes(a.size)} · ` : ""}
-                  скачать
-                </span>
-              </span>
-            </button>
-          </li>
-        ))}
+                {a.size > 0 && (
+                  <span className="block truncate px-0.5 text-[11px] text-white/35 font-[family-name:var(--font-manrope)]">
+                    {formatBytes(a.size)}
+                  </span>
+                )}
+              </button>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

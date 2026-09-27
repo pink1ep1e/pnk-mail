@@ -108,6 +108,25 @@ export function stripAttachmentsBlock(html: string): string {
   return out;
 }
 
+/** True if stripped HTML still has readable text/media (skip empty black iframe). */
+export function hasVisibleMailBody(html: string): boolean {
+  const stripped = stripAttachmentsBlock(html || "");
+  if (!stripped.trim()) return false;
+  const text = stripped
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<\/(p|div|tr|li|h[1-6])>/gi, " ")
+    .replace(/<img\b[^>]*>/gi, "◆")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&[a-z]+;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return text.length > 0;
+}
+
 export function dataUrlToBase64Parts(dataUrl: string): {
   contentType: string;
   content: string;
