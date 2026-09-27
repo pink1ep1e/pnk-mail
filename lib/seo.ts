@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import {
   DEFAULT_DESCRIPTION,
   DEFAULT_KEYWORDS,
+  SITE_ALT_NAMES,
   SITE_DOMAIN,
   SITE_NAME,
   SITE_NAME_SHORT,
@@ -27,7 +28,7 @@ export function buildPageMetadata({
   const url = `${base}${path === "/" ? "" : path}`;
   const fullTitle =
     title === SITE_NAME || title === SITE_NAME_SHORT
-      ? `${SITE_NAME} — электронная почта @pnkmail.ru`
+      ? `${SITE_NAME} (пнк почта) — электронная почта @pnkmail.ru`
       : `${title} · ${SITE_NAME}`;
 
   return {
@@ -70,16 +71,25 @@ export function organizationJsonLd() {
     "@context": "https://schema.org",
     "@type": "Organization",
     name: SITE_NAME_SHORT,
+    alternateName: SITE_ALT_NAMES,
     legalName: "pnk почта",
+    brand: {
+      "@type": "Brand",
+      name: SITE_NAME,
+      alternateName: SITE_ALT_NAMES,
+    },
     url: base,
     logo: `${base}/icon-512.png`,
+    image: `${base}/icon-512.png`,
     email: `hello@${SITE_DOMAIN}`,
+    description: DEFAULT_DESCRIPTION,
     sameAs: [],
     contactPoint: {
       "@type": "ContactPoint",
       contactType: "customer support",
       email: `hello@${SITE_DOMAIN}`,
-      availableLanguage: ["Russian"],
+      availableLanguage: ["Russian", "ru"],
+      areaServed: "RU",
     },
   };
 }
@@ -90,10 +100,15 @@ export function websiteJsonLd() {
     "@context": "https://schema.org",
     "@type": "WebSite",
     name: SITE_NAME_SHORT,
+    alternateName: SITE_ALT_NAMES,
     url: base,
     inLanguage: "ru-RU",
     description: DEFAULT_DESCRIPTION,
-    publisher: { "@type": "Organization", name: SITE_NAME_SHORT },
+    publisher: {
+      "@type": "Organization",
+      name: SITE_NAME_SHORT,
+      alternateName: SITE_ALT_NAMES,
+    },
     potentialAction: {
       "@type": "SearchAction",
       target: `${base}/help?q={search_term_string}`,
@@ -108,18 +123,52 @@ export function softwareApplicationJsonLd() {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     name: SITE_NAME_SHORT,
+    alternateName: SITE_ALT_NAMES,
     applicationCategory: "BusinessApplication",
-    applicationSubCategory: "Email",
+    applicationSubCategory: "EmailClient",
     operatingSystem: "Web, iOS, Android",
     url: base,
     image: `${base}/icon-512.png`,
     description: DEFAULT_DESCRIPTION,
+    featureList: [
+      "Адрес @pnkmail.ru",
+      "Письма и вложения",
+      "Веб-интерфейс и PWA",
+      "Вход через pnk ID",
+      "Обмен с Gmail, Яндекс и Mail.ru",
+    ],
     offers: {
       "@type": "Offer",
       price: "0",
       priceCurrency: "RUB",
     },
     inLanguage: "ru-RU",
+    countriesSupported: "RU",
+  };
+}
+
+export function emailServiceJsonLd() {
+  const base = getSiteUrl();
+  return {
+    "@context": "https://schema.org",
+    "@type": "Service",
+    name: `${SITE_NAME} — электронная почта`,
+    alternateName: SITE_ALT_NAMES,
+    serviceType: "Email hosting",
+    provider: {
+      "@type": "Organization",
+      name: SITE_NAME_SHORT,
+    },
+    url: base,
+    description: DEFAULT_DESCRIPTION,
+    areaServed: {
+      "@type": "Country",
+      name: "Russia",
+    },
+    audience: {
+      "@type": "Audience",
+      audienceType: "Individuals and businesses",
+    },
   };
 }
 
@@ -142,23 +191,33 @@ export function faqJsonLd(
 
 export const HOME_FAQ = [
   {
-    question: "Что такое pnk почта?",
+    question: "Что такое pnk почта (пнк почта)?",
     answer:
-      "pnk почта — российский почтовый сервис с адресами @pnkmail.ru. Письма, вложения, веб-интерфейс и вход через pnk ID.",
+      "pnk почта — это современный почтовый сервис (также ищут как «пнк почта», pnk Mail, pnkmail). Вы получаете адрес вида имя@pnkmail.ru, веб-ящик и приложение: письма, вложения, вход через единый pnk ID.",
+  },
+  {
+    question: "Чем pnk почта отличается от обычной почты?",
+    answer:
+      "Это отдельный бренд почты на домене pnkmail.ru: быстрый русскоязычный интерфейс, крупные кнопки, удобные вложения и один аккаунт pnk ID для входа с телефона или компьютера — без лишнего шума рекламы.",
   },
   {
     question: "Как создать почту на pnkmail.ru?",
     answer:
-      "Откройте pnkmail.ru, нажмите «Открыть почту» и войдите или зарегистрируйтесь через pnk ID. Ящик @pnkmail.ru создаётся автоматически.",
+      "Откройте pnkmail.ru, нажмите «Открыть почту» и войдите или зарегистрируйтесь через pnk ID. Ящик @pnkmail.ru создаётся автоматически — отдельно регистрировать «пнк почту» не нужно.",
   },
   {
-    question: "Можно ли писать на Gmail и Яндекс?",
+    question: "Можно ли писать на Gmail, Яндекс и Mail.ru?",
     answer:
-      "Да. С @pnkmail.ru можно отправлять и получать письма с Gmail, Яндекс, Mail.ru и других сервисов.",
+      "Да. С адреса @pnkmail.ru можно отправлять и получать письма с Gmail, Яндекс Почты, Mail.ru и других сервисов по всему миру.",
+  },
+  {
+    question: "pnk почта бесплатная?",
+    answer:
+      "Личный ящик @pnkmail.ru можно открыть бесплатно. Для команд и магазинов есть pnk почта для бизнеса с корпоративными адресами.",
   },
   {
     question: "Есть ли почта для бизнеса?",
     answer:
-      "Да. На странице «Для бизнеса» можно оформить корпоративную почту для команды и клиентов.",
+      "Да. На странице «Для бизнеса» можно оформить корпоративную почту на базе pnk для сотрудников и клиентов.",
   },
 ];

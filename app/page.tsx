@@ -4,6 +4,7 @@ import { JsonLd } from "@/components/shared/json-ld";
 import {
   HOME_FAQ,
   buildPageMetadata,
+  emailServiceJsonLd,
   faqJsonLd,
   organizationJsonLd,
   softwareApplicationJsonLd,
@@ -25,6 +26,7 @@ export default function Home() {
           organizationJsonLd(),
           websiteJsonLd(),
           softwareApplicationJsonLd(),
+          emailServiceJsonLd(),
           faqJsonLd(HOME_FAQ),
         ]}
       />

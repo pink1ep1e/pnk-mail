@@ -31,7 +31,7 @@ const siteUrl = getSiteUrl();
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: `${SITE_NAME} — электронная почта @pnkmail.ru`,
+    default: `${SITE_NAME} (пнк почта) — электронная почта @pnkmail.ru`,
     template: `%s · ${SITE_NAME}`,
   },
   description: DEFAULT_DESCRIPTION,
@@ -69,12 +69,12 @@ export const metadata: Metadata = {
     locale: "ru_RU",
     url: siteUrl,
     siteName: SITE_NAME_SHORT,
-    title: `${SITE_NAME} — электронная почта @pnkmail.ru`,
+    title: `${SITE_NAME} (пнк почта) — электронная почта @pnkmail.ru`,
     description: DEFAULT_DESCRIPTION,
   },
   twitter: {
     card: "summary_large_image",
-    title: `${SITE_NAME} — электронная почта @pnkmail.ru`,
+    title: `${SITE_NAME} (пнк почта) — электронная почта @pnkmail.ru`,
     description: DEFAULT_DESCRIPTION,
   },
   robots: {

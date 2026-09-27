@@ -14,7 +14,9 @@ export const metadata: Metadata = buildPageMetadata({
     "почта на своём домене",
     "бизнес email",
     "pnk почта бизнес",
-    "pnkmail",
+    "пнк почта для бизнеса",
+    "pnkmail бизнес",
+    "корпоративная почта pnk",
   ],
 });
 
