@@ -5,6 +5,7 @@ import {
 } from "@/lib/cookie-crypto";
 import {
   PNK_ID_CLIENT_ID,
+  PNK_ID_URL,
   getServerPnkIdUrl,
 } from "@/lib/id-auth";
 import { getMailClientSecret } from "@/lib/mail-secrets";
@@ -128,35 +129,52 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const base = getServerPnkIdUrl();
-    const { json: tokenJsonRaw, status: tokenStatus } = await fetchJson(
-      `${base}/api/oauth/token`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          grant_type: "authorization_code",
-          code,
-          redirect_uri: redirectUri(req),
-          client_id: PNK_ID_CLIENT_ID,
-          client_secret: secret,
-        }),
-      },
-    );
-    const tokenJson = tokenJsonRaw as {
+    // Prefer loopback; fall back to public URL if local id is unreachable
+    const bases = [
+      getServerPnkIdUrl(),
+      ...(PNK_ID_URL && getServerPnkIdUrl() !== PNK_ID_URL ? [PNK_ID_URL] : []),
+    ];
+
+    type TokenResponse = {
       ok?: boolean;
       data?: {
         access_token?: string;
         refresh_token?: string;
         expires_in?: number;
       };
-    } | null;
+    };
+    let tokenJson: TokenResponse | null = null;
+    let tokenStatus = 0;
+    let baseUsed = bases[0];
+
+    for (const base of bases) {
+      try {
+        const r = await fetchJson(`${base}/api/oauth/token`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            grant_type: "authorization_code",
+            code,
+            redirect_uri: redirectUri(req),
+            client_id: PNK_ID_CLIENT_ID,
+            client_secret: secret,
+          }),
+        });
+        tokenStatus = r.status;
+        tokenJson = r.json as TokenResponse | null;
+        baseUsed = base;
+        if (tokenJson?.ok && tokenJson.data?.access_token) break;
+        console.warn("[auth/callback] token fail on", base, tokenStatus);
+      } catch (e) {
+        console.warn("[auth/callback] token fetch error on", base, e);
+      }
+    }
 
     if (!tokenJson?.ok || !tokenJson.data?.access_token) {
       console.error("token exchange failed", {
         tokenStatus,
         tokenJson,
-        idBase: base,
+        tried: bases,
       });
       const res = NextResponse.redirect(`${origin}/?error=token`);
       clearStateCookie(res);
@@ -167,9 +185,37 @@ export async function GET(req: NextRequest) {
     const refresh = tokenJson.data.refresh_token || "";
     const expiresIn = Number(tokenJson.data.expires_in) || 3600;
 
-    const user = await fetchUserinfo(access);
+    // userinfo against the same base that issued the token
+    let user = null as Awaited<ReturnType<typeof fetchUserinfo>>;
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 10_000);
+      const ui = await fetch(`${baseUsed}/api/oauth/userinfo`, {
+        headers: { Authorization: `Bearer ${access}` },
+        cache: "no-store",
+        signal: ctrl.signal,
+      });
+      clearTimeout(t);
+      const uj = await ui.json().catch(() => null);
+      if (uj?.ok && uj.data) {
+        const d = uj.data as Record<string, unknown>;
+        user = {
+          id: String(d.sub || ""),
+          login: String(d.preferred_username || ""),
+          email: (d.email as string) || null,
+          displayName: (d.name as string) || null,
+          firstName: (d.given_name as string) || null,
+          lastName: (d.family_name as string) || null,
+          avatarUrl: (d.picture as string) || null,
+        };
+      }
+    } catch (e) {
+      console.warn("[auth/callback] userinfo error", e);
+      user = await fetchUserinfo(access);
+    }
+
     if (!user?.id) {
-      console.error("userinfo failed after token ok", { idBase: base });
+      console.error("userinfo failed after token ok", { baseUsed });
       return NextResponse.redirect(`${origin}/?error=userinfo`);
     }
 

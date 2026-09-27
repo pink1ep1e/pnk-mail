@@ -193,7 +193,17 @@ function buildVaultFromCookies(
   if (meta) {
     const accounts: Record<string, MailVaultAccount> = {};
     for (const profile of meta.profiles) {
-      const tokens = decodeTokens(getCookie(source, tokenCookieName(profile.id)));
+      let tokens = decodeTokens(getCookie(source, tokenCookieName(profile.id)));
+      // Active account: tokens live in MAIL_ACCESS / MAIL_REFRESH (avoids huge duplicate cookies)
+      if (!tokens && profile.id === meta.activeId) {
+        const access = getCookie(source, MAIL_ACCESS_COOKIE);
+        if (access) {
+          tokens = {
+            accessToken: access,
+            refreshToken: getCookie(source, MAIL_REFRESH_COOKIE) || "",
+          };
+        }
+      }
       if (!tokens) continue;
       accounts[profile.id] = {
         profile,
@@ -250,6 +260,7 @@ export function applyActiveCookies(
   const longLived = sessionCookieOptions(30 * 24 * 60 * 60);
   const shortLived = sessionCookieOptions(expiresIn);
 
+  // Active tokens once — do NOT also stuff the same JWTs into pnk_mt_* (nginx 502 on big headers)
   res.cookies.set(MAIL_ACCESS_COOKIE, active.accessToken, shortLived);
   res.cookies.set(
     MAIL_REFRESH_COOKIE,
@@ -259,16 +270,23 @@ export function applyActiveCookies(
 
   const meta: MailMeta = {
     activeId: vault.activeId,
-    // Keep short http(s) avatar URLs; never store data-URLs (cookie size limit)
     profiles: Object.values(vault.accounts).map((a) => ({
       ...a.profile,
-      avatarUrl: resolveAvatarUrl(a.profile.id, a.profile.avatarUrl),
+      avatarUrl: idPublicAvatarUrl(a.profile.id),
     })),
   };
   res.cookies.set(MAIL_META_COOKIE, encodeMeta(meta), longLived);
 
-  // Persist each account's tokens in its own cookie (avoids 4KB limit)
+  // Inactive accounts only (switch-account support)
   for (const account of Object.values(vault.accounts)) {
+    if (account.profile.id === vault.activeId) {
+      // Clear any previous bulky duplicate for the active id
+      res.cookies.set(tokenCookieName(account.profile.id), "", {
+        ...sessionCookieOptions(0),
+        maxAge: 0,
+      });
+      continue;
+    }
     res.cookies.set(
       tokenCookieName(account.profile.id),
       encodeTokens({
@@ -279,7 +297,6 @@ export function applyActiveCookies(
     );
   }
 
-  // Drop legacy blob if it existed
   res.cookies.set(MAIL_VAULT_COOKIE, "", {
     ...sessionCookieOptions(0),
     maxAge: 0,
