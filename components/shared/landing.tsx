@@ -55,7 +55,7 @@ export default function LandingPage() {
         <div className="relative max-w-[1280px] mx-auto px-5 md:px-8 min-h-[100svh] grid grid-cols-1 lg:grid-cols-2 items-center gap-6 pt-24 md:pt-28">
           <div data-aos="fade-up" className="relative z-10 max-w-[560px] py-10 lg:py-0">
             <p className="mb-3 text-[15px] md:text-[16px] font-semibold tracking-[-0.02em] text-white/90 font-[family-name:var(--font-manrope)]">
-              pnk почта · пнк почта
+              pnk почта
             </p>
             <h1 className="font-[family-name:var(--font-unbounded)] font-bold text-[40px] sm:text-[52px] md:text-[64px] lg:text-[68px] leading-[1.08] tracking-[-0.03em] text-white">
               Письма и вложения
@@ -65,9 +65,8 @@ export default function LandingPage() {
             <p className="mt-5 max-w-[480px] text-[16px] md:text-[18px] leading-relaxed text-white/85 font-[family-name:var(--font-manrope)]">
               Современный почтовый сервис{" "}
               <span className="font-semibold text-white">@pnkmail.ru</span>
-              {" "}
-              (pnk Mail): бесплатный ящик, веб и приложение, вход через pnk ID.
-              Пишет на Gmail, Яндекс и Mail.ru.
+              : бесплатный ящик, веб и приложение, вход через pnk ID. Пишет на
+              Gmail, Яндекс и Mail.ru.
             </p>
             <button
               type="button"
@@ -85,7 +84,7 @@ export default function LandingPage() {
           >
             <Image
               src="/hero-girl.png"
-              alt="pnk почта (пнк почта) — электронная почта @pnkmail.ru, веб и приложение"
+              alt="pnk почта — электронная почта @pnkmail.ru, веб и приложение"
               fill
               className="object-contain object-bottom lg:object-right-bottom select-none mix-blend-lighten scale-110 lg:scale-125 origin-bottom"
               priority
@@ -103,8 +102,7 @@ export default function LandingPage() {
           <p className="mt-3 max-w-[640px] text-[15px] md:text-[16px] text-white/75 font-[family-name:var(--font-manrope)] leading-relaxed">
             <strong className="text-white font-semibold">pnk почта</strong>
             {" "}
-            (её также ищут как «пнк почта», pnk Mail или pnkmail) — это не просто
-            «ещё одна российская почта», а отдельный сервис на домене{" "}
+            — почтовый сервис на домене{" "}
             <strong className="text-white font-semibold">pnkmail.ru</strong>:
             свой адрес, понятный интерфейс на русском, удобные вложения и единый
             вход через pnk ID с телефона или компьютера.

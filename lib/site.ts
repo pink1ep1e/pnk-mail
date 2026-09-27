@@ -6,37 +6,34 @@ export function getSiteUrl(): string {
   );
 }
 
+/** Official brand — always use this in UI and primary titles */
 export const SITE_NAME = "pnk почта";
 export const SITE_NAME_SHORT = "pnk Почта";
 export const SITE_DOMAIN = "pnkmail.ru";
 
-/** Alternate brand spellings for search / structured data */
-export const SITE_ALT_NAMES = [
+/**
+ * How people may type the brand in Google (not the official name).
+ * Used in keywords, alternateName, FAQ — not as the main title on the page.
+ */
+export const SITE_SEARCH_ALIASES = [
   "пнк почта",
   "ПНК почта",
+  "pnk mail",
   "pnk Mail",
   "pnkmail",
-  "pnkmail.ru",
   "почта pnk",
   "почта пнк",
 ];
 
 export const DEFAULT_DESCRIPTION =
-  "pnk почта (пнк почта, pnk Mail) — современный почтовый сервис с адресом @pnkmail.ru. Бесплатный ящик: письма и вложения, веб и приложение, вход через pnk ID. Обмен с Gmail, Яндекс Почтой и Mail.ru.";
+  "pnk почта — современный почтовый сервис с адресом @pnkmail.ru. Бесплатный ящик: письма и вложения, веб и приложение, вход через pnk ID. Обмен с Gmail, Яндекс Почтой и Mail.ru.";
 
 export const DEFAULT_KEYWORDS = [
   "pnk почта",
-  "пнк почта",
-  "ПНК почта",
-  "pnk Mail",
-  "pnk mail",
-  "pnkmail",
+  ...SITE_SEARCH_ALIASES,
   "pnkmail.ru",
   "@pnkmail.ru",
-  "почта pnk",
-  "почта пнк",
   "создать почту pnk",
-  "создать почту пнк",
   "создать почту @pnkmail.ru",
   "регистрация pnk почта",
   "открыть почту pnkmail",
