@@ -1060,25 +1060,6 @@ export default function ComposeEditor({
     setLinkUrl("https://");
   }, [linkUrl, restoreSelection, saveSelection, syncEmpty]);
 
-  const insertImageFile = useCallback(
-    (file: File) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        restoreSelection();
-        const src = String(reader.result || "");
-        document.execCommand(
-          "insertHTML",
-          false,
-          `<img src="${src}" alt="" style="max-width:100%;height:auto;border-radius:12px;display:block;margin:8px 0;" />`,
-        );
-        saveSelection();
-        syncEmpty();
-      };
-      reader.readAsDataURL(file);
-    },
-    [restoreSelection, saveSelection, syncEmpty],
-  );
-
   const persistRect = useCallback((r: WinRect) => {
     // Don't persist phone fullscreen geometry into desktop window prefs
     if (isNarrowViewport()) return clampRect(r);

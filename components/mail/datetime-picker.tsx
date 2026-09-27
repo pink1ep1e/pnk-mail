@@ -84,7 +84,7 @@ function buildMonthGrid(view: Date): Array<{ date: Date; inMonth: boolean }> {
   const month = view.getMonth();
   const first = new Date(year, month, 1);
   // Monday = 0
-  let startPad = (first.getDay() + 6) % 7;
+  const startPad = (first.getDay() + 6) % 7;
   const cells: Array<{ date: Date; inMonth: boolean }> = [];
   const start = new Date(year, month, 1 - startPad);
   for (let i = 0; i < 42; i++) {
