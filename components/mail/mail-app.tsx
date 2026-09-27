@@ -299,7 +299,9 @@ function MailBodyFrame({ html }: { html: string }) {
     const host = hostRef.current;
     if (!host) return;
     const shadow = host.shadowRoot ?? host.attachShadow({ mode: "open" });
-    shadow.innerHTML = `${parts.headStyles}<style data-pnk-reader>${parts.css}</style><div class="pnk-mail-root">${parts.bodyHtml}</div>`;
+    // Reader fit CSS last — must win over author <style> fixed widths on mobile
+    // Author styles first, then our fit CSS (must come last to override fixed widths)
+    shadow.innerHTML = `${parts.headStyles}<div class="pnk-mail-root">${parts.bodyHtml}</div><style data-pnk-reader>${parts.css}</style>`;
 
     const onClick = (e: Event) => {
       const t = e.target as HTMLElement | null;
@@ -320,10 +322,8 @@ function MailBodyFrame({ html }: { html: string }) {
   }
 
   return (
-    <div
-      className="relative w-full overflow-x-hidden rounded-[14px] border border-white/12 bg-white shadow-[0_0_0_1px_rgba(255,255,255,0.04)]"
-    >
-      <div ref={hostRef} className="w-full min-w-0" />
+    <div className="relative w-full max-w-full min-w-0 overflow-x-auto rounded-[14px] border border-white/12 bg-white shadow-[0_0_0_1px_rgba(255,255,255,0.04)] [-webkit-overflow-scrolling:touch]">
+      <div ref={hostRef} className="w-full min-w-0 max-w-full" />
     </div>
   );
 }

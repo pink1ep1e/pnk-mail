@@ -171,15 +171,18 @@ const READER_DARK_CSS = `
 
 /**
  * Light canvas for branded HTML mail (Reg.ru, banks, newsletters).
- * Do NOT force text/link colors — preserve author layout.
- * Avoid height:auto on all images — spacer GIFs hold table layouts together.
+ * Mobile: force fixed-width marketing tables to fit the screen.
  */
 const READER_LIGHT_CSS = `
-  :host, .pnk-mail-root {
+  :host {
     display: block;
     width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
   .pnk-mail-root {
+    display: block;
     margin: 0;
     padding: 0;
     background: #ffffff;
@@ -188,35 +191,104 @@ const READER_LIGHT_CSS = `
     font-size: 15px;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
-    overflow: visible;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
     overflow-x: hidden;
-    width: 100%;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
     box-sizing: border-box;
   }
-  .pnk-mail-root *, .pnk-mail-root *::before, .pnk-mail-root *::after { box-sizing: border-box; }
-  img, video {
+  .pnk-mail-root *,
+  .pnk-mail-root *::before,
+  .pnk-mail-root *::after {
+    box-sizing: border-box !important;
+  }
+  .pnk-mail-root img,
+  .pnk-mail-root video {
     max-width: 100% !important;
   }
-  /* Real content images may scale; keep 1px spacers intact */
-  img[width]:not([width="1"]):not([width="0"]),
-  img:not([width]) {
-    height: auto;
+  .pnk-mail-root img[width]:not([width="1"]):not([width="0"]),
+  .pnk-mail-root img:not([width]) {
+    height: auto !important;
   }
-  img[width="1"], img[height="1"], img[width="0"], img[height="0"] {
+  .pnk-mail-root img[width="1"],
+  .pnk-mail-root img[height="1"],
+  .pnk-mail-root img[width="0"],
+  .pnk-mail-root img[height="0"] {
     max-width: none !important;
     width: 1px !important;
     height: 1px !important;
   }
-  table {
-    border-collapse: collapse;
+  .pnk-mail-root table {
+    border-collapse: collapse !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+  .pnk-mail-root table[width],
+  .pnk-mail-root table[style*="width"] {
+    width: 100% !important;
     max-width: 100% !important;
   }
-  a {
+  .pnk-mail-root td,
+  .pnk-mail-root th {
+    max-width: 100% !important;
+  }
+  .pnk-mail-root div[style*="width"],
+  .pnk-mail-root td[style*="width"],
+  .pnk-mail-root th[style*="width"] {
+    max-width: 100% !important;
+  }
+  /* Common 500–700px email shells → fluid on phone */
+  @media (max-width: 640px) {
+    .pnk-mail-root table,
+    .pnk-mail-root div[style*="width"] {
+      width: 100% !important;
+      min-width: 0 !important;
+      margin-left: 0 !important;
+      margin-right: 0 !important;
+    }
+    .pnk-mail-root td,
+    .pnk-mail-root th {
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+  }
+  .pnk-mail-root a {
     cursor: pointer;
     pointer-events: auto;
   }
-  center { display: block; width: 100%; }
+  .pnk-mail-root center {
+    display: block;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
 `;
+
+/** Soften fixed widths in marketing HTML so mobile doesn't clip. */
+function fluidizeEmailLayout(html: string): string {
+  let out = html.replace(
+    /\swidth\s*=\s*(["']?)(\d{3,4})\1/gi,
+    (_m, q: string, w: string) => {
+      const n = Number(w);
+      if (n >= 280) return ` width=${q}100%${q}`;
+      return _m;
+    },
+  );
+  out = out.replace(
+    /\bstyle\s*=\s*(["'])(.*?)\1/gi,
+    (_m, q: string, style: string) => {
+      const next = style
+        .replace(/\bmin-width\s*:\s*\d{3,}px\b/gi, "min-width:0")
+        .replace(/\bwidth\s*:\s*(\d{3,4})px\b/gi, (_s, px: string) => {
+          const n = Number(px);
+          return n >= 280 ? "width:100%;max-width:100%" : _s;
+        });
+      return `style=${q}${next}${q}`;
+    },
+  );
+  return out;
+}
 /** True if message looks like a branded / table-based HTML email. */
 export function isBrandedHtmlEmail(html: string): boolean {
   const s = html || "";
@@ -392,6 +464,7 @@ export function prepareMailReaderSrcDoc(html: string): string {
   <meta name="color-scheme" content="${branded ? "light" : "dark"}" />
   <style data-pnk-reader>${css}</style>
   ${headStyles}
+  <style data-pnk-reader-fit>${css}</style>
 </head>
 <body class="pnk-mail-root">${bodyHtml}</body>
 </html>`;
@@ -426,6 +499,10 @@ export function prepareMailReaderParts(html: string): {
   bodyHtml = ensureClickableLinks(linkifyBareUrls(bodyHtml));
   if (!branded) {
     bodyHtml = lightenDarkTextColors(bodyHtml);
+  } else {
+    bodyHtml = fluidizeEmailLayout(bodyHtml);
+    // Soften fixed widths inside author <style> blocks too
+    headStyles = fluidizeEmailLayout(headStyles);
   }
 
   return {
