@@ -578,6 +578,8 @@ export default function MailApp() {
   const [counts, setCounts] = useState<FolderCounts>({});
   const [loadingMail, setLoadingMail] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
+  /** Animate list↔reader only when opening/closing the panel — not when switching letters. */
+  const [readerPanelAnim, setReaderPanelAnim] = useState(true);
   const [swipeOpenId, setSwipeOpenId] = useState<string | null>(null);
   const [detail, setDetail] = useState<MessageDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -750,9 +752,7 @@ export default function MailApp() {
       setAccounts(list.map(withAccountAvatar));
       setSelected(new Set());
       setFolder("inbox");
-      setOpenId(null);
-      setDetail(null);
-      setThread([]);
+      closeReader();
       await loadMessages("inbox");
       setBootReady(true);
 
@@ -1313,10 +1313,7 @@ export default function MailApp() {
             ? threadKeys.has(detail.threadId)
             : threadKeys.has(openId)));
       if (openGone) {
-        setOpenId(null);
-        openIdRef.current = null;
-        setDetail(null);
-        setThread([]);
+        closeReader();
       }
     }
 
@@ -1373,10 +1370,7 @@ export default function MailApp() {
         showToast(msg);
       }
       if (openId && ids.includes(openId)) {
-        setOpenId(null);
-        openIdRef.current = null;
-        setDetail(null);
-        setThread([]);
+        closeReader();
       }
     });
   };
@@ -1394,10 +1388,7 @@ export default function MailApp() {
       setToolbarMenu(null);
       if (ok) showToast("Перемещено");
       if (openId && ids.includes(openId)) {
-        setOpenId(null);
-        openIdRef.current = null;
-        setDetail(null);
-        setThread([]);
+        closeReader();
       }
     });
   };
@@ -1485,10 +1476,7 @@ export default function MailApp() {
         );
       }
       if (openId === id) {
-        setOpenId(null);
-        openIdRef.current = null;
-        setDetail(null);
-        setThread([]);
+        closeReader();
       }
     });
   };
@@ -1574,6 +1562,16 @@ export default function MailApp() {
     return (json.data?.id as string) || null;
   };
 
+  const closeReader = () => {
+    setReaderPanelAnim(true);
+    setOpenId(null);
+    openIdRef.current = null;
+    setDetail(null);
+    setThread([]);
+    setDetailLoading(false);
+    setRecipientsOpen(false);
+  };
+
   const openMessage = async (id: string) => {
     const fromList = items.find((m) => m.id === id);
     if (fromList?.folder === "drafts" || folder === "drafts") {
@@ -1594,7 +1592,12 @@ export default function MailApp() {
 
     if (openIdRef.current === id && detail?.id === id && !detailLoading) return;
 
+    const alreadyOpen = openIdRef.current != null;
+    const switching = alreadyOpen && openIdRef.current !== id;
     const cached = detailCache.current.get(id);
+
+    // Panel slide only when first opening (or later closing) — never when hopping letters
+    setReaderPanelAnim(!alreadyOpen);
 
     openIdRef.current = id;
     setOpenId(id);
@@ -1616,12 +1619,15 @@ export default function MailApp() {
         })),
       );
       setDetailLoading(false);
-      // Always persist read for the whole conversation (expandThread on API)
       void patchMessages([id], "read");
       return;
     }
 
-    if (fromList) {
+    // Switching letters: blank → spinner → full UI (no stub/half letter)
+    if (switching) {
+      setDetail(null);
+      setThread([]);
+    } else if (fromList) {
       setDetail({
         ...fromList,
         unread: false,
@@ -1653,7 +1659,6 @@ export default function MailApp() {
         detailCache.current.set(id, { message: msg, thread: threadMsgs });
         setDetail(msg);
         setThread(threadMsgs);
-        // Propagate richer logos into the list (from HTML / backfill)
         const logoByEmail = new Map<string, string>();
         for (const m of threadMsgs) {
           if (m.avatarUrl && m.fromEmail) {
@@ -1712,11 +1717,7 @@ export default function MailApp() {
     clearSelection();
     closeDrawer();
     setSwipeOpenId(null);
-    setOpenId(null);
-    openIdRef.current = null;
-    setDetail(null);
-    setThread([]);
-    setDetailLoading(false);
+    closeReader();
     setItems([]); // don't flash previous folder while loading
     void loadMessages(id);
   };
@@ -1906,8 +1907,7 @@ export default function MailApp() {
                 type="button"
                 onClick={() => {
                   setFolder("all");
-                  setOpenId(null);
-                  openIdRef.current = null;
+                  closeReader();
                   setItems([]);
                   const reqId = ++folderReqId.current;
                   void (async () => {
@@ -2497,10 +2497,16 @@ export default function MailApp() {
                 aria-hidden={openId && isMobileUi ? true : undefined}
                 initial={false}
                 animate={{
-                  // Desktop: list shrinks/expands together with the letter panel
+                  // Desktop: list slides left + shrinks as the letter arrives from the right
                   right: isMobileUi ? 0 : openId ? "calc(50% + 6px)" : 12,
+                  x: openId ? (isMobileUi ? "-14%" : -20) : 0,
+                  opacity: isMobileUi && openId ? 0.35 : 1,
                 }}
-                transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                transition={
+                  readerPanelAnim
+                    ? { duration: 0.32, ease: [0.22, 1, 0.36, 1] }
+                    : { duration: 0 }
+                }
               >
               <MobileMailBanners enabled={Boolean(activeAccount)} />
               <PullToRefresh
@@ -2665,22 +2671,14 @@ export default function MailApp() {
               {openId && (
                 <motion.div
                   key="mail-reader"
-                  initial={
-                    isMobileUi
-                      ? { x: "100%" }
-                      : { opacity: 0, x: 28 }
+                  initial={readerPanelAnim ? { x: "100%" } : false}
+                  animate={{ x: 0 }}
+                  exit={{ x: "100%" }}
+                  transition={
+                    readerPanelAnim
+                      ? { duration: 0.32, ease: [0.22, 1, 0.36, 1] }
+                      : { duration: 0 }
                   }
-                  animate={
-                    isMobileUi
-                      ? { x: 0 }
-                      : { opacity: 1, x: 0 }
-                  }
-                  exit={
-                    isMobileUi
-                      ? { x: "100%" }
-                      : { opacity: 0, x: 28 }
-                  }
-                  transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
                   className={cn(
                     "z-30 flex flex-col overflow-hidden rounded-[16px] border border-white/10 bg-[#111318]",
                     // Mobile: inset card. Desktop: half panel, padded from parent edges
@@ -2692,19 +2690,15 @@ export default function MailApp() {
                       <button
                         type="button"
                         className="md:hidden h-8 w-8 rounded-full flex items-center justify-center text-white/50 hover:bg-white/5"
-                        onClick={() => {
-                          setOpenId(null);
-                          openIdRef.current = null;
-                          setDetail(null);
-                          setThread([]);
-                          setRecipientsOpen(false);
-                        }}
+                        onClick={closeReader}
                         aria-label="Назад к списку"
                       >
                         <X size={16} />
                       </button>
                       <span className="flex-1 min-w-0 text-[13px] text-white/30 font-[family-name:var(--font-manrope)] truncate px-1 leading-none self-center">
-                        {detail?.subject || ""}
+                        {detailLoading && !detail?.bodyHtml
+                          ? ""
+                          : detail?.subject || ""}
                       </span>
                       <button
                         type="button"
@@ -2727,42 +2721,23 @@ export default function MailApp() {
                       <button
                         type="button"
                         className="h-8 w-8 rounded-full flex items-center justify-center text-white/40 hover:bg-white/5 hover:text-white"
-                        onClick={() => {
-                          setOpenId(null);
-                          openIdRef.current = null;
-                          setDetail(null);
-                          setThread([]);
-                          setRecipientsOpen(false);
-                        }}
+                        onClick={closeReader}
                         aria-label="Закрыть письмо"
                       >
                         <X size={16} />
                       </button>
                     </div>
 
-                    <div
-                      className="flex-1 min-h-0 overflow-y-auto mail-scroll"
-                      key={`scroll-${openId}`}
-                    >
+                    <div className="flex-1 min-h-0 overflow-y-auto mail-scroll">
+                      {detailLoading && !detail?.bodyHtml ? (
+                        <div className="h-full min-h-[240px] flex flex-col items-center justify-center gap-3 px-6">
+                          <div className="h-8 w-8 rounded-full border-2 border-white/10 border-t-[#0066ff] animate-spin" />
+                          <p className="text-[13px] text-white/35 font-[family-name:var(--font-manrope)]">
+                            Загрузка письма…
+                          </p>
+                        </div>
+                      ) : (
                       <div className="mx-auto w-full max-w-[680px] px-3 sm:px-6 md:px-8 pt-4 md:pt-6 pb-10">
-                        {detailLoading && !detail?.bodyHtml ? (
-                          <div className="space-y-6">
-                            <div className="h-8 w-[72%] rounded-xl bg-white/[0.06] animate-pulse" />
-                            <div className="flex items-center gap-3.5">
-                              <div className="h-12 w-12 rounded-full bg-white/[0.06] animate-pulse" />
-                              <div className="flex-1 space-y-2.5">
-                                <div className="h-3.5 w-[48%] rounded-md bg-white/[0.06] animate-pulse" />
-                                <div className="h-3 w-[28%] rounded-md bg-white/[0.04] animate-pulse" />
-                              </div>
-                            </div>
-                            <div className="rounded-[20px] bg-white/[0.04] p-6 space-y-3 min-h-[220px]">
-                              <div className="h-3 rounded-md bg-white/[0.07] w-[88%] animate-pulse" />
-                              <div className="h-3 rounded-md bg-white/[0.05] w-[70%] animate-pulse" />
-                              <div className="h-3 rounded-md bg-white/[0.05] w-[78%] animate-pulse" />
-                            </div>
-                          </div>
-                        ) : (
-                          <>
                             <h2 className="text-[24px] md:text-[28px] font-bold tracking-[-0.035em] leading-[1.2] text-white font-[family-name:var(--font-unbounded)]">
                               {detail?.subject || "…"}
                             </h2>
@@ -2897,11 +2872,6 @@ export default function MailApp() {
                                           !isLast && "pb-4",
                                         )}
                                       >
-                                        {detailLoading && isLast && (
-                                          <div className="absolute inset-0 z-10 rounded-[12px] bg-[#111318]/50 flex items-center justify-center">
-                                            <div className="h-8 w-8 rounded-full border-2 border-white/10 border-t-[#0066ff] animate-spin" />
-                                          </div>
-                                        )}
                                         {msg.bodyHtml ? (
                                           <MailBodyFrame
                                             html={stripAttachmentsBlock(
@@ -2925,9 +2895,8 @@ export default function MailApp() {
                                 },
                               )}
                             </div>
-                          </>
-                        )}
                       </div>
+                      )}
                     </div>
                 </motion.div>
               )}
