@@ -1,22 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireActiveMailbox } from "@/lib/mail-auth";
+import { sendMailMessage } from "@/lib/mail-outbound-send";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { assertSameOrigin } from "@/lib/request-guard";
-import {
-  htmlToPreview,
-  htmlToText,
-  isPnkMailAddress,
-  parseAddressList,
-  toListDto,
-} from "@/lib/mail-store";
-import { outboundMailHtml, sanitizeMailHtml } from "@/lib/mail-template";
-import {
-  formatRfcMessageId,
-  normalizeRfcMessageId,
-} from "@/lib/mail-thread";
-import { getMailFromDomain, sendOutbound } from "@/lib/mail-transport";
-import { notifyMailboxNewMail } from "@/lib/web-push";
+import { toListDto } from "@/lib/mail-store";
 
 export async function POST(req: NextRequest) {
   const origin = assertSameOrigin(req);
@@ -62,270 +50,50 @@ export async function POST(req: NextRequest) {
     }>;
   };
 
-  const toList = parseAddressList(body.to || "");
-  const ccList = parseAddressList(body.cc || "");
-  const subject = (body.subject || "").trim().slice(0, 500) || "(без темы)";
-  const rawHtml = (body.bodyHtml || "").trim() || "<p></p>";
-  if (rawHtml.length > 6_000_000) {
-    return NextResponse.json(
-      { ok: false, error: { message: "Слишком большое письмо" } },
-      { status: 400 },
-    );
-  }
-  const bodyHtml = sanitizeMailHtml(rawHtml);
-  const bodyText = htmlToText(bodyHtml);
-  const preview = htmlToPreview(bodyHtml);
-  const outboundHtml = outboundMailHtml(bodyHtml);
-
-  const fileAttachments = (Array.isArray(body.attachments) ? body.attachments : [])
-    .filter(
-      (a) =>
-        a &&
-        typeof a.filename === "string" &&
-        a.filename.trim() &&
-        typeof a.content === "string" &&
-        a.content.length > 0 &&
-        a.content.length < 12_000_000,
-    )
-    .slice(0, 8)
-    .map((a) => ({
-      filename: String(a.filename).slice(0, 200),
-      content: String(a.content),
-      contentType:
-        typeof a.contentType === "string" && a.contentType
-          ? a.contentType.slice(0, 120)
-          : "application/octet-stream",
-    }));
-
-  if (!toList.length) {
-    return NextResponse.json(
-      { ok: false, error: { message: "Укажите получателя" } },
-      { status: 400 },
-    );
-  }
-  if (toList.length + ccList.length > 50) {
-    return NextResponse.json(
-      { ok: false, error: { message: "Слишком много получателей" } },
-      { status: 400 },
-    );
-  }
-
-  const fromName = auth.ctx.name;
-  const fromEmail = auth.ctx.email;
-  const toJoined = toList.join(", ");
-  const ccJoined = ccList.join(", ");
-  const domain = getMailFromDomain();
-
-  const internal = [...new Set([...toList, ...ccList])].filter(isPnkMailAddress);
-  const external = [...new Set([...toList, ...ccList])].filter(
-    (a) => !isPnkMailAddress(a),
-  );
-
-  let threadId: string | null = null;
-  let inReplyTo: string | null = null;
-  const refIds: string[] = [];
-  const replyToId = (body.replyToId || "").trim();
-
-  if (replyToId) {
-    const parent = await prisma.message.findFirst({
-      where: { id: replyToId, mailboxId: auth.ctx.mailboxId },
-    });
-    if (parent) {
-      threadId = parent.threadId || parent.id;
-      if (!parent.threadId) {
-        await prisma.message.update({
-          where: { id: parent.id },
-          data: { threadId: parent.id },
-        });
-        threadId = parent.id;
-      }
-
-      inReplyTo =
-        normalizeRfcMessageId(parent.rfcMessageId) ||
-        (parent.threadId?.startsWith("ext:")
-          ? normalizeRfcMessageId(parent.threadId.slice(4))
-          : null);
-
-      const threadMsgs = await prisma.message.findMany({
-        where: {
-          mailboxId: auth.ctx.mailboxId,
-          OR: [{ threadId }, { id: threadId }],
-        },
-        orderBy: { createdAt: "asc" },
-        select: { rfcMessageId: true, threadId: true },
-      });
-      for (const m of threadMsgs) {
-        const id =
-          normalizeRfcMessageId(m.rfcMessageId) ||
-          (m.threadId?.startsWith("ext:")
-            ? normalizeRfcMessageId(m.threadId.slice(4))
-            : null);
-        if (id && !refIds.includes(id)) refIds.push(id);
-      }
-      if (inReplyTo && !refIds.includes(inReplyTo)) refIds.push(inReplyTo);
-    }
-  }
-
-  const labelIds = Array.isArray(body.labelIds)
-    ? body.labelIds.filter((id) => typeof id === "string" && id.length > 0).slice(0, 20)
-    : [];
-  const hasAttachment =
-    Boolean(body.hasAttachment) ||
-    fileAttachments.length > 0 ||
-    /<img\b/i.test(bodyHtml) ||
-    /download=/i.test(bodyHtml) ||
-    /data-pnk-attachments/i.test(bodyHtml);
-
-  const sent = await prisma.message.create({
-    data: {
-      mailboxId: auth.ctx.mailboxId,
-      folder: "sent",
-      fromName,
-      fromEmail,
-      toAddresses: toJoined,
-      ccAddresses: ccJoined,
-      subject,
-      preview,
-      bodyHtml,
-      bodyText,
-      unread: false,
-      hasAttachment,
-      labelIds: JSON.stringify(labelIds),
-      deliveryStatus: external.length ? "queued" : "delivered",
-      deliveryDetail: external.length ? "" : "internal",
-      threadId: threadId || undefined,
-      inReplyTo: inReplyTo || undefined,
-    },
+  const result = await sendMailMessage({
+    mailboxId: auth.ctx.mailboxId,
+    fromName: auth.ctx.name,
+    fromEmail: auth.ctx.email,
+    to: body.to || "",
+    cc: body.cc || "",
+    subject: body.subject,
+    bodyHtml: body.bodyHtml,
+    replyToId: body.replyToId,
+    labelIds: body.labelIds,
+    hasAttachment: body.hasAttachment,
+    attachments: Array.isArray(body.attachments)
+      ? body.attachments
+          .filter(
+            (a) =>
+              a &&
+              typeof a.filename === "string" &&
+              typeof a.content === "string",
+          )
+          .map((a) => ({
+            filename: a.filename!,
+            content: a.content!,
+            contentType: a.contentType || "application/octet-stream",
+          }))
+      : undefined,
   });
 
-  const finalThreadId = threadId || sent.id;
-  const rfcMessageId = `${sent.id}.${Date.now()}@${domain}`;
-  await prisma.message.update({
-    where: { id: sent.id },
-    data: {
-      threadId: finalThreadId,
-      rfcMessageId,
-    },
+  if (!result.ok) {
+    return NextResponse.json(
+      { ok: false, error: { message: result.error } },
+      { status: 400 },
+    );
+  }
+
+  const fresh = await prisma.message.findUnique({
+    where: { id: result.sentId },
   });
-
-  const headers: Record<string, string> = {
-    "Message-ID": formatRfcMessageId(rfcMessageId),
-  };
-  if (inReplyTo) {
-    headers["In-Reply-To"] = formatRfcMessageId(inReplyTo);
-    headers.References = (refIds.length ? refIds : [inReplyTo])
-      .map((id) => formatRfcMessageId(id))
-      .join(" ");
-  }
-
-  for (const address of internal) {
-    if (address === fromEmail) continue;
-    const recipient = await prisma.mailbox.findUnique({ where: { address } });
-    if (!recipient) continue;
-
-    const created = await prisma.message.create({
-      data: {
-        mailboxId: recipient.id,
-        folder: "inbox",
-        fromName,
-        fromEmail,
-        toAddresses: toJoined,
-        ccAddresses: ccJoined,
-        subject,
-        preview,
-        bodyHtml,
-        bodyText,
-        unread: true,
-        hasAttachment,
-        threadId: finalThreadId,
-        rfcMessageId,
-        inReplyTo: inReplyTo || undefined,
-      },
-    });
-
-    try {
-      await notifyMailboxNewMail(recipient.id, {
-        id: created.id,
-        fromName: created.fromName,
-        fromEmail: created.fromEmail,
-        subject: created.subject,
-        preview: created.preview,
-      });
-    } catch (e) {
-      console.warn("[mail-send] push notify failed", e);
-    }
-  }
-
-  let transportWarning: string | null = null;
-  if (external.length) {
-    const externalTo = external.filter((a) => toList.includes(a));
-    const externalCc = external.filter((a) => ccList.includes(a));
-    const toSend =
-      externalTo.length > 0
-        ? externalTo
-        : externalCc.length > 0
-          ? [externalCc[0]]
-          : [];
-    const ccSend =
-      externalTo.length > 0 ? externalCc : externalCc.slice(1);
-
-    if (!toSend.length) {
-      transportWarning = "Нет внешнего адреса получателя";
-    } else {
-      const result = await sendOutbound({
-        fromName,
-        fromEmail,
-        to: toSend,
-        cc: ccSend.length ? ccSend : undefined,
-        subject,
-        bodyHtml: outboundHtml,
-        bodyText,
-        tags: {
-          pnk_msg: sent.id,
-          pnk_mb: auth.ctx.mailboxId,
-        },
-        headers,
-        attachments: fileAttachments.length ? fileAttachments : undefined,
-      });
-      if (!result.ok) {
-        transportWarning = result.error;
-        await prisma.message.update({
-          where: { id: sent.id },
-          data: {
-            deliveryStatus: "failed",
-            deliveryDetail: result.error.slice(0, 1000),
-          },
-        });
-        console.error("[mail-send] outbound failed", {
-          to: toSend,
-          error: result.error,
-        });
-      } else {
-        await prisma.message.update({
-          where: { id: sent.id },
-          data: {
-            providerId: result.providerId || null,
-            deliveryStatus: "sent",
-            deliveryDetail: "",
-          },
-        });
-        console.info("[mail-send] outbound ok", {
-          to: toSend,
-          providerId: result.providerId,
-          threadId: finalThreadId,
-        });
-      }
-    }
-  }
-
-  const fresh = await prisma.message.findUnique({ where: { id: sent.id } });
   return NextResponse.json({
     ok: true,
     data: {
-      message: toListDto(fresh || sent),
-      deliveredInternal: internal.length,
-      deliveredExternal: external.length,
-      transportWarning,
+      message: fresh ? toListDto(fresh) : { id: result.sentId },
+      deliveredInternal: result.deliveredInternal,
+      deliveredExternal: result.deliveredExternal,
+      transportWarning: result.transportWarning,
     },
   });
 }

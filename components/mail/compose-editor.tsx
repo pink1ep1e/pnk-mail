@@ -1,12 +1,13 @@
 "use client";
 
-import { cn } from "@/lib/utils";
+import { DateTimePicker } from "@/components/mail/datetime-picker";
 import {
   buildAttachmentsHtml,
   dataUrlToBase64Parts,
   formatBytes as formatAttachBytes,
 } from "@/lib/mail-attachments";
 import { fileIconSrc } from "@/lib/file-icon";
+import { cn } from "@/lib/utils";
 import {
   AlignCenter,
   AlignLeft,
@@ -96,13 +97,16 @@ type ComposeEditorProps = {
       contentType: string;
     }>;
   }) => void | Promise<void>;
-  onSaveDraft?: (payload: {
-    id?: string | null;
-    to: string;
-    cc: string;
-    subject: string;
-    bodyHtml: string;
-  }) => void | Promise<string | null | undefined>;
+  onSaveDraft?: (
+    payload: {
+      id?: string | null;
+      to: string;
+      cc: string;
+      subject: string;
+      bodyHtml: string;
+    },
+    opts?: { silent?: boolean },
+  ) => void | Promise<string | null | undefined>;
 };
 
 const TEMPLATES_KEY = "pnk-mail-compose-templates-v1";
@@ -616,7 +620,7 @@ function PortalMenu({
         left,
         top,
         bottom,
-        maxWidth: `min(288px, calc(100vw - ${pad * 2}px))`,
+        maxWidth: `calc(100vw - ${pad * 2}px)`,
       });
     };
 
@@ -800,7 +804,7 @@ export default function ComposeEditor({
   const [attachments, setAttachments] = useState<AttachItem[]>([]);
   const [fileDropOver, setFileDropOver] = useState(false);
   const sendingRef = useRef(false);
-  const [customSchedule, setCustomSchedule] = useState("");
+  const [customSchedule, setCustomSchedule] = useState<Date | null>(null);
   const [signatureHtml, setSignatureHtml] = useState("");
   const [bodyEmpty, setBodyEmpty] = useState(true);
   const [fmt, setFmt] = useState({
@@ -1106,7 +1110,7 @@ export default function ComposeEditor({
     setStatusFlash("");
     setComposeLabels([]);
     setAttachments([]);
-    setCustomSchedule("");
+    setCustomSchedule(null);
     setBodyEmpty(true);
     setFontLabel("Arial");
     setFontSizeLabel("16");
@@ -1503,24 +1507,57 @@ export default function ComposeEditor({
 
   const scheduleSendAt = async (when: Date) => {
     setPopover(null);
+    if (Number.isNaN(when.getTime()) || when.getTime() < Date.now() - 30_000) {
+      onToast?.("Выберите дату и время в будущем");
+      return;
+    }
     const payload = collectDraftPayload();
-    if (!payload.to && !payload.subject && !(payload.bodyHtml && payload.bodyHtml !== "<p></p>")) {
+    let bodyHtml = payload.bodyHtml || "";
+    if (attachments.length) {
+      bodyHtml += buildAttachmentsHtml(attachments);
+    }
+    if (!payload.to.trim()) {
+      onToast?.("Укажите получателя, чтобы отложить отправку");
+      return;
+    }
+    if (
+      !payload.to &&
+      !payload.subject &&
+      !(bodyHtml && bodyHtml !== "<p></p>")
+    ) {
       onToast?.("Нечего откладывать — заполните письмо");
       return;
     }
     try {
-      const id = (await onSaveDraft?.(payload)) || activeDraftId;
-      if (id) {
-        setActiveDraftId(id);
-        await fetch("/api/mail/messages", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ids: [id],
-            action: "remind",
-            remindAt: when.toISOString(),
-          }),
-        });
+      const id =
+        (await onSaveDraft?.(
+          {
+            ...payload,
+            bodyHtml,
+            subject: payload.subject || "(без темы)",
+          },
+          { silent: true },
+        )) || activeDraftId;
+      if (!id) {
+        onToast?.("Не удалось сохранить черновик");
+        return;
+      }
+      setActiveDraftId(id);
+      const res = await fetch("/api/mail/messages", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ids: [id],
+          action: "schedule",
+          remindAt: when.toISOString(),
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!json?.ok) {
+        onToast?.(
+          json?.error?.message || "Не удалось отложить письмо",
+        );
+        return;
       }
       const label = when.toLocaleString("ru-RU", {
         day: "numeric",
@@ -1528,8 +1565,8 @@ export default function ComposeEditor({
         hour: "2-digit",
         minute: "2-digit",
       });
-      setStatusFlash(`Отложено на ${label}`);
-      onToast?.(`Черновик отложен на ${label}`);
+      setStatusFlash(`Отправим ${label}`);
+      onToast?.(`Письмо будет отправлено ${label}`);
       window.setTimeout(() => {
         setStatusFlash("");
         reset();
@@ -2534,7 +2571,7 @@ export default function ComposeEditor({
                   placement="top"
                   align="center"
                   onClose={closePopover}
-                  className="w-64"
+                  className="w-[min(100vw-16px,360px)] p-2"
                 >
                   <button
                     type="button"
@@ -2552,27 +2589,19 @@ export default function ComposeEditor({
                     <span className="text-white/85">Через неделю</span>
                     <span className="text-white/35">{schedules.weekLabel}</span>
                   </button>
-                  <div className="px-3 py-2 space-y-2">
-                    <p className="text-[12px] text-white/40">Своя дата и время</p>
-                    <input
-                      type="datetime-local"
-                      value={customSchedule}
-                      onChange={(e) => setCustomSchedule(e.target.value)}
-                      className="w-full h-9 rounded-[10px] bg-[#0f1115] border border-white/10 px-2.5 text-[13px] text-white/85 outline-none"
-                    />
-                    <button
-                      type="button"
-                      disabled={!customSchedule}
-                      className="w-full h-9 rounded-[10px] bg-[#0066ff]/90 text-white text-[13px] font-medium disabled:opacity-40"
-                      onClick={() => {
-                        const d = new Date(customSchedule);
-                        if (Number.isNaN(d.getTime())) return;
-                        void scheduleSendAt(d);
-                      }}
-                    >
-                      Отложить
-                    </button>
-                  </div>
+                  <div className="my-1.5 border-t border-white/8" />
+                  <p className="px-2 pb-1.5 text-[12px] text-white/40 font-[family-name:var(--font-manrope)]">
+                    Своя дата и время
+                  </p>
+                  <DateTimePicker
+                    value={customSchedule}
+                    onChange={setCustomSchedule}
+                    confirmLabel="Отложить"
+                    onConfirm={(d) => {
+                      void scheduleSendAt(d);
+                      setCustomSchedule(null);
+                    }}
+                  />
                 </PortalMenu>
 
                 <ToolBtn

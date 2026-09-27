@@ -19,11 +19,14 @@ const MAX_PULL = 120;
  */
 export function PullToRefresh({
   onRefresh,
+  refreshing: externalRefreshing = false,
   disabled,
   className,
   children,
 }: {
   onRefresh: () => Promise<void> | void;
+  /** Parent-driven refresh (toolbar / sidebar button) — keeps the top spinner visible. */
+  refreshing?: boolean;
   disabled?: boolean;
   className?: string;
   children: ReactNode;
@@ -38,9 +41,11 @@ export function PullToRefresh({
   const onRefreshRef = useRef(onRefresh);
   onRefreshRef.current = onRefresh;
 
+  const busy = refreshing || externalRefreshing;
+
   useEffect(() => {
-    refreshingRef.current = refreshing;
-  }, [refreshing]);
+    refreshingRef.current = busy;
+  }, [busy]);
 
   useEffect(() => {
     const el = scrollerRef.current;
@@ -123,9 +128,9 @@ export function PullToRefresh({
     };
   }, [disabled]);
 
-  const showLoader = pull > 4 || refreshing;
-  const armed = pull >= THRESHOLD || refreshing;
-  const pad = showLoader ? Math.max(pull, refreshing ? THRESHOLD : 0) : 0;
+  const showLoader = pull > 4 || busy;
+  const armed = pull >= THRESHOLD || busy;
+  const pad = showLoader ? Math.max(pull, busy ? THRESHOLD : 0) : 0;
 
   return (
     <div
@@ -135,20 +140,20 @@ export function PullToRefresh({
       )}
     >
       <div
-        className="pointer-events-none absolute left-0 right-0 top-0 z-10 flex justify-center overflow-hidden"
+        className="pointer-events-none absolute left-0 right-0 top-0 z-10 flex flex-col items-center justify-end overflow-hidden"
         style={{ height: pad }}
         aria-hidden={!showLoader}
       >
         <div
           className={cn(
-            "mt-2 h-9 w-9 rounded-full bg-[#2a2d36] border border-white/15 flex items-center justify-center shadow-[0_8px_24px_rgba(0,0,0,0.35)]",
-            armed ? "text-white" : "text-white/55",
+            "mb-2 h-9 w-9 rounded-full bg-[#2a2d36] border border-white/15 flex items-center justify-center shadow-[0_8px_24px_rgba(0,0,0,0.35)]",
+            armed ? "text-[#4d9fff]" : "text-white/55",
           )}
         >
           <span
-            className={cn("inline-flex", refreshing && "animate-spin")}
+            className={cn("inline-flex", busy && "animate-spin")}
             style={
-              refreshing
+              busy
                 ? undefined
                 : {
                     transform: `rotate(${Math.min(180, (pull / THRESHOLD) * 180)}deg)`,
@@ -165,10 +170,17 @@ export function PullToRefresh({
         className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden mail-scroll overscroll-y-contain"
         style={{
           paddingTop: pad,
-          transition: pulling.current ? undefined : "padding-top 0.18s ease",
+          transition: pulling.current ? undefined : "padding-top 0.2s ease",
         }}
       >
-        <div className="p-2 md:p-2.5 min-w-0">{children}</div>
+        <div
+          className={cn(
+            "p-2 md:p-2.5 min-w-0 transition-opacity duration-200",
+            busy && pull < 4 && "opacity-55",
+          )}
+        >
+          {children}
+        </div>
       </div>
     </div>
   );

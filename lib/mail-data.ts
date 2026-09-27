@@ -25,6 +25,8 @@ export type MailMessage = {
   avatarUrl?: string | null;
   deliveryStatus?: string | null;
   deliveryDetail?: string | null;
+  /** Deferred send / snooze time (ISO) */
+  remindAt?: string | null;
   threadId?: string | null;
   threadCount?: number;
 };

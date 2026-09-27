@@ -171,6 +171,7 @@ export function toListDto(row: {
   createdAt: Date;
   deliveryStatus?: string | null;
   deliveryDetail?: string | null;
+  remindAt?: Date | null;
   threadId?: string | null;
   threadCount?: number;
   senderLogoUrl?: string | null;
@@ -191,6 +192,7 @@ export function toListDto(row: {
     }),
     deliveryStatus: row.deliveryStatus || null,
     deliveryDetail: row.deliveryDetail || null,
+    remindAt: row.remindAt ? row.remindAt.toISOString() : null,
     threadId: row.threadId || row.id,
     threadCount: row.threadCount,
   };

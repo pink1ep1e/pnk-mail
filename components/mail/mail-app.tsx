@@ -394,6 +394,8 @@ export default function MailApp() {
   const [accounts, setAccounts] = useState<MailAccount[]>([]);
   const [counts, setCounts] = useState<FolderCounts>({});
   const [loadingMail, setLoadingMail] = useState(false);
+  const [listRefreshing, setListRefreshing] = useState(false);
+  const listRefreshLock = useRef(false);
   const [openId, setOpenId] = useState<string | null>(null);
   /** Animate list↔reader only when opening/closing the panel — not when switching letters. */
   const [readerPanelAnim, setReaderPanelAnim] = useState(true);
@@ -467,6 +469,23 @@ export default function MailApp() {
       return false;
     } finally {
       if (!soft && reqId === folderReqId.current) setLoadingMail(false);
+    }
+  };
+
+  /** Manual refresh with visible spinner (min ~500ms so it never feels dead). */
+  const refreshList = async () => {
+    if (listRefreshLock.current) return;
+    listRefreshLock.current = true;
+    setListRefreshing(true);
+    const started = Date.now();
+    try {
+      await loadMessages(folder, query);
+      clearSelection();
+    } finally {
+      const left = Math.max(0, 520 - (Date.now() - started));
+      if (left > 0) await new Promise((r) => setTimeout(r, left));
+      setListRefreshing(false);
+      listRefreshLock.current = false;
     }
   };
 
@@ -1349,13 +1368,16 @@ export default function MailApp() {
     }
   };
 
-  const saveDraft = async (payload: {
-    id?: string | null;
-    to: string;
-    cc: string;
-    subject: string;
-    bodyHtml: string;
-  }) => {
+  const saveDraft = async (
+    payload: {
+      id?: string | null;
+      to: string;
+      cc: string;
+      subject: string;
+      bodyHtml: string;
+    },
+    opts?: { silent?: boolean },
+  ) => {
     const res = await fetch("/api/mail/drafts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1377,7 +1399,7 @@ export default function MailApp() {
         },
       }));
     }
-    showToast("Черновик сохранён");
+    if (!opts?.silent) showToast("Черновик сохранён");
     return (json.data?.id as string) || null;
   };
 
@@ -1633,16 +1655,19 @@ export default function MailApp() {
           className="h-8 w-8 rounded-full flex items-center justify-center text-white/45 hover:bg-white/5 hover:text-white disabled:opacity-40"
           aria-label="Обновить"
           title="Обновить"
-          disabled={loadingMail}
+          disabled={listRefreshing || loadingMail}
           onClick={() => {
-            void loadMessages(folder);
-            clearSelection();
+            haptic("light");
+            void refreshList();
           }}
         >
           <Reload
             size={15}
-            strokeWidth={2}
-            className={loadingMail ? "animate-spin text-[#4d9fff]" : undefined}
+            className={
+              listRefreshing || loadingMail
+                ? "animate-spin text-[#4d9fff]"
+                : undefined
+            }
           />
         </button>
       </div>
@@ -2174,6 +2199,29 @@ export default function MailApp() {
                   aria-label="Выбрать все"
                 />
               </div>
+              <button
+                type="button"
+                className={cn(
+                  "h-9 w-9 rounded-[10px] inline-flex items-center justify-center shrink-0 transition-colors",
+                  listRefreshing || loadingMail
+                    ? "text-[#4d9fff]"
+                    : "text-white/55 hover:bg-white/5 hover:text-white",
+                )}
+                aria-label="Обновить"
+                title="Обновить"
+                disabled={listRefreshing}
+                onClick={() => {
+                  haptic("light");
+                  void refreshList();
+                }}
+              >
+                <Reload
+                  size={15}
+                  className={
+                    listRefreshing || loadingMail ? "animate-spin" : undefined
+                  }
+                />
+              </button>
               <ToolbarBtn
                 icon={Reply}
                 label="Ответить"
@@ -2339,9 +2387,9 @@ export default function MailApp() {
               <MobileMailBanners enabled={Boolean(activeAccount)} />
               <PullToRefresh
                 disabled={Boolean(openId)}
+                refreshing={listRefreshing}
                 onRefresh={async () => {
-                  await loadMessages(folder);
-                  clearSelection();
+                  await refreshList();
                 }}
               >
               {visible.length === 0 ? (
@@ -2351,8 +2399,13 @@ export default function MailApp() {
                     Нет писем
                   </p>
                   <p className="mt-1 text-[13px] text-white/35 font-[family-name:var(--font-manrope)]">
-                    {loadingMail ? "Загрузка…" : "В этой папке пока пусто"}
+                    {listRefreshing || loadingMail
+                      ? "Обновляем…"
+                      : "В этой папке пока пусто"}
                   </p>
+                  {(listRefreshing || loadingMail) && (
+                    <div className="mt-4 h-7 w-7 rounded-full border-2 border-white/10 border-t-[#4d9fff] animate-spin" />
+                  )}
                 </div>
               ) : (
                 <ul className="space-y-2.5 pt-3 pb-20 md:pb-2 min-w-0">
@@ -2457,6 +2510,22 @@ export default function MailApp() {
                             </div>
 
                             <div className="shrink-0 flex items-center gap-2 pl-1">
+                              {m.deliveryStatus === "scheduled" && m.remindAt && (
+                                <span
+                                  className="inline-flex items-center gap-1 text-[11px] text-[#4d9fff] font-[family-name:var(--font-manrope)]"
+                                  title={new Date(m.remindAt).toLocaleString("ru-RU")}
+                                >
+                                  <Clock size={12} />
+                                  <span className="hidden sm:inline">
+                                    {new Date(m.remindAt).toLocaleString("ru-RU", {
+                                      day: "numeric",
+                                      month: "short",
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })}
+                                  </span>
+                                </span>
+                              )}
                               {m.hasAttachment && (
                                 <Paperclip
                                   size={13}

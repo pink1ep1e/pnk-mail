@@ -3,7 +3,8 @@ import { prisma } from "@/lib/db";
 import { requireActiveMailbox } from "@/lib/mail-auth";
 import type { FolderId } from "@/lib/mail-data";
 import { maybeSyncResendInbound, repairFalseSubjectThreads } from "@/lib/mail-inbound";
-import { groupMessagesIntoThreads, toListDto, attachPnkMailAvatars } from "@/lib/mail-store";
+import { processDueScheduledSends } from "@/lib/mail-scheduled-send";
+import { groupMessagesIntoThreads, toListDto, attachPnkMailAvatars, parseAddressList } from "@/lib/mail-store";
 import { assertSameOrigin } from "@/lib/request-guard";
 
 const LIST_SELECT = {
@@ -20,6 +21,7 @@ const LIST_SELECT = {
   deliveryDetail: true,
   threadId: true,
   senderLogoUrl: true,
+  remindAt: true,
 } as const;
 
 export async function GET(req: NextRequest) {
@@ -43,6 +45,9 @@ export async function GET(req: NextRequest) {
       () => {},
     );
   }
+
+  // Flush deferred sends when anyone opens mail (throttled inside)
+  void processDueScheduledSends().catch(() => {});
 
   // One-shot repair of old subject-only thread merges (cheap, capped)
   void repairFalseSubjectThreads(auth.ctx.mailboxId).catch(() => {});
@@ -190,6 +195,7 @@ type PatchAction =
   | "label"
   | "unlabel"
   | "remind"
+  | "schedule"
   | "delete";
 
 export async function PATCH(req: NextRequest) {
@@ -329,6 +335,12 @@ export async function PATCH(req: NextRequest) {
     const remindAt = body.remindAt
       ? new Date(body.remindAt)
       : new Date(Date.now() + 24 * 60 * 60 * 1000);
+    if (Number.isNaN(remindAt.getTime())) {
+      return NextResponse.json(
+        { ok: false, error: { message: "Некорректная дата" } },
+        { status: 400 },
+      );
+    }
     const result = await prisma.message.updateMany({
       where,
       data: { remindAt },
@@ -336,6 +348,67 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       data: { updated: result.count, remindAt: remindAt.toISOString() },
+    });
+  }
+
+  /** Defer send: draft stays in drafts until remindAt, then cron/flush sends it. */
+  if (action === "schedule") {
+    const remindAt = body.remindAt ? new Date(body.remindAt) : null;
+    if (!remindAt || Number.isNaN(remindAt.getTime())) {
+      return NextResponse.json(
+        { ok: false, error: { message: "Укажите дату отправки" } },
+        { status: 400 },
+      );
+    }
+    if (remindAt.getTime() < Date.now() - 30_000) {
+      return NextResponse.json(
+        { ok: false, error: { message: "Дата должна быть в будущем" } },
+        { status: 400 },
+      );
+    }
+
+    const drafts = await prisma.message.findMany({
+      where: {
+        ...where,
+        folder: "drafts",
+      },
+      select: { id: true, toAddresses: true },
+    });
+    if (!drafts.length) {
+      return NextResponse.json(
+        { ok: false, error: { message: "Черновик не найден" } },
+        { status: 404 },
+      );
+    }
+    for (const d of drafts) {
+      if (!parseAddressList(d.toAddresses || "").length) {
+        return NextResponse.json(
+          { ok: false, error: { message: "Укажите получателя перед отложением" } },
+          { status: 400 },
+        );
+      }
+    }
+
+    const result = await prisma.message.updateMany({
+      where: {
+        id: { in: drafts.map((d) => d.id) },
+        mailboxId: auth.ctx.mailboxId,
+        folder: "drafts",
+      },
+      data: {
+        remindAt,
+        deliveryStatus: "scheduled",
+        deliveryDetail: "",
+        unread: false,
+      },
+    });
+    return NextResponse.json({
+      ok: true,
+      data: {
+        updated: result.count,
+        remindAt: remindAt.toISOString(),
+        scheduled: true,
+      },
     });
   }
 
