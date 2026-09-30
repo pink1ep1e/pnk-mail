@@ -2,8 +2,10 @@
 
 import { Logo } from "@/components/shared/logo";
 import { cn } from "@/lib/utils";
-import { ArrowRight, Mail } from "@/lib/icons";
+import { ArrowRight } from "@/lib/icons";
 import Link from "next/link";
+
+const TG_URL = "https://t.me/pink1e_p1e";
 
 const SUMMARY = [
   "Разработчик, который самостоятельно создаёт и запускает продукты и использует данные для принятия продуктовых решений. Запустил несколько собственных сервисов: VPN-сервис, почтовый сервис и единую систему аккаунтов.",
@@ -100,7 +102,7 @@ const VALUE = [
 
 export default function ResumePage() {
   return (
-    <div className="min-h-[100dvh] bg-[#0c0d10] text-white">
+    <div className="h-[100dvh] max-h-[100dvh] overflow-y-auto overscroll-y-contain bg-[#0c0d10] text-white">
       <div
         aria-hidden
         className="pointer-events-none fixed inset-0"
@@ -110,7 +112,7 @@ export default function ResumePage() {
         }}
       />
 
-      <div className="relative mx-auto max-w-[820px] px-5 md:px-8 pb-20">
+      <div className="relative mx-auto max-w-[820px] px-5 md:px-8 pb-24">
         <header className="flex items-center justify-between gap-4 pt-8 md:pt-10 pb-10 md:pb-14">
           <Link href="/" className="shrink-0" aria-label="pnk почта">
             <Logo
@@ -135,11 +137,12 @@ export default function ResumePage() {
               Справка
             </Link>
             <a
-              href="mailto:hello@pnkmail.ru?subject=Резюме%20/%20продуктовый%20аналитик"
+              href={TG_URL}
+              target="_blank"
+              rel="noopener noreferrer"
               className="h-9 px-3.5 rounded-full bg-[#0066ff] text-white font-semibold inline-flex items-center gap-1.5 hover:bg-[#0052cc] transition-colors"
             >
-              <Mail size={14} />
-              <span className="hidden sm:inline">Написать</span>
+              Написать
             </a>
           </nav>
         </header>
@@ -229,10 +232,12 @@ export default function ResumePage() {
 
           <div className="mt-10 flex flex-col sm:flex-row gap-3">
             <a
-              href="mailto:hello@pnkmail.ru?subject=Резюме%20/%20продуктовый%20аналитик"
+              href={TG_URL}
+              target="_blank"
+              rel="noopener noreferrer"
               className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-[#0066ff] px-6 text-[15px] font-semibold font-[family-name:var(--font-manrope)] text-white hover:bg-[#0052cc] transition-colors"
             >
-              Связаться
+              Написать в Telegram
               <ArrowRight size={16} />
             </a>
             <Link
