@@ -1811,6 +1811,9 @@ export default function MailApp() {
           <Link href="/help" className="hover:text-white/55">
             Помощь
           </Link>
+          <Link href="/resume" className="hover:text-white/55">
+            Резюме
+          </Link>
         </div>
         <p>© {new Date().getFullYear()} pnk почта</p>
       </div>
@@ -2010,6 +2013,10 @@ export default function MailApp() {
                       <div className="mt-3 pt-2 flex items-center justify-center gap-2 text-[12px] text-white/35 font-[family-name:var(--font-manrope)]">
                         <Link href="/help" className="hover:text-white/55">
                           Справка
+                        </Link>
+                        <span>·</span>
+                        <Link href="/resume" className="hover:text-white/55">
+                          Резюме
                         </Link>
                         <span>·</span>
                         <Link href="/legal/terms" className="hover:text-white/55">
