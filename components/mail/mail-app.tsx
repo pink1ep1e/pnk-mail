@@ -1,6 +1,12 @@
 "use client";
 
-import { idCabinetUrl, idLogoutThenLoginUrl, mailAuthAddAccountUrl, mailAuthStartUrl, PNK_ID_URL } from "@/lib/id-auth";
+import {
+  idCabinetUrl,
+  idLogoutThenLoginUrl,
+  mailAuthAddAccountUrl,
+  mailAuthStartUrl,
+  PNK_ID_URL,
+} from "@/lib/id-auth";
 import { cn } from "@/lib/utils";
 import {
   folders,
@@ -40,13 +46,24 @@ import { AppSplash } from "@/components/shared/app-splash";
 import { PushSubscribe } from "@/components/shared/push-subscribe";
 import { MobileMailBanners } from "@/components/shared/mobile-mail-banners";
 import { MailAttachmentsList } from "@/components/mail/mail-attachments-list";
-import { extractAttachmentsFromHtml, hasVisibleMailBody, stripAttachmentsBlock } from "@/lib/mail-attachments";
+import {
+  extractAttachmentsFromHtml,
+  hasVisibleMailBody,
+  stripAttachmentsBlock,
+} from "@/lib/mail-attachments";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { haptic } from "@/lib/haptic";
 import { prepareMailReaderParts } from "@/lib/mail-template";
 import Image from "next/image";
 import Link from "next/link";
-import { AnimatePresence, animate, motion, useMotionValue, useTransform, type PanInfo } from "motion/react";
+import {
+  AnimatePresence,
+  animate,
+  motion,
+  useMotionValue,
+  useTransform,
+  type PanInfo,
+} from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 const folderIcons: Partial<Record<FolderId, typeof Inbox>> = {
@@ -142,8 +159,7 @@ function replyAddressFor(
   const mine = myEmail.trim().toLowerCase();
   const from = (m.fromEmail || "").trim().toLowerCase();
   const toList = parseEmailsLoose(m.to);
-  const weSent =
-    m.folder === "sent" || (Boolean(mine) && from === mine);
+  const weSent = m.folder === "sent" || (Boolean(mine) && from === mine);
 
   if (weSent) {
     const tos = toList.filter((a) => a !== mine);
@@ -186,10 +202,7 @@ function AccountAvatar({
   size,
   className,
 }: {
-  account: Pick<
-    MailAccount,
-    "id" | "initial" | "color" | "avatarUrl" | "name"
-  >;
+  account: Pick<MailAccount, "id" | "initial" | "color" | "avatarUrl" | "name">;
   size: number;
   className?: string;
 }) {
@@ -249,8 +262,8 @@ function SenderAvatar({
   const showImg = Boolean(avatarUrl) && !broken;
   const isPersonPhoto = Boolean(
     avatarUrl &&
-      (/\/api\/public\/avatar\//i.test(avatarUrl) ||
-        /\b(googleusercontent|gravatar|avatar)\b/i.test(avatarUrl)),
+    (/\/api\/public\/avatar\//i.test(avatarUrl) ||
+      /\b(googleusercontent|gravatar|avatar)\b/i.test(avatarUrl)),
   );
 
   return (
@@ -423,7 +436,9 @@ export default function MailApp() {
     bodyHtml?: string;
     replyToId?: string | null;
   } | null>(null);
-  const detailCache = useRef<Map<string, { message: MessageDetail; thread: MessageDetail[] }>>(new Map());
+  const detailCache = useRef<
+    Map<string, { message: MessageDetail; thread: MessageDetail[] }>
+  >(new Map());
   const openIdRef = useRef<string | null>(null);
   const folderReqId = useRef(0);
   const [thread, setThread] = useState<MessageDetail[]>([]);
@@ -596,7 +611,9 @@ export default function MailApp() {
 
       // Refresh avatars / names from ID for the newly active account
       try {
-        const sessionRes = await fetch("/api/auth/session", { cache: "no-store" });
+        const sessionRes = await fetch("/api/auth/session", {
+          cache: "no-store",
+        });
         const sessionJson = await sessionRes.json();
         if (sessionJson.ok && sessionJson.data?.accounts?.length) {
           setAccounts(
@@ -955,14 +972,17 @@ export default function MailApp() {
     const scrollers = Array.from(
       document.querySelectorAll<HTMLElement>(".mail-scroll"),
     );
-    const prevScroll: { el: HTMLElement; overflowY: string; touchAction: string }[] =
-      scrollers.map((el) => {
-        const overflowY = el.style.overflowY;
-        const touchAction = el.style.touchAction;
-        el.style.overflowY = "hidden";
-        el.style.touchAction = "none";
-        return { el, overflowY, touchAction };
-      });
+    const prevScroll: {
+      el: HTMLElement;
+      overflowY: string;
+      touchAction: string;
+    }[] = scrollers.map((el) => {
+      const overflowY = el.style.overflowY;
+      const touchAction = el.style.touchAction;
+      el.style.overflowY = "hidden";
+      el.style.touchAction = "none";
+      return { el, overflowY, touchAction };
+    });
 
     const onTouchMove = (e: TouchEvent) => {
       const target = e.target as HTMLElement | null;
@@ -1029,7 +1049,12 @@ export default function MailApp() {
     const social = counts.social?.unread ?? 0;
     const totalUnread =
       Object.entries(counts).reduce((sum, [key, v]) => {
-        if (key === "trash" || key === "spam" || key === "sent" || key === "drafts")
+        if (
+          key === "trash" ||
+          key === "spam" ||
+          key === "sent" ||
+          key === "drafts"
+        )
           return sum;
         return sum + (v?.unread ?? 0);
       }, 0) || inbox + news + social;
@@ -1188,7 +1213,9 @@ export default function MailApp() {
     );
   };
 
-  const moveSelected = (action: "trash" | "spam" | "archive" | "restore" | "delete") => {
+  const moveSelected = (
+    action: "trash" | "spam" | "archive" | "restore" | "delete",
+  ) => {
     if (!hasTargets) return;
     const ids = [...targetIds];
     void patchMessages(ids, action).then((ok) => {
@@ -1417,7 +1444,9 @@ export default function MailApp() {
   const openMessage = async (id: string) => {
     const fromList = items.find((m) => m.id === id);
     if (fromList?.folder === "drafts" || folder === "drafts") {
-      const res = await fetch(`/api/mail/messages/${id}`, { cache: "no-store" });
+      const res = await fetch(`/api/mail/messages/${id}`, {
+        cache: "no-store",
+      });
       const json = await res.json();
       if (!json.ok || !json.data?.message) return;
       const m = json.data.message as MessageDetail;
@@ -1447,7 +1476,8 @@ export default function MailApp() {
     setRecipientsOpen(false);
     setItems((prev) =>
       prev.map((m) =>
-        m.id === id || (m.threadId && fromList?.threadId && m.threadId === fromList.threadId)
+        m.id === id ||
+        (m.threadId && fromList?.threadId && m.threadId === fromList.threadId)
           ? { ...m, unread: false }
           : m,
       ),
@@ -1485,7 +1515,9 @@ export default function MailApp() {
     setDetailLoading(true);
 
     try {
-      const res = await fetch(`/api/mail/messages/${id}`, { cache: "no-store" });
+      const res = await fetch(`/api/mail/messages/${id}`, {
+        cache: "no-store",
+      });
       const json = await res.json();
       if (openIdRef.current !== id) return;
       if (json.ok && json.data?.message) {
@@ -1597,13 +1629,7 @@ export default function MailApp() {
     </button>
   );
 
-  const FolderBtn = ({
-    id,
-    label,
-  }: {
-    id: string;
-    label: string;
-  }) => {
+  const FolderBtn = ({ id, label }: { id: string; label: string }) => {
     const Icon = folderIcons[id as FolderId] ?? Mail;
     const c = countsMemo[id];
     const active = folder === id;
@@ -1811,9 +1837,6 @@ export default function MailApp() {
           <Link href="/help" className="hover:text-white/55">
             Помощь
           </Link>
-          <Link href="/resume" className="hover:text-white/55">
-            Резюме
-          </Link>
         </div>
         <p>© {new Date().getFullYear()} pnk почта</p>
       </div>
@@ -1906,124 +1929,118 @@ export default function MailApp() {
                 tabIndex={profileOpen ? 0 : -1}
                 className={cn(
                   "fixed inset-0 z-[60] bg-black/50 transition-opacity duration-150 ease-out",
-                  profileOpen
-                    ? "opacity-100"
-                    : "opacity-0 pointer-events-none",
+                  profileOpen ? "opacity-100" : "opacity-0 pointer-events-none",
                 )}
                 onClick={() => setProfileOpen(false)}
               />
 
               <AnimatePresence>
                 {profileOpen && (
-                    <motion.div
-                      key="account-menu"
-                      data-account-menu
-                      initial={{ opacity: 0, y: -4, scale: 0.98 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: -3, scale: 0.99 }}
-                      transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
-                      style={{ transformOrigin: "calc(100% - 16px) 0%" }}
-                      className="absolute right-0 top-[calc(100%+10px)] w-[min(calc(100vw-32px),340px)] rounded-[22px] bg-[#22252e] border border-white/22 shadow-[0_16px_48px_rgba(0,0,0,0.75),0_0_0_1px_rgba(255,255,255,0.06)] p-3 z-[70]"
-                    >
-                      <div className="rounded-[14px] bg-[#17191f] border border-white/10 overflow-hidden mb-2">
-                        <div className="flex items-center gap-3 px-3 py-3">
-                          <AccountAvatar account={activeAccount} size={52} />
-                          <div className="min-w-0 flex-1">
-                            <p className="font-[family-name:var(--font-manrope)] font-semibold text-[16px] truncate">
-                              {activeAccount.name}
-                            </p>
-                            <button
-                              type="button"
-                              onClick={() => copyEmail("profile")}
-                              title="Скопировать адрес"
-                              className="relative text-[13px] text-white/50 font-[family-name:var(--font-manrope)] truncate hover:text-white/80 transition-colors text-left max-w-full"
-                            >
-                              <span className="truncate block">
-                                {activeAccount.email}
+                  <motion.div
+                    key="account-menu"
+                    data-account-menu
+                    initial={{ opacity: 0, y: -4, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -3, scale: 0.99 }}
+                    transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
+                    style={{ transformOrigin: "calc(100% - 16px) 0%" }}
+                    className="absolute right-0 top-[calc(100%+10px)] w-[min(calc(100vw-32px),340px)] rounded-[22px] bg-[#22252e] border border-white/22 shadow-[0_16px_48px_rgba(0,0,0,0.75),0_0_0_1px_rgba(255,255,255,0.06)] p-3 z-[70]"
+                  >
+                    <div className="rounded-[14px] bg-[#17191f] border border-white/10 overflow-hidden mb-2">
+                      <div className="flex items-center gap-3 px-3 py-3">
+                        <AccountAvatar account={activeAccount} size={52} />
+                        <div className="min-w-0 flex-1">
+                          <p className="font-[family-name:var(--font-manrope)] font-semibold text-[16px] truncate">
+                            {activeAccount.name}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => copyEmail("profile")}
+                            title="Скопировать адрес"
+                            className="relative text-[13px] text-white/50 font-[family-name:var(--font-manrope)] truncate hover:text-white/80 transition-colors text-left max-w-full"
+                          >
+                            <span className="truncate block">
+                              {activeAccount.email}
+                            </span>
+                            {copied === "profile" && (
+                              <span
+                                role="status"
+                                className="absolute left-0 top-[calc(100%+6px)] z-50 whitespace-nowrap rounded-[10px] bg-[#2a2d36] border border-white/10 px-2.5 py-1.5 text-[12px] text-white shadow-[0_8px_24px_rgba(0,0,0,0.45)] pointer-events-none"
+                              >
+                                Скопировано
                               </span>
-                              {copied === "profile" && (
-                                <span
-                                  role="status"
-                                  className="absolute left-0 top-[calc(100%+6px)] z-50 whitespace-nowrap rounded-[10px] bg-[#2a2d36] border border-white/10 px-2.5 py-1.5 text-[12px] text-white shadow-[0_8px_24px_rgba(0,0,0,0.45)] pointer-events-none"
-                                >
-                                  Скопировано
-                                </span>
-                              )}
-                            </button>
-                          </div>
+                            )}
+                          </button>
                         </div>
                       </div>
+                    </div>
 
-                      <div className="rounded-[14px] bg-[#17191f] border border-white/10 overflow-hidden mb-2.5">
-                        {accounts
-                          .filter((a) => !a.active)
-                          .map((a) => (
-                            <button
-                              key={a.id}
-                              type="button"
-                              onClick={() => void switchAccount(a.id)}
-                              className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/[0.05] transition-colors text-left"
-                            >
-                              <AccountAvatar account={a} size={36} />
-                              <div className="min-w-0">
-                                <p className="text-[14px] font-medium font-[family-name:var(--font-manrope)] truncate">
-                                  {a.name}
-                                </p>
-                                <p className="text-[12px] text-white/40 font-[family-name:var(--font-manrope)] truncate">
-                                  {a.email}
-                                </p>
-                              </div>
-                            </button>
-                          ))}
-                        <button
-                          type="button"
-                          onClick={addAccount}
-                          className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/[0.05] transition-colors text-left"
-                        >
-                          <div className="h-9 w-9 rounded-full bg-[#2a2d36] flex items-center justify-center text-white/70">
-                            <Plus size={16} />
-                          </div>
-                          <span className="text-[14px] font-[family-name:var(--font-manrope)]">
-                            Добавить аккаунт
-                          </span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void logoutAll()}
-                          className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/[0.05] transition-colors text-left"
-                        >
-                          <div className="h-9 w-9 rounded-full bg-[#2a2d36] flex items-center justify-center text-white/70">
-                            <LogOut size={16} />
-                          </div>
-                          <span className="text-[14px] font-[family-name:var(--font-manrope)]">
-                            Выйти из всех аккаунтов
-                          </span>
-                        </button>
-                      </div>
-
+                    <div className="rounded-[14px] bg-[#17191f] border border-white/10 overflow-hidden mb-2.5">
+                      {accounts
+                        .filter((a) => !a.active)
+                        .map((a) => (
+                          <button
+                            key={a.id}
+                            type="button"
+                            onClick={() => void switchAccount(a.id)}
+                            className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/[0.05] transition-colors text-left"
+                          >
+                            <AccountAvatar account={a} size={36} />
+                            <div className="min-w-0">
+                              <p className="text-[14px] font-medium font-[family-name:var(--font-manrope)] truncate">
+                                {a.name}
+                              </p>
+                              <p className="text-[12px] text-white/40 font-[family-name:var(--font-manrope)] truncate">
+                                {a.email}
+                              </p>
+                            </div>
+                          </button>
+                        ))}
                       <button
                         type="button"
-                        onClick={manageAccount}
-                        className="w-full h-11 rounded-full bg-[#17191f] border border-white/12 hover:bg-[#1c1f27] transition-colors px-4 inline-flex items-center gap-3 text-[14px] font-[family-name:var(--font-manrope)]"
+                        onClick={addAccount}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/[0.05] transition-colors text-left"
                       >
-                        <Settings size={16} className="text-white/55" />
-                        Управление аккаунтом
+                        <div className="h-9 w-9 rounded-full bg-[#2a2d36] flex items-center justify-center text-white/70">
+                          <Plus size={16} />
+                        </div>
+                        <span className="text-[14px] font-[family-name:var(--font-manrope)]">
+                          Добавить аккаунт
+                        </span>
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => void logoutAll()}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/[0.05] transition-colors text-left"
+                      >
+                        <div className="h-9 w-9 rounded-full bg-[#2a2d36] flex items-center justify-center text-white/70">
+                          <LogOut size={16} />
+                        </div>
+                        <span className="text-[14px] font-[family-name:var(--font-manrope)]">
+                          Выйти из всех аккаунтов
+                        </span>
+                      </button>
+                    </div>
 
-                      <div className="mt-3 pt-2 flex items-center justify-center gap-2 text-[12px] text-white/35 font-[family-name:var(--font-manrope)]">
-                        <Link href="/help" className="hover:text-white/55">
-                          Справка
-                        </Link>
-                        <span>·</span>
-                        <Link href="/resume" className="hover:text-white/55">
-                          Резюме
-                        </Link>
-                        <span>·</span>
-                        <Link href="/legal/terms" className="hover:text-white/55">
-                          Условия
-                        </Link>
-                      </div>
-                    </motion.div>
+                    <button
+                      type="button"
+                      onClick={manageAccount}
+                      className="w-full h-11 rounded-full bg-[#17191f] border border-white/12 hover:bg-[#1c1f27] transition-colors px-4 inline-flex items-center gap-3 text-[14px] font-[family-name:var(--font-manrope)]"
+                    >
+                      <Settings size={16} className="text-white/55" />
+                      Управление аккаунтом
+                    </button>
+
+                    <div className="mt-3 pt-2 flex items-center justify-center gap-2 text-[12px] text-white/35 font-[family-name:var(--font-manrope)]">
+                      <Link href="/help" className="hover:text-white/55">
+                        Справка
+                      </Link>
+                      <span>·</span>
+                      <Link href="/legal/terms" className="hover:text-white/55">
+                        Условия
+                      </Link>
+                    </div>
+                  </motion.div>
                 )}
               </AnimatePresence>
             </div>
@@ -2147,9 +2164,7 @@ export default function MailApp() {
 
       <div className="flex-1 min-h-0 flex md:gap-3 md:px-3 md:pb-3 overflow-hidden min-w-0">
         {/* Folder sidebar */}
-        <div className="hidden md:block shrink-0 self-stretch">
-          {Sidebar}
-        </div>
+        <div className="hidden md:block shrink-0 self-stretch">{Sidebar}</div>
 
         {/* Folder drawer — always mounted; x follows finger via drawerX */}
         <motion.button
@@ -2199,98 +2214,98 @@ export default function MailApp() {
             {/* Toolbar — menus outside overflow-x so dropdowns aren't clipped */}
             <div className="relative shrink-0">
               <div className="flex items-center gap-0.5 px-2 md:px-3 py-1.5 overflow-x-auto no-scrollbar">
-              <div className="h-9 w-9 flex items-center justify-center shrink-0">
-                <Checkbox
-                  checked={allSelected && visible.length > 0}
-                  onChange={toggleAll}
-                  aria-label="Выбрать все"
+                <div className="h-9 w-9 flex items-center justify-center shrink-0">
+                  <Checkbox
+                    checked={allSelected && visible.length > 0}
+                    onChange={toggleAll}
+                    aria-label="Выбрать все"
+                  />
+                </div>
+                <button
+                  type="button"
+                  className={cn(
+                    "h-9 w-9 rounded-[10px] inline-flex items-center justify-center shrink-0 transition-colors",
+                    listRefreshing || loadingMail
+                      ? "text-[#4d9fff]"
+                      : "text-white/55 hover:bg-white/5 hover:text-white",
+                  )}
+                  aria-label="Обновить"
+                  title="Обновить"
+                  disabled={listRefreshing}
+                  onClick={() => {
+                    haptic("light");
+                    void refreshList();
+                  }}
+                >
+                  <Reload
+                    size={15}
+                    className={
+                      listRefreshing || loadingMail ? "animate-spin" : undefined
+                    }
+                  />
+                </button>
+                <ToolbarBtn
+                  icon={Reply}
+                  label="Ответить"
+                  onClick={() => void replySelected()}
                 />
-              </div>
-              <button
-                type="button"
-                className={cn(
-                  "h-9 w-9 rounded-[10px] inline-flex items-center justify-center shrink-0 transition-colors",
-                  listRefreshing || loadingMail
-                    ? "text-[#4d9fff]"
-                    : "text-white/55 hover:bg-white/5 hover:text-white",
-                )}
-                aria-label="Обновить"
-                title="Обновить"
-                disabled={listRefreshing}
-                onClick={() => {
-                  haptic("light");
-                  void refreshList();
-                }}
-              >
-                <Reload
-                  size={15}
-                  className={
-                    listRefreshing || loadingMail ? "animate-spin" : undefined
+                <ToolbarBtn
+                  icon={Forward}
+                  label="Переслать"
+                  onClick={() => void forwardSelected()}
+                />
+                <ToolbarBtn
+                  icon={Trash2}
+                  label={folder === "trash" ? "Удалить" : "Удалить"}
+                  onClick={moveToTrash}
+                  danger
+                />
+                <ToolbarBtn
+                  icon={Archive}
+                  label="В архив"
+                  onClick={() => moveSelected("archive")}
+                />
+                <ToolbarBtn
+                  icon={Mail}
+                  label="Непрочит."
+                  onClick={() => markUnread(true)}
+                />
+                <ToolbarBtn
+                  icon={MailOpen}
+                  label="Прочитано"
+                  onClick={() => markUnread(false)}
+                />
+                <ToolbarBtn
+                  icon={FolderInput}
+                  label="В папку"
+                  onClick={() =>
+                    setToolbarMenu((m) => (m === "folder" ? null : "folder"))
                   }
                 />
-              </button>
-              <ToolbarBtn
-                icon={Reply}
-                label="Ответить"
-                onClick={() => void replySelected()}
-              />
-              <ToolbarBtn
-                icon={Forward}
-                label="Переслать"
-                onClick={() => void forwardSelected()}
-              />
-              <ToolbarBtn
-                icon={Trash2}
-                label={folder === "trash" ? "Удалить" : "Удалить"}
-                onClick={moveToTrash}
-                danger
-              />
-              <ToolbarBtn
-                icon={Archive}
-                label="В архив"
-                onClick={() => moveSelected("archive")}
-              />
-              <ToolbarBtn
-                icon={Mail}
-                label="Непрочит."
-                onClick={() => markUnread(true)}
-              />
-              <ToolbarBtn
-                icon={MailOpen}
-                label="Прочитано"
-                onClick={() => markUnread(false)}
-              />
-              <ToolbarBtn
-                icon={FolderInput}
-                label="В папку"
-                onClick={() =>
-                  setToolbarMenu((m) => (m === "folder" ? null : "folder"))
-                }
-              />
-              <ToolbarBtn
-                icon={Tag}
-                label="Метка"
-                onClick={() =>
-                  setToolbarMenu((m) => (m === "label" ? null : "label"))
-                }
-              />
-              <ToolbarBtn
-                icon={Clock}
-                label="Напомнить"
-                onClick={remindSelected}
-              />
-              <ToolbarBtn
-                icon={ShieldAlert}
-                label="Это спам!"
-                onClick={() => moveSelected("spam")}
-              />
-              {folder === "trash" || folder === "spam" ? (
                 <ToolbarBtn
-                  icon={Inbox}
-                  label="Восстановить"
-                  onClick={() => moveSelected("restore")}
+                  icon={Tag}
+                  label="Метка"
+                  onClick={() =>
+                    setToolbarMenu((m) => (m === "label" ? null : "label"))
+                  }
                 />
-              ) : null}
+                <ToolbarBtn
+                  icon={Clock}
+                  label="Напомнить"
+                  onClick={remindSelected}
+                />
+                <ToolbarBtn
+                  icon={ShieldAlert}
+                  label="Это спам!"
+                  onClick={() => moveSelected("spam")}
+                />
+                {folder === "trash" || folder === "spam" ? (
+                  <ToolbarBtn
+                    icon={Inbox}
+                    label="Восстановить"
+                    onClick={() => moveSelected("restore")}
+                  />
+                ) : null}
               </div>
 
               {toolbarMenu === "folder" && hasTargets && (
@@ -2391,206 +2406,214 @@ export default function MailApp() {
                 }
                 transition={readerPanelAnim ? READER_SPRING : READER_SNAP}
               >
-              <MobileMailBanners enabled={Boolean(activeAccount)} />
-              <PullToRefresh
-                disabled={Boolean(openId)}
-                refreshing={listRefreshing}
-                onRefresh={async () => {
-                  await refreshList();
-                }}
-              >
-              {visible.length === 0 ? (
-                <div className="min-h-[240px] flex flex-col items-center justify-center text-center px-6">
-                  <Mail size={36} className="text-white/20" />
-                  <p className="mt-4 text-[15px] font-semibold font-[family-name:var(--font-manrope)]">
-                    Нет писем
-                  </p>
-                  <p className="mt-1 text-[13px] text-white/35 font-[family-name:var(--font-manrope)]">
-                    {listRefreshing || loadingMail
-                      ? "Обновляем…"
-                      : "В этой папке пока пусто"}
-                  </p>
-                  {(listRefreshing || loadingMail) && (
-                    <div className="mt-4 h-7 w-7 rounded-full border-2 border-white/10 border-t-[#4d9fff] animate-spin" />
-                  )}
-                </div>
-              ) : (
-                <ul className="space-y-2.5 pt-3 pb-20 md:pb-2 min-w-0">
-                  {visible.map((m, i) => {
-                    const isSel = selected.has(m.id);
-                    const isOpen = openId === m.id;
-                    return (
-                      <motion.li
-                        key={m.id}
-                        className="relative min-w-0"
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{
-                          type: "spring",
-                          stiffness: 480,
-                          damping: 36,
-                          delay: Math.min(i, 8) * 0.02,
-                        }}
-                        layout={false}
-                      >
-                        <SwipeMailRow
-                          id={m.id}
-                          open={swipeOpenId === m.id}
-                          onOpenChange={setSwipeOpenId}
-                          onReply={() => replyMessage(m.id)}
-                          onDelete={() => trashMessage(m.id)}
-                        >
-                          <div
-                            data-pressable
-                            className={cn(
-                              "relative flex items-center gap-2.5 md:gap-2.5 px-2.5 md:px-2.5 h-[56px] md:h-[50px] cursor-pointer rounded-[14px] overflow-hidden min-w-0 w-full box-border",
-                              isOpen
-                                ? "bg-[#0066ff]/25"
-                                : isSel
-                                  ? "bg-[#0066ff]/30"
-                                  : m.unread
-                                    ? "bg-[#2a2d36] hover:bg-[#32363f]"
-                                    : "bg-[#24262e] hover:bg-[#2a2d36]",
-                            )}
-                            onClick={() => {
-                              setSwipeOpenId(null);
-                              void openMessage(m.id);
+                <MobileMailBanners enabled={Boolean(activeAccount)} />
+                <PullToRefresh
+                  disabled={Boolean(openId)}
+                  refreshing={listRefreshing}
+                  onRefresh={async () => {
+                    await refreshList();
+                  }}
+                >
+                  {visible.length === 0 ? (
+                    <div className="min-h-[240px] flex flex-col items-center justify-center text-center px-6">
+                      <Mail size={36} className="text-white/20" />
+                      <p className="mt-4 text-[15px] font-semibold font-[family-name:var(--font-manrope)]">
+                        Нет писем
+                      </p>
+                      <p className="mt-1 text-[13px] text-white/35 font-[family-name:var(--font-manrope)]">
+                        {listRefreshing || loadingMail
+                          ? "Обновляем…"
+                          : "В этой папке пока пусто"}
+                      </p>
+                      {(listRefreshing || loadingMail) && (
+                        <div className="mt-4 h-7 w-7 rounded-full border-2 border-white/10 border-t-[#4d9fff] animate-spin" />
+                      )}
+                    </div>
+                  ) : (
+                    <ul className="space-y-2.5 pt-3 pb-20 md:pb-2 min-w-0">
+                      {visible.map((m, i) => {
+                        const isSel = selected.has(m.id);
+                        const isOpen = openId === m.id;
+                        return (
+                          <motion.li
+                            key={m.id}
+                            className="relative min-w-0"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{
+                              type: "spring",
+                              stiffness: 480,
+                              damping: 36,
+                              delay: Math.min(i, 8) * 0.02,
                             }}
-                            onMouseEnter={() => prefetchMessage(m.id)}
-                            onFocus={() => prefetchMessage(m.id)}
+                            layout={false}
                           >
-                            {m.unread && (
-                              <span className="pointer-events-none absolute top-1 left-2 z-20 h-[18px] px-1.5 rounded-[6px] bg-[#0066ff] text-white text-[10px] font-semibold font-[family-name:var(--font-manrope)] inline-flex items-center leading-none shadow-[0_2px_8px_rgba(0,102,255,0.4)]">
-                                новое
-                              </span>
-                            )}
-                            <Checkbox
-                              checked={isSel}
-                              onChange={() => toggleOne(m.id)}
-                              aria-label={`Выбрать ${m.from}`}
-                            />
-
-                            <SenderAvatar
-                              from={m.from}
-                              fromEmail={m.fromEmail}
-                              avatarColor={m.avatarColor}
-                              avatarUrl={avatarForSender(
-                                m.fromEmail,
-                                m.avatarUrl,
-                                accounts,
-                              )}
-                              size={34}
-                            />
-
-                            <div className="min-w-0 flex-1 basis-0 flex items-center gap-2 overflow-hidden">
-                              <span
+                            <SwipeMailRow
+                              id={m.id}
+                              open={swipeOpenId === m.id}
+                              onOpenChange={setSwipeOpenId}
+                              onReply={() => replyMessage(m.id)}
+                              onDelete={() => trashMessage(m.id)}
+                            >
+                              <div
+                                data-pressable
                                 className={cn(
-                                  "shrink-0 w-[100px] sm:w-[120px] md:w-[140px] truncate text-[14px] md:text-[14px] font-[family-name:var(--font-manrope)]",
-                                  m.unread
-                                    ? "font-bold text-white"
-                                    : "font-medium text-white/70",
+                                  "relative flex items-center gap-2.5 md:gap-2.5 px-2.5 md:px-2.5 h-[56px] md:h-[50px] cursor-pointer rounded-[14px] overflow-hidden min-w-0 w-full box-border",
+                                  isOpen
+                                    ? "bg-[#0066ff]/25"
+                                    : isSel
+                                      ? "bg-[#0066ff]/30"
+                                      : m.unread
+                                        ? "bg-[#2a2d36] hover:bg-[#32363f]"
+                                        : "bg-[#24262e] hover:bg-[#2a2d36]",
                                 )}
+                                onClick={() => {
+                                  setSwipeOpenId(null);
+                                  void openMessage(m.id);
+                                }}
+                                onMouseEnter={() => prefetchMessage(m.id)}
+                                onFocus={() => prefetchMessage(m.id)}
                               >
-                                {m.from}
-                              </span>
-
-                              <span className="min-w-0 flex-1 basis-0 truncate block text-[14px] md:text-[14px] font-[family-name:var(--font-manrope)]">
-                                <span
-                                  className={
-                                    m.unread
-                                      ? "font-semibold text-white"
-                                      : "text-white/75"
-                                  }
-                                >
-                                  {m.subject}
-                                </span>
-                                {(m.threadCount || 0) > 1 && (
-                                  <span className="ml-1.5 text-[11px] text-white/35 font-medium">
-                                    {m.threadCount}
+                                {m.unread && (
+                                  <span className="pointer-events-none absolute top-1 left-2 z-20 h-[18px] px-1.5 rounded-[6px] bg-[#0066ff] text-white text-[10px] font-semibold font-[family-name:var(--font-manrope)] inline-flex items-center leading-none shadow-[0_2px_8px_rgba(0,102,255,0.4)]">
+                                    новое
                                   </span>
                                 )}
-                                <span className="text-white/30">
-                                  {" "}
-                                  — {m.preview}
-                                </span>
-                              </span>
-                            </div>
-
-                            <div className="shrink-0 flex items-center gap-2 pl-1">
-                              {m.deliveryStatus === "scheduled" && m.remindAt && (
-                                <span
-                                  className="inline-flex items-center gap-1 text-[11px] text-[#4d9fff] font-[family-name:var(--font-manrope)]"
-                                  title={new Date(m.remindAt).toLocaleString("ru-RU")}
-                                >
-                                  <Clock size={12} />
-                                  <span className="hidden sm:inline">
-                                    {new Date(m.remindAt).toLocaleString("ru-RU", {
-                                      day: "numeric",
-                                      month: "short",
-                                      hour: "2-digit",
-                                      minute: "2-digit",
-                                    })}
-                                  </span>
-                                </span>
-                              )}
-                              {m.hasAttachment && (
-                                <Paperclip
-                                  size={13}
-                                  className="text-white/30 hidden sm:block"
+                                <Checkbox
+                                  checked={isSel}
+                                  onChange={() => toggleOne(m.id)}
+                                  aria-label={`Выбрать ${m.from}`}
                                 />
-                              )}
-                              {(() => {
-                                const badge = deliveryBadge(m.deliveryStatus);
-                                if (
-                                  !badge ||
-                                  (folder !== "sent" && m.folder !== "sent")
-                                )
-                                  return null;
-                                return (
+
+                                <SenderAvatar
+                                  from={m.from}
+                                  fromEmail={m.fromEmail}
+                                  avatarColor={m.avatarColor}
+                                  avatarUrl={avatarForSender(
+                                    m.fromEmail,
+                                    m.avatarUrl,
+                                    accounts,
+                                  )}
+                                  size={34}
+                                />
+
+                                <div className="min-w-0 flex-1 basis-0 flex items-center gap-2 overflow-hidden">
                                   <span
                                     className={cn(
-                                      "hidden sm:inline text-[11px] font-[family-name:var(--font-manrope)]",
-                                      badge.className,
+                                      "shrink-0 w-[100px] sm:w-[120px] md:w-[140px] truncate text-[14px] md:text-[14px] font-[family-name:var(--font-manrope)]",
+                                      m.unread
+                                        ? "font-bold text-white"
+                                        : "font-medium text-white/70",
                                     )}
-                                    title={m.deliveryDetail || undefined}
                                   >
-                                    {badge.text}
+                                    {m.from}
                                   </span>
-                                );
-                              })()}
-                              <span className="w-[48px] md:w-[56px] text-right text-[12px] md:text-[13px] text-white/35 font-[family-name:var(--font-manrope)] tabular-nums">
-                                {m.time}
-                              </span>
-                            </div>
-                          </div>
-                        </SwipeMailRow>
-                      </motion.li>
-                    );
-                  })}
-                </ul>
-              )}
-              </PullToRefresh>
+
+                                  <span className="min-w-0 flex-1 basis-0 truncate block text-[14px] md:text-[14px] font-[family-name:var(--font-manrope)]">
+                                    <span
+                                      className={
+                                        m.unread
+                                          ? "font-semibold text-white"
+                                          : "text-white/75"
+                                      }
+                                    >
+                                      {m.subject}
+                                    </span>
+                                    {(m.threadCount || 0) > 1 && (
+                                      <span className="ml-1.5 text-[11px] text-white/35 font-medium">
+                                        {m.threadCount}
+                                      </span>
+                                    )}
+                                    <span className="text-white/30">
+                                      {" "}
+                                      — {m.preview}
+                                    </span>
+                                  </span>
+                                </div>
+
+                                <div className="shrink-0 flex items-center gap-2 pl-1">
+                                  {m.deliveryStatus === "scheduled" &&
+                                    m.remindAt && (
+                                      <span
+                                        className="inline-flex items-center gap-1 text-[11px] text-[#4d9fff] font-[family-name:var(--font-manrope)]"
+                                        title={new Date(
+                                          m.remindAt,
+                                        ).toLocaleString("ru-RU")}
+                                      >
+                                        <Clock size={12} />
+                                        <span className="hidden sm:inline">
+                                          {new Date(m.remindAt).toLocaleString(
+                                            "ru-RU",
+                                            {
+                                              day: "numeric",
+                                              month: "short",
+                                              hour: "2-digit",
+                                              minute: "2-digit",
+                                            },
+                                          )}
+                                        </span>
+                                      </span>
+                                    )}
+                                  {m.hasAttachment && (
+                                    <Paperclip
+                                      size={13}
+                                      className="text-white/30 hidden sm:block"
+                                    />
+                                  )}
+                                  {(() => {
+                                    const badge = deliveryBadge(
+                                      m.deliveryStatus,
+                                    );
+                                    if (
+                                      !badge ||
+                                      (folder !== "sent" && m.folder !== "sent")
+                                    )
+                                      return null;
+                                    return (
+                                      <span
+                                        className={cn(
+                                          "hidden sm:inline text-[11px] font-[family-name:var(--font-manrope)]",
+                                          badge.className,
+                                        )}
+                                        title={m.deliveryDetail || undefined}
+                                      >
+                                        {badge.text}
+                                      </span>
+                                    );
+                                  })()}
+                                  <span className="w-[48px] md:w-[56px] text-right text-[12px] md:text-[13px] text-white/35 font-[family-name:var(--font-manrope)] tabular-nums">
+                                    {m.time}
+                                  </span>
+                                </div>
+                              </div>
+                            </SwipeMailRow>
+                          </motion.li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </PullToRefresh>
               </motion.div>
 
               <AnimatePresence initial={false}>
-              {openId && (
-                <motion.div
-                  key="mail-reader"
-                  initial={
-                    readerPanelAnimRef.current
-                      ? { x: "104%", opacity: 0.6 }
-                      : false
-                  }
-                  animate={{ x: 0, opacity: 1 }}
-                  exit={{ x: "104%", opacity: 0.6 }}
-                  transition={readerPanelAnim ? READER_SPRING : READER_SNAP}
-                  className={cn(
-                    "z-20 flex flex-col overflow-hidden rounded-[16px] bg-[#111318] will-change-transform",
-                    // Mobile: full inset card from the right. Desktop: right half, left edge fixed via width
-                    "absolute inset-2",
-                    "md:inset-auto md:top-3 md:bottom-3 md:right-3 md:w-[calc(50%-15px)]",
-                  )}
-                >
+                {openId && (
+                  <motion.div
+                    key="mail-reader"
+                    initial={
+                      readerPanelAnimRef.current
+                        ? { x: "104%", opacity: 0.6 }
+                        : false
+                    }
+                    animate={{ x: 0, opacity: 1 }}
+                    exit={{ x: "104%", opacity: 0.6 }}
+                    transition={readerPanelAnim ? READER_SPRING : READER_SNAP}
+                    className={cn(
+                      "z-20 flex flex-col overflow-hidden rounded-[16px] bg-[#111318] will-change-transform",
+                      // Mobile: full inset card from the right. Desktop: right half, left edge fixed via width
+                      "absolute inset-2",
+                      "md:inset-auto md:top-3 md:bottom-3 md:right-3 md:w-[calc(50%-15px)]",
+                    )}
+                  >
                     <div className="shrink-0 flex items-center gap-2 px-3 md:px-5 h-12">
                       <button
                         type="button"
@@ -2643,20 +2666,24 @@ export default function MailApp() {
                         </div>
                       ) : (
                         <>
-                      <div className="flex-1 px-3 sm:px-5 md:px-6 pt-3 md:pt-4 pb-4">
-                        <article className="mx-auto w-full max-w-[680px] rounded-[20px] bg-[#1a1c24] border border-white/[0.07] px-4 sm:px-5 md:px-6 pt-5 pb-5 md:pt-6 md:pb-6 shadow-[0_8px_32px_rgba(0,0,0,0.25)]">
-                            <h2 className="text-[22px] md:text-[26px] font-bold tracking-[-0.035em] leading-[1.25] text-white font-[family-name:var(--font-unbounded)]">
-                              {detail?.subject || "…"}
-                            </h2>
-                            {thread.length > 1 && (
-                              <p className="mt-1.5 text-[13px] text-white/35 font-[family-name:var(--font-manrope)]">
-                                {thread.length} писем в переписке
-                              </p>
-                            )}
+                          <div className="flex-1 px-3 sm:px-5 md:px-6 pt-3 md:pt-4 pb-4">
+                            <article className="mx-auto w-full max-w-[680px] rounded-[20px] bg-[#1a1c24] border border-white/[0.07] px-4 sm:px-5 md:px-6 pt-5 pb-5 md:pt-6 md:pb-6 shadow-[0_8px_32px_rgba(0,0,0,0.25)]">
+                              <h2 className="text-[22px] md:text-[26px] font-bold tracking-[-0.035em] leading-[1.25] text-white font-[family-name:var(--font-unbounded)]">
+                                {detail?.subject || "…"}
+                              </h2>
+                              {thread.length > 1 && (
+                                <p className="mt-1.5 text-[13px] text-white/35 font-[family-name:var(--font-manrope)]">
+                                  {thread.length} писем в переписке
+                                </p>
+                              )}
 
-                            <div className="mt-5 space-y-0">
-                              {(thread.length > 0 ? thread : detail ? [detail] : []).map(
-                                (msg, idx, list) => {
+                              <div className="mt-5 space-y-0">
+                                {(thread.length > 0
+                                  ? thread
+                                  : detail
+                                    ? [detail]
+                                    : []
+                                ).map((msg, idx, list) => {
                                   const isLast = idx === list.length - 1;
                                   const attaches = extractAttachmentsFromHtml(
                                     msg.bodyHtml || "",
@@ -2669,7 +2696,8 @@ export default function MailApp() {
                                       key={msg.id}
                                       className={cn(
                                         "pt-4",
-                                        idx > 0 && "border-t border-white/8 mt-1",
+                                        idx > 0 &&
+                                          "border-t border-white/8 mt-1",
                                       )}
                                     >
                                       <div className="flex items-start gap-3">
@@ -2743,8 +2771,10 @@ export default function MailApp() {
                                               {isLast && recipientsOpen && (
                                                 <div className="mt-2 rounded-[12px] bg-white/[0.04] px-3 py-2 space-y-1">
                                                   {(
-                                                    (msg.to ||
-                                                      activeAccount.email)
+                                                    (
+                                                      msg.to ||
+                                                      activeAccount.email
+                                                    )
                                                       .split(/[,;]+/)
                                                       .map((s) => s.trim())
                                                       .filter(Boolean) || []
@@ -2799,35 +2829,34 @@ export default function MailApp() {
                                       </div>
                                     </div>
                                   );
-                                },
-                              )}
-                            </div>
-                        </article>
-                      </div>
+                                })}
+                              </div>
+                            </article>
+                          </div>
 
-                      <div className="shrink-0 border-t border-white/[0.06] bg-[#14161c] px-4 md:px-6 py-3 flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => void replySelected()}
-                          className="h-10 flex-1 sm:flex-none sm:min-w-[140px] px-4 rounded-[12px] bg-[#0066ff] text-white text-[14px] font-semibold font-[family-name:var(--font-manrope)] inline-flex items-center justify-center gap-2 hover:bg-[#0052cc]"
-                        >
-                          <Reply size={16} />
-                          Ответить
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void forwardSelected()}
-                          className="h-10 flex-1 sm:flex-none sm:min-w-[140px] px-4 rounded-[12px] bg-white/[0.06] text-white/80 text-[14px] font-medium font-[family-name:var(--font-manrope)] inline-flex items-center justify-center gap-2 hover:bg-white/[0.1] hover:text-white"
-                        >
-                          <Forward size={16} />
-                          Переслать
-                        </button>
-                      </div>
+                          <div className="shrink-0 border-t border-white/[0.06] bg-[#14161c] px-4 md:px-6 py-3 flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => void replySelected()}
+                              className="h-10 flex-1 sm:flex-none sm:min-w-[140px] px-4 rounded-[12px] bg-[#0066ff] text-white text-[14px] font-semibold font-[family-name:var(--font-manrope)] inline-flex items-center justify-center gap-2 hover:bg-[#0052cc]"
+                            >
+                              <Reply size={16} />
+                              Ответить
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void forwardSelected()}
+                              className="h-10 flex-1 sm:flex-none sm:min-w-[140px] px-4 rounded-[12px] bg-white/[0.06] text-white/80 text-[14px] font-medium font-[family-name:var(--font-manrope)] inline-flex items-center justify-center gap-2 hover:bg-white/[0.1] hover:text-white"
+                            >
+                              <Forward size={16} />
+                              Переслать
+                            </button>
+                          </div>
                         </>
                       )}
                     </div>
-                </motion.div>
-              )}
+                  </motion.div>
+                )}
               </AnimatePresence>
             </div>
           </div>
