@@ -3,22 +3,22 @@
 :root {
   --background: #0c0d10;
   --foreground: #ffffff;
-  --card: #1a1c22;
+  --card: #16181f;
   --card-foreground: #ffffff;
-  --popover: #1a1c22;
+  --popover: #1c1f27;
   --popover-foreground: #ffffff;
   --primary: #0066ff;
   --primary-foreground: #ffffff;
-  --secondary: #24262e;
+  --secondary: #252830;
   --secondary-foreground: #4d9fff;
-  --muted: #24262e;
+  --muted: #1e2129;
   --muted-foreground: #8b8f9a;
-  --accent: #24262e;
+  --accent: #252830;
   --accent-foreground: #ffffff;
   --destructive: #ef4444;
   --destructive-foreground: #fafafa;
   --border: transparent;
-  --input: #0f1115;
+  --input: #14161c;
   --ring: #0066ff;
   --radius: 16px;
 
@@ -28,7 +28,18 @@
   --blue-800: #003399;
   --blue-900: #0a1a3a;
   --surface: #0c0d10;
-  --surface-elevated: #1a1c22;
+  --surface-elevated: #16181f;
+
+  /* Mail chrome */
+  --mail-canvas: #0c0d10;
+  --mail-pane: #16181f;
+  --mail-panel: #1c1f27;
+  --mail-search: #1e2129;
+  --mail-row: #1c1f27;
+  --mail-row-unread: #252830;
+  --mail-row-hover: #2c303b;
+  --mail-tabbar: #12141a;
+  --mail-chip: #252830;
 
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -140,20 +151,29 @@ html.standalone body {
   padding-bottom: 0;
   padding-left: max(var(--safe-left), env(safe-area-inset-left, 0px));
   padding-right: max(var(--safe-right), env(safe-area-inset-right, 0px));
-  background: #0c0d10;
+  background: var(--mail-canvas);
   box-sizing: border-box;
   overflow: hidden;
 }
 
 .mail-main-pane {
-  background: #1a1c22;
+  background: var(--mail-pane);
   padding-bottom: var(--safe-bottom);
+  border-radius: 20px 20px 0 0;
+}
+
+@media (min-width: 768px) {
+  .mail-main-pane {
+    border-radius: 20px;
+    padding-bottom: 0;
+  }
 }
 
 /* Same as pnk-id mobile tab bar */
 .mobile-tab-bar {
   bottom: 0;
   padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  background: var(--mail-tabbar);
 }
 
 button,

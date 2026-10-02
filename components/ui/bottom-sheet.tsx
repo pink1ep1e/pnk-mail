@@ -94,7 +94,7 @@ export function BottomSheet({
             aria-modal
             aria-labelledby={labelledBy}
             className={cn(
-              "pointer-events-auto relative z-10 w-full sm:max-w-[520px] max-h-[88dvh] flex flex-col rounded-t-[28px] sm:rounded-[28px] bg-[#1a1c22] shadow-[0_24px_80px_rgba(0,0,0,0.55)]",
+              "pointer-events-auto relative z-10 w-full sm:max-w-[520px] max-h-[88dvh] flex flex-col rounded-t-[28px] sm:rounded-[28px] bg-[var(--mail-panel,#1c1f27)] shadow-[0_24px_80px_rgba(0,0,0,0.55)]",
               className,
             )}
             initial={mobile ? { y: "100%" } : { opacity: 0, scale: 0.96, y: 12 }}

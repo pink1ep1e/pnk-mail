@@ -1675,7 +1675,7 @@ export default function MailApp() {
         className={cn(
           "w-full flex items-center gap-2.5 rounded-[12px] px-3 h-[38px] text-[14px] font-[family-name:var(--font-manrope)] transition-colors",
           active
-            ? "bg-[#24262e] text-white font-semibold"
+            ? "bg-[var(--mail-chip)] text-white font-semibold"
             : "text-white/55 hover:bg-white/[0.04] hover:text-white/85",
         )}
       >
@@ -1699,7 +1699,7 @@ export default function MailApp() {
 
   const accountMenuBody = (
     <>
-      <div className="rounded-[14px] bg-[#17191f] border border-white/10 overflow-hidden mb-2.5">
+      <div className="rounded-[14px] bg-[var(--mail-canvas)] border border-white/[0.08] overflow-hidden mb-2.5">
         <div className="flex items-center gap-3 px-3 py-3 md:px-3.5 md:py-3.5">
           <AccountAvatar
             account={activeAccount}
@@ -1719,7 +1719,7 @@ export default function MailApp() {
               {copied === "profile" && (
                 <span
                   role="status"
-                  className="absolute left-0 top-[calc(100%+6px)] z-50 whitespace-nowrap rounded-[10px] bg-[#2a2d36] border border-white/10 px-2.5 py-1.5 text-[12px] text-white shadow-[0_8px_24px_rgba(0,0,0,0.45)] pointer-events-none"
+                  className="absolute left-0 top-[calc(100%+6px)] z-50 whitespace-nowrap rounded-[10px] bg-[var(--mail-chip)] border border-white/10 px-2.5 py-1.5 text-[12px] text-white shadow-[0_8px_24px_rgba(0,0,0,0.45)] pointer-events-none"
                 >
                   Скопировано
                 </span>
@@ -1729,7 +1729,7 @@ export default function MailApp() {
         </div>
       </div>
 
-      <div className="rounded-[14px] bg-[#17191f] border border-white/10 overflow-hidden mb-2.5">
+      <div className="rounded-[14px] bg-[var(--mail-canvas)] border border-white/[0.08] overflow-hidden mb-2.5">
         {accounts
           .filter((a) => !a.active)
           .map((a) => (
@@ -1755,7 +1755,7 @@ export default function MailApp() {
           onClick={addAccount}
           className="w-full flex items-center gap-3 px-3 py-2.5 md:py-3 hover:bg-white/[0.05] transition-colors text-left"
         >
-          <div className="h-9 w-9 md:h-10 md:w-10 rounded-full bg-[#2a2d36] flex items-center justify-center text-white/70">
+          <div className="h-9 w-9 md:h-10 md:w-10 rounded-full bg-[var(--mail-chip)] flex items-center justify-center text-white/70">
             <Plus size={16} />
           </div>
           <span className="text-[14px] md:text-[15px] font-[family-name:var(--font-manrope)]">
@@ -1767,7 +1767,7 @@ export default function MailApp() {
           onClick={() => void logoutAll()}
           className="w-full flex items-center gap-3 px-3 py-2.5 md:py-3 hover:bg-white/[0.05] transition-colors text-left"
         >
-          <div className="h-9 w-9 md:h-10 md:w-10 rounded-full bg-[#2a2d36] flex items-center justify-center text-white/70">
+          <div className="h-9 w-9 md:h-10 md:w-10 rounded-full bg-[var(--mail-chip)] flex items-center justify-center text-white/70">
             <LogOut size={16} />
           </div>
           <span className="text-[14px] md:text-[15px] font-[family-name:var(--font-manrope)]">
@@ -1779,7 +1779,7 @@ export default function MailApp() {
       <button
         type="button"
         onClick={manageAccount}
-        className="w-full h-11 md:h-12 rounded-full bg-[#17191f] border border-white/12 hover:bg-[#1c1f27] transition-colors px-4 inline-flex items-center gap-3 text-[14px] md:text-[15px] font-[family-name:var(--font-manrope)]"
+        className="w-full h-11 md:h-12 rounded-full bg-[var(--mail-canvas)] border border-white/[0.1] hover:bg-[var(--mail-search)] transition-colors px-4 inline-flex items-center gap-3 text-[14px] md:text-[15px] font-[family-name:var(--font-manrope)]"
       >
         <Settings size={16} className="text-white/55" />
         Управление аккаунтом
@@ -1800,7 +1800,7 @@ export default function MailApp() {
   const Sidebar = ({ fullBleed = false }: { fullBleed?: boolean }) => (
     <aside
       className={cn(
-        "flex h-full flex-col bg-[#1a1c22] text-white overflow-hidden",
+        "flex h-full flex-col bg-[var(--mail-pane)] text-white overflow-hidden",
         fullBleed
           ? "w-full rounded-none"
           : "w-[240px] shrink-0 rounded-[20px]",
@@ -1986,15 +1986,15 @@ export default function MailApp() {
   );
 
   return (
-    <div className="mail-app-shell w-full max-w-[100vw] bg-[#0c0d10] text-white flex flex-col overflow-hidden overscroll-none touch-pan-y">
-      {/* Header — mobile pill (screen 2) / desktop bar */}
-      <header className="shrink-0 z-50 bg-[#0c0d10]">
+    <div className="mail-app-shell w-full max-w-[100vw] bg-[var(--mail-canvas)] text-white flex flex-col overflow-hidden overscroll-none touch-pan-y">
+      {/* Header — mobile pill / desktop bar */}
+      <header className="shrink-0 z-50 bg-[var(--mail-canvas)]">
         {/* Mobile: floating search pill — shell already has safe-area top */}
         <div className="md:hidden px-3 pt-1.5 pb-2">
-          <div className="h-11 flex items-center rounded-full bg-[#32363f] pl-1 pr-1.5">
+          <div className="h-11 flex items-center rounded-full bg-[var(--mail-search)] pl-1 pr-1.5">
             <button
               type="button"
-              className="h-9 w-9 shrink-0 rounded-full flex items-center justify-center text-white/75 active:bg-white/10"
+              className="h-9 w-9 shrink-0 rounded-full flex items-center justify-center text-white/70 active:bg-white/10"
               onClick={() => openDrawer()}
               aria-label="Меню"
             >
@@ -2006,7 +2006,7 @@ export default function MailApp() {
               className="min-w-0 flex-1 h-9 flex items-center px-1 text-left"
               aria-label="Поиск"
             >
-              <span className="text-[15px] text-white/45 font-[family-name:var(--font-manrope)] truncate">
+              <span className="text-[15px] text-white/40 font-[family-name:var(--font-manrope)] truncate">
                 Поиск в почте
               </span>
             </button>
@@ -2024,7 +2024,7 @@ export default function MailApp() {
         </div>
 
         {/* Desktop header */}
-        <div className="hidden md:flex h-16 px-5 items-center gap-4 border-b border-white/5">
+        <div className="hidden md:flex h-16 px-5 items-center gap-4 border-b border-white/[0.06]">
           <button
             type="button"
             onClick={() => window.location.reload()}
@@ -2045,7 +2045,7 @@ export default function MailApp() {
             <button
               type="button"
               onClick={() => setSearchOpen(true)}
-              className="flex items-center gap-2 h-10 min-w-[240px] max-w-[320px] flex-1 rounded-full bg-[#2a2d36] px-4 text-left hover:bg-[#32363f] transition-colors"
+              className="flex items-center gap-2 h-10 min-w-[240px] max-w-[320px] flex-1 rounded-full bg-[var(--mail-search)] px-4 text-left hover:bg-[var(--mail-row-hover)] transition-colors"
             >
               <Search size={16} className="text-white/35 shrink-0" />
               <span className="text-[14px] text-white/35 font-[family-name:var(--font-manrope)] truncate">
@@ -2063,7 +2063,7 @@ export default function MailApp() {
               {copied === "header" && (
                 <span
                   role="status"
-                  className="absolute left-1/2 -translate-x-1/2 top-[calc(100%+6px)] z-50 whitespace-nowrap rounded-[10px] bg-[#2a2d36] border border-white/10 px-2.5 py-1.5 text-[12px] text-white shadow-[0_8px_24px_rgba(0,0,0,0.45)] pointer-events-none"
+                  className="absolute left-1/2 -translate-x-1/2 top-[calc(100%+6px)] z-50 whitespace-nowrap rounded-[10px] bg-[var(--mail-chip)] border border-white/10 px-2.5 py-1.5 text-[12px] text-white shadow-[0_8px_24px_rgba(0,0,0,0.45)] pointer-events-none"
                 >
                   Скопировано
                 </span>
@@ -2110,7 +2110,7 @@ export default function MailApp() {
                           ease: [0.22, 1, 0.36, 1],
                         }}
                         style={{ transformOrigin: "calc(100% - 16px) 0%" }}
-                        className="absolute right-0 top-[calc(100%+10px)] w-[min(calc(100vw-32px),348px)] rounded-[20px] bg-[#22252e] border border-white/18 shadow-[0_16px_48px_rgba(0,0,0,0.75),0_0_0_1px_rgba(255,255,255,0.06)] p-3 z-[70]"
+                        className="absolute right-0 top-[calc(100%+10px)] w-[min(calc(100vw-32px),348px)] rounded-[20px] bg-[var(--mail-panel)] border border-white/14 shadow-[0_16px_48px_rgba(0,0,0,0.75),0_0_0_1px_rgba(255,255,255,0.06)] p-3 z-[70]"
                       >
                         {accountMenuBody}
                       </motion.div>
@@ -2129,7 +2129,7 @@ export default function MailApp() {
           open={profileOpen}
           onClose={() => setProfileOpen(false)}
           labelledBy="account-menu-title"
-          className="bg-[#22252e]"
+          className="bg-[var(--mail-panel)]"
         >
           <div data-account-menu className="pb-1">
             <h2
@@ -2150,7 +2150,7 @@ export default function MailApp() {
           style={{ paddingTop: "calc(4rem + var(--safe-top))" }}
         >
           <div
-            className="w-full max-w-[640px] rounded-[16px] bg-[#1a1c22] border border-white/10 shadow-2xl overflow-hidden"
+            className="w-full max-w-[640px] rounded-[16px] bg-[var(--mail-panel)] border border-white/10 shadow-2xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="relative p-3 pb-2">
@@ -2164,7 +2164,7 @@ export default function MailApp() {
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Поиск в почте"
-                  className="w-full h-12 rounded-[12px] bg-[#0f1115] pl-10 pr-12 text-[15px] font-[family-name:var(--font-manrope)] text-white outline-none focus:outline focus:outline-2 focus:outline-[#0066ff] placeholder:text-white/30"
+                  className="w-full h-12 rounded-[12px] bg-[var(--mail-canvas)] pl-10 pr-12 text-[15px] font-[family-name:var(--font-manrope)] text-white outline-none focus:outline focus:outline-2 focus:outline-[#0066ff] placeholder:text-white/30"
                 />
                 <button
                   type="button"
@@ -2300,7 +2300,7 @@ export default function MailApp() {
             touchAction: "pan-y",
           }}
         >
-          <div className="h-full overflow-y-auto overscroll-contain bg-[#1a1c22] shadow-[8px_0_32px_rgba(0,0,0,0.45)]"
+          <div className="h-full overflow-y-auto overscroll-contain bg-[var(--mail-pane)] shadow-[8px_0_32px_rgba(0,0,0,0.45)]"
             style={{
               paddingTop: "var(--safe-top)",
               paddingBottom: "var(--safe-bottom)",
@@ -2312,7 +2312,7 @@ export default function MailApp() {
 
         {/* Main — Yandex-style list pane */}
         <main className="flex-1 min-w-0 flex flex-col p-0">
-          <div className="flex-1 min-h-0 bg-[#1a1c22] mail-main-pane md:rounded-[20px] flex flex-col overflow-hidden">
+          <div className="flex-1 min-h-0 mail-main-pane md:rounded-[20px] flex flex-col overflow-hidden">
             {/* Toolbar — horizontal scroll on mobile; menus outside so dropdowns aren't clipped */}
             <div className="relative shrink-0 min-w-0">
               <div className="mail-toolbar-scroll flex items-center gap-0.5 px-2 md:px-3 py-1.5 overflow-x-auto overscroll-x-contain no-scrollbar min-w-0 w-full [-webkit-overflow-scrolling:touch]">
@@ -2388,7 +2388,7 @@ export default function MailApp() {
               </div>
 
               {toolbarMenu === "folder" && hasTargets && (
-                <div className="absolute left-2 md:left-28 top-full mt-1 z-50 min-w-[220px] max-h-[280px] overflow-y-auto rounded-[14px] bg-[#1a1c22] shadow-xl py-1 border border-white/10">
+                <div className="absolute left-2 md:left-28 top-full mt-1 z-50 min-w-[220px] max-h-[280px] overflow-y-auto rounded-[14px] bg-[var(--mail-panel)] shadow-xl py-1 border border-white/10">
                   {[
                     { id: "inbox", name: "Входящие" },
                     { id: "archive", name: "Архив" },
@@ -2417,7 +2417,7 @@ export default function MailApp() {
               )}
 
               {toolbarMenu === "label" && hasTargets && (
-                <div className="absolute left-2 md:left-52 top-full mt-1 z-50 min-w-[220px] max-h-[280px] overflow-y-auto rounded-[14px] bg-[#1a1c22] shadow-xl py-1 border border-white/10">
+                <div className="absolute left-2 md:left-52 top-full mt-1 z-50 min-w-[220px] max-h-[280px] overflow-y-auto rounded-[14px] bg-[var(--mail-panel)] shadow-xl py-1 border border-white/10">
                   {mailLabels.length === 0 ? (
                     <button
                       type="button"
@@ -2546,12 +2546,12 @@ export default function MailApp() {
                                 className={cn(
                                   "relative flex items-center gap-2.5 md:gap-2.5 px-2.5 md:px-2.5 h-[56px] md:h-[50px] cursor-pointer rounded-[14px] overflow-hidden min-w-0 w-full box-border",
                                   isOpen
-                                    ? "bg-[#0066ff]/25"
+                                    ? "bg-[#0066ff]/22"
                                     : isSel
-                                      ? "bg-[#0066ff]/30"
+                                      ? "bg-[#0066ff]/28"
                                       : m.unread
-                                        ? "bg-[#2a2d36] hover:bg-[#32363f]"
-                                        : "bg-[#24262e] hover:bg-[#2a2d36]",
+                                        ? "bg-[var(--mail-row-unread)] hover:bg-[var(--mail-row-hover)]"
+                                        : "bg-[var(--mail-row)] hover:bg-[var(--mail-row-hover)]",
                                 )}
                                 onClick={() => {
                                   setSwipeOpenId(null);
@@ -2694,10 +2694,10 @@ export default function MailApp() {
                     exit={{ x: "100%" }}
                     transition={readerPanelAnim ? READER_SPRING : READER_SNAP}
                     className={cn(
-                      "flex flex-col overflow-hidden bg-[#0c0d10] will-change-transform",
+                      "flex flex-col overflow-hidden bg-[var(--mail-canvas)] will-change-transform",
                       // Mobile: true full-screen page. Desktop: right half panel
                       "max-md:fixed max-md:inset-0 max-md:z-[55]",
-                      "md:absolute md:inset-auto md:top-3 md:bottom-3 md:right-3 md:z-20 md:w-[calc(50%-15px)] md:rounded-[16px] md:bg-[#111318]",
+                      "md:absolute md:inset-auto md:top-3 md:bottom-3 md:right-3 md:z-20 md:w-[calc(50%-15px)] md:rounded-[16px] md:bg-[var(--mail-pane)]",
                     )}
                   >
                     <div
@@ -2763,7 +2763,7 @@ export default function MailApp() {
                       ) : (
                         <>
                           <div className="flex-1 px-3 sm:px-5 md:px-6 pt-3 md:pt-4 pb-4">
-                            <article className="mx-auto w-full max-w-[680px] rounded-[20px] bg-[#1a1c24] border border-white/[0.07] px-4 sm:px-5 md:px-6 pt-5 pb-5 md:pt-6 md:pb-6 shadow-[0_8px_32px_rgba(0,0,0,0.25)]">
+                            <article className="mx-auto w-full max-w-[680px] rounded-[20px] bg-[var(--mail-panel)] border border-white/[0.07] px-4 sm:px-5 md:px-6 pt-5 pb-5 md:pt-6 md:pb-6 shadow-[0_8px_32px_rgba(0,0,0,0.25)]">
                               <h2 className="text-[22px] md:text-[26px] font-bold tracking-[-0.035em] leading-[1.25] text-white font-[family-name:var(--font-unbounded)]">
                                 {detail?.subject || "…"}
                               </h2>
@@ -3081,7 +3081,7 @@ export default function MailApp() {
               void submitNameModal();
             }
           }}
-          className="mt-4 w-full h-12 rounded-[12px] bg-[#0f1115] border border-white/10 px-3.5 text-[15px] text-white font-[family-name:var(--font-manrope)] outline-none focus:border-[#0066ff]/60 focus:shadow-[0_0_0_3px_rgba(0,102,255,0.18)] placeholder:text-white/30"
+          className="mt-4 w-full h-12 rounded-[12px] bg-[var(--mail-canvas)] border border-white/10 px-3.5 text-[15px] text-white font-[family-name:var(--font-manrope)] outline-none focus:border-[#0066ff]/60 focus:shadow-[0_0_0_3px_rgba(0,102,255,0.18)] placeholder:text-white/30"
         />
         <div className="mt-4 flex items-center justify-end gap-2">
           <button
@@ -3112,7 +3112,7 @@ export default function MailApp() {
 
       {(sendError || toast) && (
         <div
-          className="fixed left-1/2 -translate-x-1/2 z-50 max-w-[min(90vw,420px)] rounded-[14px] bg-[#2a2d36] px-4 py-3 text-[13px] text-white/80 shadow-lg font-[family-name:var(--font-manrope)]"
+          className="fixed left-1/2 -translate-x-1/2 z-50 max-w-[min(90vw,420px)] rounded-[14px] bg-[var(--mail-panel)] px-4 py-3 text-[13px] text-white/80 shadow-lg font-[family-name:var(--font-manrope)]"
           style={{ bottom: "calc(4.5rem + var(--safe-bottom))" }}
         >
           {sendError || toast}
@@ -3128,11 +3128,11 @@ export default function MailApp() {
         </div>
       )}
 
-      {/* Mobile bottom tabs — lighter surface + compose in bar */}
+      {/* Mobile bottom tabs — flat, all buttons same style */}
       {isMobileUi && !composeOpen && !idOverlayUrl && !idOverlayLoading && !openId && (
         <nav
           className={cn(
-            "mobile-tab-bar md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-white/[0.08] bg-[#22252e] transition-transform duration-[220ms] ease-out",
+            "mobile-tab-bar md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-white/[0.06] transition-transform duration-[220ms] ease-out",
             mobileTabHidden && "translate-y-full",
           )}
           aria-label="Основные папки"
@@ -3167,10 +3167,8 @@ export default function MailApp() {
               className="relative flex flex-col items-center justify-end gap-1 pb-0.5 font-[family-name:var(--font-manrope)] transition-colors duration-75 select-none text-white/40"
               aria-label="Написать"
             >
-              <span className="h-[28px] w-[28px] -mt-0.5 rounded-full bg-[#0066ff] text-white inline-flex items-center justify-center">
-                <Pencil size={15} />
-              </span>
-              <span className="text-[11px] font-semibold leading-none text-white/55">
+              <Pencil size={22} className="text-white/40" />
+              <span className="text-[11px] font-semibold leading-none">
                 Написать
               </span>
             </button>
