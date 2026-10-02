@@ -103,7 +103,7 @@ type MailAccount = {
 
 type FolderCounts = Partial<Record<string, { unread: number; total: number }>>;
 
-const DRAWER_W = 280;
+const DRAWER_W_DESKTOP = 280;
 const DRAWER_EDGE = 52;
 
 type MessageDetail = MailMessage & {
@@ -395,10 +395,15 @@ export default function MailApp() {
   const [isMobileUi, setIsMobileUi] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [drawerPulling, setDrawerPulling] = useState(false);
-  const drawerX = useMotionValue(-DRAWER_W);
-  const drawerBackdrop = useTransform(drawerX, [-DRAWER_W, 0], [0, 1]);
+  const drawerWRef = useRef(DRAWER_W_DESKTOP);
+  const drawerX = useMotionValue(-DRAWER_W_DESKTOP);
+  const drawerBackdrop = useTransform(drawerX, (x) => {
+    const w = drawerWRef.current || DRAWER_W_DESKTOP;
+    return Math.max(0, Math.min(1, (x + w) / w));
+  });
   const [searchOpen, setSearchOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [mobileTabHidden, setMobileTabHidden] = useState(false);
   const [idOverlayUrl, setIdOverlayUrl] = useState<string | null>(null);
   const [idOverlayLoading, setIdOverlayLoading] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
@@ -840,12 +845,20 @@ export default function MailApp() {
   }, [nameModal, nameModalBusy]);
 
   useEffect(() => {
-    const sync = () =>
-      setIsMobileUi(window.matchMedia("(max-width: 767px)").matches);
+    const sync = () => {
+      const mobile = window.matchMedia("(max-width: 767px)").matches;
+      setIsMobileUi(mobile);
+      const w = mobile ? window.innerWidth : DRAWER_W_DESKTOP;
+      drawerWRef.current = w;
+      if (!sidebarOpen && !drawerPulling) {
+        drawerX.set(-w);
+      }
+    };
     sync();
     window.addEventListener("resize", sync);
     return () => window.removeEventListener("resize", sync);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only sync size on mount/resize
+  }, [sidebarOpen, drawerPulling, drawerX]);
 
   // Mobile: pull folder drawer with the finger from the left edge
   useEffect(() => {
@@ -878,6 +891,7 @@ export default function MailApp() {
       if (!t) return;
       const dx = t.clientX - startX;
       const dy = t.clientY - startY;
+      const w = drawerWRef.current;
       if (!locked) {
         if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
         locked = Math.abs(dx) > Math.abs(dy) * 1.1 ? "h" : "v";
@@ -893,7 +907,7 @@ export default function MailApp() {
       }
       if (locked !== "h") return;
       e.preventDefault();
-      const next = Math.max(-DRAWER_W, Math.min(0, -DRAWER_W + dx));
+      const next = Math.max(-w, Math.min(0, -w + dx));
       drawerX.set(next);
     };
 
@@ -905,8 +919,9 @@ export default function MailApp() {
       delete document.documentElement.dataset.mailGesture;
       setDrawerPulling(false);
       if (!wasH || !openedByPull) return;
+      const w = drawerWRef.current;
       const x = drawerX.get();
-      const progress = (x + DRAWER_W) / DRAWER_W;
+      const progress = (x + w) / w;
       if (progress > 0.35) {
         setSidebarOpen(true);
         void animate(drawerX, 0, {
@@ -916,7 +931,7 @@ export default function MailApp() {
         });
       } else {
         setSidebarOpen(false);
-        void animate(drawerX, -DRAWER_W, {
+        void animate(drawerX, -w, {
           type: "spring",
           stiffness: 420,
           damping: 38,
@@ -941,6 +956,10 @@ export default function MailApp() {
     if (sidebarOpen) setSwipeOpenId(null);
   }, [sidebarOpen]);
 
+  useEffect(() => {
+    if (openId) setMobileTabHidden(false);
+  }, [openId]);
+
   const openDrawer = () => {
     setSwipeOpenId(null);
     setSidebarOpen(true);
@@ -953,7 +972,7 @@ export default function MailApp() {
 
   const closeDrawer = () => {
     setSidebarOpen(false);
-    void animate(drawerX, -DRAWER_W, {
+    void animate(drawerX, -drawerWRef.current, {
       type: "spring",
       stiffness: 420,
       damping: 38,
@@ -1029,8 +1048,9 @@ export default function MailApp() {
 
   const onSidebarDragEnd = (_: unknown, info: PanInfo) => {
     delete document.documentElement.dataset.mailGesture;
+    const w = drawerWRef.current;
     const x = drawerX.get();
-    if (x < -DRAWER_W * 0.45 || info.velocity.x < -400) {
+    if (x < -w * 0.45 || info.velocity.x < -400) {
       closeDrawer();
     } else {
       setSidebarOpen(true);
@@ -1662,8 +1682,115 @@ export default function MailApp() {
     return <AppSplash progress={progress} />;
   }
 
-  const Sidebar = (
-    <aside className="flex h-full w-[240px] shrink-0 flex-col bg-[#1a1c22] text-white rounded-[20px] overflow-hidden">
+  const accountMenuBody = (
+    <>
+      <div className="rounded-[16px] bg-[#17191f] border border-white/10 overflow-hidden mb-3">
+        <div className="flex items-center gap-3.5 px-3.5 py-3.5 md:px-4 md:py-4">
+          <AccountAvatar
+            account={activeAccount}
+            size={isMobileUi ? 56 : 64}
+          />
+          <div className="min-w-0 flex-1">
+            <p className="font-[family-name:var(--font-manrope)] font-semibold text-[17px] md:text-[18px] truncate">
+              {activeAccount.name}
+            </p>
+            <button
+              type="button"
+              onClick={() => copyEmail("profile")}
+              title="Скопировать адрес"
+              className="relative text-[14px] text-white/50 font-[family-name:var(--font-manrope)] truncate hover:text-white/80 transition-colors text-left max-w-full"
+            >
+              <span className="truncate block">{activeAccount.email}</span>
+              {copied === "profile" && (
+                <span
+                  role="status"
+                  className="absolute left-0 top-[calc(100%+6px)] z-50 whitespace-nowrap rounded-[10px] bg-[#2a2d36] border border-white/10 px-2.5 py-1.5 text-[12px] text-white shadow-[0_8px_24px_rgba(0,0,0,0.45)] pointer-events-none"
+                >
+                  Скопировано
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-[16px] bg-[#17191f] border border-white/10 overflow-hidden mb-3">
+        {accounts
+          .filter((a) => !a.active)
+          .map((a) => (
+            <button
+              key={a.id}
+              type="button"
+              onClick={() => void switchAccount(a.id)}
+              className="w-full flex items-center gap-3.5 px-3.5 py-3 md:px-4 md:py-3.5 hover:bg-white/[0.05] transition-colors text-left"
+            >
+              <AccountAvatar account={a} size={isMobileUi ? 40 : 44} />
+              <div className="min-w-0">
+                <p className="text-[15px] md:text-[16px] font-medium font-[family-name:var(--font-manrope)] truncate">
+                  {a.name}
+                </p>
+                <p className="text-[13px] text-white/40 font-[family-name:var(--font-manrope)] truncate">
+                  {a.email}
+                </p>
+              </div>
+            </button>
+          ))}
+        <button
+          type="button"
+          onClick={addAccount}
+          className="w-full flex items-center gap-3.5 px-3.5 py-3 md:px-4 md:py-3.5 hover:bg-white/[0.05] transition-colors text-left"
+        >
+          <div className="h-10 w-10 md:h-11 md:w-11 rounded-full bg-[#2a2d36] flex items-center justify-center text-white/70">
+            <Plus size={18} />
+          </div>
+          <span className="text-[15px] md:text-[16px] font-[family-name:var(--font-manrope)]">
+            Добавить аккаунт
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => void logoutAll()}
+          className="w-full flex items-center gap-3.5 px-3.5 py-3 md:px-4 md:py-3.5 hover:bg-white/[0.05] transition-colors text-left"
+        >
+          <div className="h-10 w-10 md:h-11 md:w-11 rounded-full bg-[#2a2d36] flex items-center justify-center text-white/70">
+            <LogOut size={18} />
+          </div>
+          <span className="text-[15px] md:text-[16px] font-[family-name:var(--font-manrope)]">
+            Выйти из всех аккаунтов
+          </span>
+        </button>
+      </div>
+
+      <button
+        type="button"
+        onClick={manageAccount}
+        className="w-full h-12 md:h-[52px] rounded-full bg-[#17191f] border border-white/12 hover:bg-[#1c1f27] transition-colors px-4 inline-flex items-center gap-3 text-[15px] md:text-[16px] font-[family-name:var(--font-manrope)]"
+      >
+        <Settings size={18} className="text-white/55" />
+        Управление аккаунтом
+      </button>
+
+      <div className="mt-4 pt-2 flex items-center justify-center gap-2 text-[13px] text-white/35 font-[family-name:var(--font-manrope)]">
+        <Link href="/help" className="hover:text-white/55">
+          Справка
+        </Link>
+        <span>·</span>
+        <Link href="/legal/terms" className="hover:text-white/55">
+          Условия
+        </Link>
+      </div>
+    </>
+  );
+
+  const Sidebar = ({ fullBleed = false }: { fullBleed?: boolean }) => (
+    <aside
+      className={cn(
+        "flex h-full flex-col bg-[#1a1c22] text-white overflow-hidden",
+        fullBleed
+          ? "w-full rounded-none"
+          : "w-[240px] shrink-0 rounded-[20px]",
+      )}
+    >
       <div className="flex items-center gap-1 px-3 pt-3 pb-2">
         <span className="flex-1 font-[family-name:var(--font-unbounded)] font-bold text-[17px] px-1">
           Почта
@@ -1922,131 +2049,67 @@ export default function MailApp() {
                 <AccountAvatar account={activeAccount} size={40} />
               </button>
 
-              <button
-                type="button"
-                aria-label="Закрыть меню аккаунта"
-                aria-hidden={!profileOpen}
-                tabIndex={profileOpen ? 0 : -1}
-                className={cn(
-                  "fixed inset-0 z-[60] bg-black/50 transition-opacity duration-150 ease-out",
-                  profileOpen ? "opacity-100" : "opacity-0 pointer-events-none",
-                )}
-                onClick={() => setProfileOpen(false)}
-              />
-
-              <AnimatePresence>
-                {profileOpen && (
-                  <motion.div
-                    key="account-menu"
-                    data-account-menu
-                    initial={{ opacity: 0, y: -4, scale: 0.98 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -3, scale: 0.99 }}
-                    transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
-                    style={{ transformOrigin: "calc(100% - 16px) 0%" }}
-                    className="absolute right-0 top-[calc(100%+10px)] w-[min(calc(100vw-32px),340px)] rounded-[22px] bg-[#22252e] border border-white/22 shadow-[0_16px_48px_rgba(0,0,0,0.75),0_0_0_1px_rgba(255,255,255,0.06)] p-3 z-[70]"
-                  >
-                    <div className="rounded-[14px] bg-[#17191f] border border-white/10 overflow-hidden mb-2">
-                      <div className="flex items-center gap-3 px-3 py-3">
-                        <AccountAvatar account={activeAccount} size={52} />
-                        <div className="min-w-0 flex-1">
-                          <p className="font-[family-name:var(--font-manrope)] font-semibold text-[16px] truncate">
-                            {activeAccount.name}
-                          </p>
-                          <button
-                            type="button"
-                            onClick={() => copyEmail("profile")}
-                            title="Скопировать адрес"
-                            className="relative text-[13px] text-white/50 font-[family-name:var(--font-manrope)] truncate hover:text-white/80 transition-colors text-left max-w-full"
-                          >
-                            <span className="truncate block">
-                              {activeAccount.email}
-                            </span>
-                            {copied === "profile" && (
-                              <span
-                                role="status"
-                                className="absolute left-0 top-[calc(100%+6px)] z-50 whitespace-nowrap rounded-[10px] bg-[#2a2d36] border border-white/10 px-2.5 py-1.5 text-[12px] text-white shadow-[0_8px_24px_rgba(0,0,0,0.45)] pointer-events-none"
-                              >
-                                Скопировано
-                              </span>
-                            )}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="rounded-[14px] bg-[#17191f] border border-white/10 overflow-hidden mb-2.5">
-                      {accounts
-                        .filter((a) => !a.active)
-                        .map((a) => (
-                          <button
-                            key={a.id}
-                            type="button"
-                            onClick={() => void switchAccount(a.id)}
-                            className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/[0.05] transition-colors text-left"
-                          >
-                            <AccountAvatar account={a} size={36} />
-                            <div className="min-w-0">
-                              <p className="text-[14px] font-medium font-[family-name:var(--font-manrope)] truncate">
-                                {a.name}
-                              </p>
-                              <p className="text-[12px] text-white/40 font-[family-name:var(--font-manrope)] truncate">
-                                {a.email}
-                              </p>
-                            </div>
-                          </button>
-                        ))}
-                      <button
-                        type="button"
-                        onClick={addAccount}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/[0.05] transition-colors text-left"
+              {/* Desktop dropdown — larger */}
+              {!isMobileUi && (
+                <>
+                  <button
+                    type="button"
+                    aria-label="Закрыть меню аккаунта"
+                    aria-hidden={!profileOpen}
+                    tabIndex={profileOpen ? 0 : -1}
+                    className={cn(
+                      "fixed inset-0 z-[60] bg-black/50 transition-opacity duration-150 ease-out",
+                      profileOpen
+                        ? "opacity-100"
+                        : "opacity-0 pointer-events-none",
+                    )}
+                    onClick={() => setProfileOpen(false)}
+                  />
+                  <AnimatePresence>
+                    {profileOpen && (
+                      <motion.div
+                        key="account-menu-desktop"
+                        data-account-menu
+                        initial={{ opacity: 0, y: -4, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -3, scale: 0.99 }}
+                        transition={{
+                          duration: 0.14,
+                          ease: [0.22, 1, 0.36, 1],
+                        }}
+                        style={{ transformOrigin: "calc(100% - 16px) 0%" }}
+                        className="absolute right-0 top-[calc(100%+12px)] w-[min(calc(100vw-32px),420px)] rounded-[24px] bg-[#22252e] border border-white/22 shadow-[0_16px_48px_rgba(0,0,0,0.75),0_0_0_1px_rgba(255,255,255,0.06)] p-4 z-[70]"
                       >
-                        <div className="h-9 w-9 rounded-full bg-[#2a2d36] flex items-center justify-center text-white/70">
-                          <Plus size={16} />
-                        </div>
-                        <span className="text-[14px] font-[family-name:var(--font-manrope)]">
-                          Добавить аккаунт
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void logoutAll()}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/[0.05] transition-colors text-left"
-                      >
-                        <div className="h-9 w-9 rounded-full bg-[#2a2d36] flex items-center justify-center text-white/70">
-                          <LogOut size={16} />
-                        </div>
-                        <span className="text-[14px] font-[family-name:var(--font-manrope)]">
-                          Выйти из всех аккаунтов
-                        </span>
-                      </button>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={manageAccount}
-                      className="w-full h-11 rounded-full bg-[#17191f] border border-white/12 hover:bg-[#1c1f27] transition-colors px-4 inline-flex items-center gap-3 text-[14px] font-[family-name:var(--font-manrope)]"
-                    >
-                      <Settings size={16} className="text-white/55" />
-                      Управление аккаунтом
-                    </button>
-
-                    <div className="mt-3 pt-2 flex items-center justify-center gap-2 text-[12px] text-white/35 font-[family-name:var(--font-manrope)]">
-                      <Link href="/help" className="hover:text-white/55">
-                        Справка
-                      </Link>
-                      <span>·</span>
-                      <Link href="/legal/terms" className="hover:text-white/55">
-                        Условия
-                      </Link>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                        {accountMenuBody}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </>
+              )}
             </div>
           </div>
         </div>
       </header>
+
+      {/* Mobile account menu — bottom sheet like ID */}
+      {isMobileUi && (
+        <BottomSheet
+          open={profileOpen}
+          onClose={() => setProfileOpen(false)}
+          labelledBy="account-menu-title"
+          className="bg-[#22252e]"
+        >
+          <div data-account-menu className="pb-1">
+            <h2
+              id="account-menu-title"
+              className="sr-only"
+            >
+              Аккаунты
+            </h2>
+            {accountMenuBody}
+          </div>
+        </BottomSheet>
+      )}
 
       {/* Search overlay */}
       {searchOpen && (
@@ -2164,9 +2227,11 @@ export default function MailApp() {
 
       <div className="flex-1 min-h-0 flex md:gap-3 md:px-3 md:pb-3 overflow-hidden min-w-0">
         {/* Folder sidebar */}
-        <div className="hidden md:block shrink-0 self-stretch">{Sidebar}</div>
+        <div className="hidden md:block shrink-0 self-stretch">
+          <Sidebar />
+        </div>
 
-        {/* Folder drawer — always mounted; x follows finger via drawerX */}
+        {/* Folder drawer — full-bleed on mobile */}
         <motion.button
           type="button"
           aria-label="Закрыть меню"
@@ -2182,7 +2247,7 @@ export default function MailApp() {
         <motion.div
           data-mail-drawer
           drag="x"
-          dragConstraints={{ left: -DRAWER_W, right: 0 }}
+          dragConstraints={{ left: -drawerWRef.current, right: 0 }}
           dragElastic={{ left: 0.08, right: 0 }}
           dragDirectionLock
           onDragStart={() => {
@@ -2191,20 +2256,22 @@ export default function MailApp() {
           }}
           onDragEnd={onSidebarDragEnd}
           className={cn(
-            "md:hidden fixed left-0 z-50 p-3 overscroll-contain",
+            "md:hidden fixed inset-y-0 left-0 z-50 overscroll-contain",
             !(sidebarOpen || drawerPulling) && "pointer-events-none",
           )}
           style={{
             x: drawerX,
-            width: DRAWER_W,
-            top: "var(--safe-top)",
-            bottom: "var(--safe-bottom)",
-            height: "auto",
+            width: isMobileUi ? "100vw" : DRAWER_W_DESKTOP,
+            top: 0,
+            bottom: 0,
+            height: "100%",
             touchAction: "pan-y",
+            paddingTop: "var(--safe-top)",
+            paddingBottom: "var(--safe-bottom)",
           }}
         >
-          <div className="h-full shadow-2xl overflow-y-auto overscroll-contain">
-            {Sidebar}
+          <div className="h-full overflow-y-auto overscroll-contain">
+            <Sidebar fullBleed />
           </div>
         </motion.div>
 
@@ -2410,6 +2477,13 @@ export default function MailApp() {
                 <PullToRefresh
                   disabled={Boolean(openId)}
                   refreshing={listRefreshing}
+                  bottomInset={isMobileUi && !openId ? 88 : 0}
+                  onScroll={(y, delta) => {
+                    if (!isMobileUi || openId) return;
+                    if (delta > 6 && y > 48) setMobileTabHidden(true);
+                    else if (delta < -6) setMobileTabHidden(false);
+                    if (y < 24) setMobileTabHidden(false);
+                  }}
                   onRefresh={async () => {
                     await refreshList();
                   }}
@@ -2430,7 +2504,7 @@ export default function MailApp() {
                       )}
                     </div>
                   ) : (
-                    <ul className="space-y-2.5 pt-3 pb-20 md:pb-2 min-w-0">
+                    <ul className="space-y-2.5 pt-3 pb-24 md:pb-2 min-w-0">
                       {visible.map((m, i) => {
                         const isSel = selected.has(m.id);
                         const isOpen = openId === m.id;
@@ -3037,11 +3111,65 @@ export default function MailApp() {
           type="button"
           onClick={() => setComposeOpen(true)}
           className="md:hidden fixed right-4 z-30 h-14 w-14 rounded-full bg-[#0066ff] text-white inline-flex items-center justify-center hover:bg-[#0052cc] transition-colors active:scale-[0.94]"
-          style={{ bottom: "calc(1rem + var(--safe-bottom))" }}
+          style={{
+            bottom:
+              openId || mobileTabHidden
+                ? "calc(1rem + var(--safe-bottom))"
+                : "calc(4.75rem + var(--safe-bottom))",
+            transition: "bottom 0.22s ease",
+          }}
           aria-label="Написать"
         >
           <Pencil size={22} />
         </button>
+      )}
+
+      {/* Mobile bottom tabs — hides when scrolling the list down */}
+      {isMobileUi && !composeOpen && !idOverlayUrl && !idOverlayLoading && !openId && (
+        <nav
+          className={cn(
+            "md:hidden fixed left-0 right-0 z-30 border-t border-white/10 bg-[#14161c]/95 backdrop-blur-md transition-transform duration-[220ms] ease-out",
+            mobileTabHidden && "translate-y-full",
+          )}
+          style={{
+            bottom: 0,
+            paddingBottom: "var(--safe-bottom)",
+          }}
+          aria-label="Основные папки"
+        >
+          <div className="grid grid-cols-2 h-[56px]">
+            <button
+              type="button"
+              onClick={() => {
+                haptic("light");
+                setMobileTabHidden(false);
+                selectFolder("all");
+              }}
+              className={cn(
+                "flex flex-col items-center justify-center gap-0.5 font-[family-name:var(--font-manrope)] transition-colors",
+                folder === "all" ? "text-[#4d9fff]" : "text-white/45",
+              )}
+            >
+              <LayoutGrid size={20} />
+              <span className="text-[11px] font-medium">Вся почта</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                haptic("light");
+                setMobileTabHidden(false);
+                selectFolder("inbox");
+              }}
+              className={cn(
+                "flex flex-col items-center justify-center gap-0.5 font-[family-name:var(--font-manrope)] transition-colors",
+                folder === "inbox" ? "text-[#4d9fff]" : "text-white/45",
+              )}
+            >
+              <Inbox size={20} />
+              <span className="text-[11px] font-medium">Входящие</span>
+            </button>
+          </div>
+        </nav>
       )}
 
       {/* In-app pnk ID / auth — edge-to-edge, no mail chrome (back lives in ID) */}

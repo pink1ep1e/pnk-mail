@@ -22,6 +22,8 @@ export function PullToRefresh({
   refreshing: externalRefreshing = false,
   disabled,
   className,
+  onScroll,
+  bottomInset = 0,
   children,
 }: {
   onRefresh: () => Promise<void> | void;
@@ -29,6 +31,9 @@ export function PullToRefresh({
   refreshing?: boolean;
   disabled?: boolean;
   className?: string;
+  onScroll?: (scrollTop: number, delta: number) => void;
+  /** Extra bottom padding for mobile tab bar / FAB */
+  bottomInset?: number;
   children: ReactNode;
 }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -42,6 +47,23 @@ export function PullToRefresh({
   onRefreshRef.current = onRefresh;
 
   const busy = refreshing || externalRefreshing;
+
+  const onScrollRef = useRef(onScroll);
+  onScrollRef.current = onScroll;
+  const lastScrollTop = useRef(0);
+
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el || !onScrollRef.current) return;
+    const handle = () => {
+      const y = el.scrollTop;
+      const delta = y - lastScrollTop.current;
+      lastScrollTop.current = y;
+      onScrollRef.current?.(y, delta);
+    };
+    el.addEventListener("scroll", handle, { passive: true });
+    return () => el.removeEventListener("scroll", handle);
+  }, []);
 
   useEffect(() => {
     refreshingRef.current = busy;
@@ -170,6 +192,7 @@ export function PullToRefresh({
         className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden mail-scroll overscroll-y-contain"
         style={{
           paddingTop: pad,
+          paddingBottom: bottomInset || undefined,
           transition: pulling.current ? undefined : "padding-top 0.2s ease",
         }}
       >

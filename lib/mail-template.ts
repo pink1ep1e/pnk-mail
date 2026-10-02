@@ -241,9 +241,15 @@ const READER_LIGHT_CSS = `
   }
   /* Common 500–700px email shells → fluid on phone */
   @media (max-width: 640px) {
+    .pnk-mail-root {
+      font-size: 14px !important;
+      zoom: 0.86;
+    }
     .pnk-mail-root table,
-    .pnk-mail-root div[style*="width"] {
+    .pnk-mail-root div[style*="width"],
+    .pnk-mail-root center {
       width: 100% !important;
+      max-width: 100% !important;
       min-width: 0 !important;
       margin-left: 0 !important;
       margin-right: 0 !important;
@@ -252,6 +258,10 @@ const READER_LIGHT_CSS = `
     .pnk-mail-root th {
       word-break: break-word;
       overflow-wrap: anywhere;
+    }
+    .pnk-mail-root img {
+      max-width: 100% !important;
+      height: auto !important;
     }
   }
   .pnk-mail-root a {
