@@ -51,15 +51,8 @@ export function BottomSheet({
     return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose, dismissible]);
 
-  useEffect(() => {
-    if (!open) return;
-    const prev = document.body.style.overflow;
-    // Avoid toggling if already locked (prevents flicker with parent locks)
-    if (prev !== "hidden") document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [open]);
+  // Do not toggle document.body.overflow — it causes a dark flash on iOS/PWA
+  // when the sheet opens (layout jump + double-lock with parent scroll locks).
 
   const onDragEnd = (_: unknown, info: PanInfo) => {
     if (!dismissible || !mobile) return;
@@ -73,11 +66,12 @@ export function BottomSheet({
           <motion.button
             type="button"
             aria-label="Закрыть"
-            className="absolute inset-0 bg-black/60"
+            className="absolute inset-0 bg-black/55"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.2, ease: "linear" }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+            style={{ willChange: "opacity" }}
             onClick={() => {
               if (dismissible) onClose();
             }}
@@ -96,7 +90,7 @@ export function BottomSheet({
             exit={mobile ? { y: "100%" } : { opacity: 0, scale: 0.96, y: 12 }}
             transition={
               mobile
-                ? { type: "spring", damping: 34, stiffness: 520, mass: 0.75 }
+                ? { type: "spring", damping: 36, stiffness: 480, mass: 0.8 }
                 : { duration: 0.14, ease: [0.2, 0.8, 0.2, 1] }
             }
             drag={mobile && dismissible ? "y" : false}
