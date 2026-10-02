@@ -40,6 +40,10 @@
   --mail-row-hover: #2c303b;
   --mail-tabbar: #12141a;
   --mail-chip: #252830;
+  --mail-letter: #1a1e28;
+  --mail-letter-chrome: #12151c;
+  --mail-attach: #242936;
+  --mail-attach-hover: #2c3240;
 
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);

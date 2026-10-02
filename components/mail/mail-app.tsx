@@ -2694,14 +2694,14 @@ export default function MailApp() {
                     exit={{ x: "100%" }}
                     transition={readerPanelAnim ? READER_SPRING : READER_SNAP}
                     className={cn(
-                      "flex flex-col overflow-hidden bg-[var(--mail-canvas)] will-change-transform",
+                      "flex flex-col overflow-hidden bg-[var(--mail-letter-chrome)] will-change-transform",
                       // Mobile: true full-screen page. Desktop: right half panel
                       "max-md:fixed max-md:inset-0 max-md:z-[55]",
-                      "md:absolute md:inset-auto md:top-3 md:bottom-3 md:right-3 md:z-20 md:w-[calc(50%-15px)] md:rounded-[16px] md:bg-[var(--mail-pane)]",
+                      "md:absolute md:inset-auto md:top-3 md:bottom-3 md:right-3 md:z-20 md:w-[calc(50%-15px)] md:rounded-[18px]",
                     )}
                   >
                     <div
-                      className="shrink-0 flex items-center gap-2 px-3 md:px-5 h-12 border-b border-white/[0.06] md:border-0"
+                      className="shrink-0 flex items-center gap-2 px-3 md:px-5 h-12 border-b border-white/[0.05]"
                       style={{
                         paddingTop: isMobileUi
                           ? "max(0px, env(safe-area-inset-top, 0px))"
@@ -2713,20 +2713,20 @@ export default function MailApp() {
                     >
                       <button
                         type="button"
-                        className="md:hidden h-8 w-8 rounded-full flex items-center justify-center text-white/50 hover:bg-white/5"
+                        className="md:hidden h-8 w-8 rounded-full flex items-center justify-center text-white/45 hover:bg-white/[0.06]"
                         onClick={closeReader}
                         aria-label="Назад к списку"
                       >
                         <X size={16} />
                       </button>
-                      <span className="flex-1 min-w-0 text-[13px] text-white/30 font-[family-name:var(--font-manrope)] truncate px-1 leading-none self-center">
+                      <span className="flex-1 min-w-0 text-[13px] text-white/28 font-[family-name:var(--font-manrope)] truncate px-1 leading-none self-center">
                         {detailLoading && !detail?.bodyHtml
                           ? ""
                           : detail?.subject || ""}
                       </span>
                       <button
                         type="button"
-                        className="h-8 px-2.5 rounded-full inline-flex items-center gap-1.5 text-[13px] text-white/50 hover:bg-white/5 hover:text-white font-[family-name:var(--font-manrope)]"
+                        className="h-8 px-2.5 rounded-full inline-flex items-center gap-1.5 text-[13px] text-white/45 hover:bg-white/[0.06] hover:text-white/85 font-[family-name:var(--font-manrope)]"
                         onClick={() => void replySelected()}
                         aria-label="Ответить"
                       >
@@ -2735,7 +2735,7 @@ export default function MailApp() {
                       </button>
                       <button
                         type="button"
-                        className="h-8 px-2.5 rounded-full inline-flex items-center gap-1.5 text-[13px] text-white/50 hover:bg-white/5 hover:text-white font-[family-name:var(--font-manrope)]"
+                        className="h-8 px-2.5 rounded-full inline-flex items-center gap-1.5 text-[13px] text-white/45 hover:bg-white/[0.06] hover:text-white/85 font-[family-name:var(--font-manrope)]"
                         onClick={() => void forwardSelected()}
                         aria-label="Переслать"
                       >
@@ -2744,7 +2744,7 @@ export default function MailApp() {
                       </button>
                       <button
                         type="button"
-                        className="h-8 w-8 rounded-full flex items-center justify-center text-white/40 hover:bg-white/5 hover:text-white"
+                        className="h-8 w-8 rounded-full flex items-center justify-center text-white/35 hover:bg-white/[0.06] hover:text-white/80"
                         onClick={closeReader}
                         aria-label="Закрыть письмо"
                       >
@@ -2755,7 +2755,7 @@ export default function MailApp() {
                     <div className="flex-1 min-h-0 overflow-y-auto mail-scroll flex flex-col">
                       {detailLoading && !detail?.bodyHtml ? (
                         <div className="flex-1 min-h-[240px] flex flex-col items-center justify-center gap-3 px-6">
-                          <div className="h-8 w-8 rounded-full border-2 border-white/10 border-t-[#0066ff] animate-spin" />
+                          <div className="h-8 w-8 rounded-full border-2 border-white/10 border-t-[#7eb6ff] animate-spin" />
                           <p className="text-[13px] text-white/35 font-[family-name:var(--font-manrope)]">
                             Загрузка письма…
                           </p>
@@ -2763,12 +2763,12 @@ export default function MailApp() {
                       ) : (
                         <>
                           <div className="flex-1 px-3 sm:px-5 md:px-6 pt-3 md:pt-4 pb-4">
-                            <article className="mx-auto w-full max-w-[680px] rounded-[20px] bg-[var(--mail-panel)] border border-white/[0.07] px-4 sm:px-5 md:px-6 pt-5 pb-5 md:pt-6 md:pb-6 shadow-[0_8px_32px_rgba(0,0,0,0.25)]">
-                              <h2 className="text-[22px] md:text-[26px] font-bold tracking-[-0.035em] leading-[1.25] text-white font-[family-name:var(--font-unbounded)]">
+                            <article className="mx-auto w-full max-w-[680px] rounded-[20px] bg-[var(--mail-letter)] border border-white/[0.06] px-4 sm:px-5 md:px-6 pt-5 pb-5 md:pt-6 md:pb-6 shadow-[0_12px_40px_rgba(0,0,0,0.28)]">
+                              <h2 className="text-[22px] md:text-[26px] font-bold tracking-[-0.035em] leading-[1.25] text-white/95 font-[family-name:var(--font-unbounded)]">
                                 {detail?.subject || "…"}
                               </h2>
                               {thread.length > 1 && (
-                                <p className="mt-1.5 text-[13px] text-white/35 font-[family-name:var(--font-manrope)]">
+                                <p className="mt-1.5 text-[13px] text-white/38 font-[family-name:var(--font-manrope)]">
                                   {thread.length} писем в переписке
                                 </p>
                               )}
@@ -2793,7 +2793,7 @@ export default function MailApp() {
                                       className={cn(
                                         "pt-4",
                                         idx > 0 &&
-                                          "border-t border-white/8 mt-1",
+                                          "border-t border-white/[0.06] mt-1",
                                       )}
                                     >
                                       <div className="flex items-start gap-3">
@@ -2815,14 +2815,14 @@ export default function MailApp() {
                                           <div className="flex items-start justify-between gap-3">
                                             <div className="min-w-0">
                                               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                                <span className="text-[14px] font-semibold text-white font-[family-name:var(--font-manrope)]">
+                                                <span className="text-[14px] font-semibold text-white/92 font-[family-name:var(--font-manrope)]">
                                                   {msg.from || "—"}
                                                 </span>
-                                                <span className="text-[12px] text-white/40 font-[family-name:var(--font-manrope)]">
+                                                <span className="text-[12px] text-white/38 font-[family-name:var(--font-manrope)]">
                                                   {msg.fromEmail || ""}
                                                 </span>
                                                 {msg.folder === "sent" ? (
-                                                  <span className="text-[11px] text-white/30 font-[family-name:var(--font-manrope)]">
+                                                  <span className="text-[11px] text-white/28 font-[family-name:var(--font-manrope)]">
                                                     вы
                                                   </span>
                                                 ) : (
@@ -2836,7 +2836,7 @@ export default function MailApp() {
                                                   onClick={() =>
                                                     setRecipientsOpen((v) => !v)
                                                   }
-                                                  className="mt-1 inline-flex items-center gap-1 text-[12px] text-white/35 hover:text-white/60 font-[family-name:var(--font-manrope)] transition-colors"
+                                                  className="mt-1 inline-flex items-center gap-1 text-[12px] text-white/32 hover:text-white/55 font-[family-name:var(--font-manrope)] transition-colors"
                                                 >
                                                   {(() => {
                                                     const nList = [
@@ -2865,7 +2865,7 @@ export default function MailApp() {
                                               )}
 
                                               {isLast && recipientsOpen && (
-                                                <div className="mt-2 rounded-[12px] bg-white/[0.04] px-3 py-2 space-y-1">
+                                                <div className="mt-2 rounded-[12px] bg-black/25 border border-white/[0.05] px-3 py-2 space-y-1">
                                                   {(
                                                     (
                                                       msg.to ||
@@ -2877,7 +2877,7 @@ export default function MailApp() {
                                                   ).map((addr) => (
                                                     <p
                                                       key={addr}
-                                                      className="text-[13px] text-white/70 font-[family-name:var(--font-manrope)]"
+                                                      className="text-[13px] text-white/65 font-[family-name:var(--font-manrope)]"
                                                     >
                                                       {addr}
                                                     </p>
@@ -2889,7 +2889,7 @@ export default function MailApp() {
                                                     .map((addr) => (
                                                       <p
                                                         key={`cc-${addr}`}
-                                                        className="text-[13px] text-white/40 font-[family-name:var(--font-manrope)]"
+                                                        className="text-[13px] text-white/38 font-[family-name:var(--font-manrope)]"
                                                       >
                                                         Копия: {addr}
                                                       </p>
@@ -2898,7 +2898,7 @@ export default function MailApp() {
                                               )}
                                             </div>
 
-                                            <span className="shrink-0 text-[12px] text-white/30 font-[family-name:var(--font-manrope)] tabular-nums pt-1">
+                                            <span className="shrink-0 text-[12px] text-white/28 font-[family-name:var(--font-manrope)] tabular-nums pt-1">
                                               {msg.time || ""}
                                             </span>
                                           </div>
@@ -2920,7 +2920,7 @@ export default function MailApp() {
                                         ) : null}
                                         <MailAttachmentsList
                                           items={attaches}
-                                          className={showBody ? "mt-4" : "mt-1"}
+                                          className={showBody ? "mt-5" : "mt-1"}
                                         />
                                       </div>
                                     </div>
@@ -2930,7 +2930,7 @@ export default function MailApp() {
                             </article>
                           </div>
 
-                          <div className="shrink-0 border-t border-white/[0.06] bg-[#14161c] px-4 md:px-6 py-3 flex items-center gap-2">
+                          <div className="shrink-0 border-t border-white/[0.05] bg-[var(--mail-letter-chrome)] px-4 md:px-6 py-3 flex items-center gap-2">
                             <button
                               type="button"
                               onClick={() => void replySelected()}
@@ -2942,7 +2942,7 @@ export default function MailApp() {
                             <button
                               type="button"
                               onClick={() => void forwardSelected()}
-                              className="h-10 flex-1 sm:flex-none sm:min-w-[140px] px-4 rounded-[12px] bg-white/[0.06] text-white/80 text-[14px] font-medium font-[family-name:var(--font-manrope)] inline-flex items-center justify-center gap-2 hover:bg-white/[0.1] hover:text-white"
+                              className="h-10 flex-1 sm:flex-none sm:min-w-[140px] px-4 rounded-[12px] bg-white/[0.07] text-white/75 text-[14px] font-medium font-[family-name:var(--font-manrope)] inline-flex items-center justify-center gap-2 hover:bg-white/[0.11] hover:text-white"
                             >
                               <Forward size={16} />
                               Переслать

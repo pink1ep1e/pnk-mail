@@ -49,7 +49,7 @@ export function MailAttachmentsList({
   if (!items.length) return null;
   return (
     <div className={cn(className)}>
-      <p className="mb-2.5 text-[13px] text-white/45 font-[family-name:var(--font-manrope)] font-semibold leading-none">
+      <p className="mb-2.5 text-[13px] text-white/40 font-[family-name:var(--font-manrope)] font-semibold leading-none tracking-[-0.01em]">
         Вложения · {items.length}
       </p>
       <ul className="flex flex-wrap gap-2.5 m-0 p-0 list-none">
@@ -66,28 +66,31 @@ export function MailAttachmentsList({
                 <span
                   className={cn(
                     "relative flex aspect-square w-full items-center justify-center overflow-hidden",
-                    "rounded-[18px] border border-white/12 bg-[#12141a]",
-                    "group-hover:border-[#0066ff]/45 group-hover:bg-[#161a24] transition-colors",
+                    "rounded-[16px] border border-white/[0.08] bg-[var(--mail-attach,#242936)]",
+                    "group-hover:border-white/16 group-hover:bg-[var(--mail-attach-hover,#2c3240)] transition-colors",
                   )}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={fileIconSrc(a.name, a.type)}
                     alt=""
-                    width={56}
-                    height={56}
-                    className="h-14 w-14 object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.35)]"
+                    width={52}
+                    height={52}
+                    className="h-[52px] w-[52px] object-contain opacity-95 drop-shadow-[0_4px_12px_rgba(0,0,0,0.3)]"
                   />
-                  <span className="absolute left-2 bottom-2 rounded-[6px] bg-[#0066ff]/90 px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-white font-[family-name:var(--font-manrope)]">
+                  <span className="absolute left-2 bottom-2 rounded-[6px] bg-[#1a1e28]/92 border border-white/10 px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-white/75 font-[family-name:var(--font-manrope)]">
                     {badge}
                   </span>
                 </span>
-                <span className="mt-2 block truncate px-0.5 text-[13px] font-semibold text-white/90 font-[family-name:var(--font-manrope)]">
+                <span className="mt-2 block truncate px-0.5 text-[13px] font-medium text-white/85 font-[family-name:var(--font-manrope)]">
                   {a.name}
                 </span>
                 {a.size > 0 && (
-                  <span className="block truncate px-0.5 text-[11px] text-white/40 font-[family-name:var(--font-manrope)]">
-                    {formatBytes(a.size)} · скачать
+                  <span className="block truncate px-0.5 text-[11px] text-white/35 font-[family-name:var(--font-manrope)]">
+                    {formatBytes(a.size)} ·{" "}
+                    <span className="text-[#7eb6ff]/90 group-hover:text-[#9ec8ff]">
+                      скачать
+                    </span>
                   </span>
                 )}
               </button>

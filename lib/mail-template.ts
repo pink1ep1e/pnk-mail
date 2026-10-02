@@ -92,12 +92,12 @@ const READER_DARK_CSS = `
   }
   .pnk-mail-root {
     margin: 0;
-    padding: 4px 2px 8px;
+    padding: 2px 0 6px;
     background: transparent;
-    color: rgba(255,255,255,0.92);
+    color: rgba(255,255,255,0.88);
     font-family: "Manrope", "Segoe UI", Helvetica, Arial, sans-serif;
-    font-size: 16px;
-    line-height: 1.65;
+    font-size: 15.5px;
+    line-height: 1.62;
     -webkit-font-smoothing: antialiased;
     overflow: visible;
     box-sizing: border-box;
@@ -105,12 +105,13 @@ const READER_DARK_CSS = `
   }
   .pnk-mail-root *, .pnk-mail-root *::before, .pnk-mail-root *::after { box-sizing: border-box; }
   a {
-    color: #4d9fff !important;
+    color: #7eb6ff !important;
     text-decoration: underline !important;
+    text-underline-offset: 2px !important;
     cursor: pointer !important;
     pointer-events: auto !important;
   }
-  a:hover { color: #7db8ff !important; }
+  a:hover { color: #a8ceff !important; }
   a[href="#"], a:not([href]) {
     color: inherit !important;
     text-decoration: none !important;
@@ -126,7 +127,7 @@ const READER_DARK_CSS = `
   }
   p { margin: 0 0 0.55em; }
   p:last-child { margin-bottom: 0; }
-  h1, h2, h3, h4 { color: #fff; line-height: 1.25; }
+  h1, h2, h3, h4 { color: rgba(255,255,255,0.96); line-height: 1.25; }
   ul, ol { padding-left: 1.25em; }
   blockquote,
   .gmail_quote,
@@ -136,19 +137,19 @@ const READER_DARK_CSS = `
   [class*="gmail_quote"] {
     margin: 0.55em 0 0 !important;
     padding: 0.2em 0 0.2em 0.85em !important;
-    border-left: 3px solid rgba(255,255,255,0.22) !important;
-    color: rgba(255,255,255,0.72) !important;
+    border-left: 3px solid rgba(126,182,255,0.35) !important;
+    color: rgba(255,255,255,0.62) !important;
   }
   blockquote *,
   .gmail_quote *,
   .yahoo_quoted *,
   .protonmail_quote *,
   [class*="gmail_quote"] * {
-    color: rgba(255,255,255,0.72) !important;
+    color: rgba(255,255,255,0.62) !important;
   }
   .gmail_attr,
   .gmail_attr * {
-    color: rgba(255,255,255,0.48) !important;
+    color: rgba(255,255,255,0.42) !important;
     margin-bottom: 0.35em !important;
   }
   .pnk-mail-root > br:first-child,
@@ -165,7 +166,8 @@ const READER_DARK_CSS = `
     overflow: auto;
     padding: 12px 14px;
     border-radius: 12px;
-    background: #1a1c22;
+    background: rgba(0,0,0,0.28);
+    border: 1px solid rgba(255,255,255,0.06);
   }
 `;
 
