@@ -54,7 +54,8 @@ export function BottomSheet({
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    // Avoid toggling if already locked (prevents flicker with parent locks)
+    if (prev !== "hidden") document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = prev;
     };
@@ -72,11 +73,11 @@ export function BottomSheet({
           <motion.button
             type="button"
             aria-label="Закрыть"
-            className="absolute inset-0 bg-black/65 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/60"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.14 }}
+            transition={{ duration: 0.2, ease: "linear" }}
             onClick={() => {
               if (dismissible) onClose();
             }}

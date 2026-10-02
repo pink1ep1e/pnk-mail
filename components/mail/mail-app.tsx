@@ -392,7 +392,11 @@ export default function MailApp() {
   const [items, setItems] = useState<MailMessage[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
-  const [isMobileUi, setIsMobileUi] = useState(false);
+  const [isMobileUi, setIsMobileUi] = useState(() =>
+    typeof window !== "undefined"
+      ? window.matchMedia("(max-width: 767px)").matches
+      : false,
+  );
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [drawerPulling, setDrawerPulling] = useState(false);
   const drawerWRef = useRef(DRAWER_W_DESKTOP);
@@ -813,13 +817,19 @@ export default function MailApp() {
 
   useEffect(() => {
     if (!profileOpen) return;
+    // Mobile account menu uses BottomSheet (owns backdrop / dismiss)
+    if (isMobileUi) {
+      const onKey = (e: KeyboardEvent) => {
+        if (e.key === "Escape") setProfileOpen(false);
+      };
+      document.addEventListener("keydown", onKey);
+      return () => document.removeEventListener("keydown", onKey);
+    }
     const onPointer = (e: MouseEvent) => {
-      if (
-        profileRef.current &&
-        !profileRef.current.contains(e.target as Node)
-      ) {
-        setProfileOpen(false);
-      }
+      const t = e.target as Node;
+      if (profileRef.current?.contains(t)) return;
+      if ((t as HTMLElement)?.closest?.("[data-account-menu]")) return;
+      setProfileOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setProfileOpen(false);
@@ -830,7 +840,7 @@ export default function MailApp() {
       document.removeEventListener("mousedown", onPointer);
       document.removeEventListener("keydown", onKey);
     };
-  }, [profileOpen]);
+  }, [profileOpen, isMobileUi]);
 
   useEffect(() => {
     if (!nameModal) return;
@@ -848,7 +858,9 @@ export default function MailApp() {
     const sync = () => {
       const mobile = window.matchMedia("(max-width: 767px)").matches;
       setIsMobileUi(mobile);
-      const w = mobile ? window.innerWidth : DRAWER_W_DESKTOP;
+      const w = mobile
+        ? Math.round(Math.min(window.innerWidth * 0.62, 360))
+        : DRAWER_W_DESKTOP;
       drawerWRef.current = w;
       if (!sidebarOpen && !drawerPulling) {
         drawerX.set(-w);
@@ -979,9 +991,9 @@ export default function MailApp() {
     });
   };
 
-  // Lock background scroll while folder drawer or account menu is open
+  // Lock background scroll while folder drawer is open (account sheet locks itself)
   useEffect(() => {
-    const locked = sidebarOpen || profileOpen || drawerPulling;
+    const locked = sidebarOpen || drawerPulling || (profileOpen && !isMobileUi);
     if (!locked) return;
 
     const body = document.body;
@@ -1025,7 +1037,7 @@ export default function MailApp() {
       }
       document.removeEventListener("touchmove", onTouchMove);
     };
-  }, [sidebarOpen, profileOpen, drawerPulling]);
+  }, [sidebarOpen, profileOpen, drawerPulling, isMobileUi]);
 
   // Haptic tap feedback on interactive controls (phones)
   useEffect(() => {
@@ -1684,21 +1696,21 @@ export default function MailApp() {
 
   const accountMenuBody = (
     <>
-      <div className="rounded-[16px] bg-[#17191f] border border-white/10 overflow-hidden mb-3">
-        <div className="flex items-center gap-3.5 px-3.5 py-3.5 md:px-4 md:py-4">
+      <div className="rounded-[14px] bg-[#17191f] border border-white/10 overflow-hidden mb-2.5">
+        <div className="flex items-center gap-3 px-3 py-3 md:px-3.5 md:py-3.5">
           <AccountAvatar
             account={activeAccount}
-            size={isMobileUi ? 56 : 64}
+            size={isMobileUi ? 48 : 52}
           />
           <div className="min-w-0 flex-1">
-            <p className="font-[family-name:var(--font-manrope)] font-semibold text-[17px] md:text-[18px] truncate">
+            <p className="font-[family-name:var(--font-manrope)] font-semibold text-[15px] md:text-[16px] truncate">
               {activeAccount.name}
             </p>
             <button
               type="button"
               onClick={() => copyEmail("profile")}
               title="Скопировать адрес"
-              className="relative text-[14px] text-white/50 font-[family-name:var(--font-manrope)] truncate hover:text-white/80 transition-colors text-left max-w-full"
+              className="relative text-[13px] text-white/50 font-[family-name:var(--font-manrope)] truncate hover:text-white/80 transition-colors text-left max-w-full"
             >
               <span className="truncate block">{activeAccount.email}</span>
               {copied === "profile" && (
@@ -1714,7 +1726,7 @@ export default function MailApp() {
         </div>
       </div>
 
-      <div className="rounded-[16px] bg-[#17191f] border border-white/10 overflow-hidden mb-3">
+      <div className="rounded-[14px] bg-[#17191f] border border-white/10 overflow-hidden mb-2.5">
         {accounts
           .filter((a) => !a.active)
           .map((a) => (
@@ -1722,14 +1734,14 @@ export default function MailApp() {
               key={a.id}
               type="button"
               onClick={() => void switchAccount(a.id)}
-              className="w-full flex items-center gap-3.5 px-3.5 py-3 md:px-4 md:py-3.5 hover:bg-white/[0.05] transition-colors text-left"
+              className="w-full flex items-center gap-3 px-3 py-2.5 md:py-3 hover:bg-white/[0.05] transition-colors text-left"
             >
-              <AccountAvatar account={a} size={isMobileUi ? 40 : 44} />
+              <AccountAvatar account={a} size={isMobileUi ? 36 : 40} />
               <div className="min-w-0">
-                <p className="text-[15px] md:text-[16px] font-medium font-[family-name:var(--font-manrope)] truncate">
+                <p className="text-[14px] md:text-[15px] font-medium font-[family-name:var(--font-manrope)] truncate">
                   {a.name}
                 </p>
-                <p className="text-[13px] text-white/40 font-[family-name:var(--font-manrope)] truncate">
+                <p className="text-[12px] text-white/40 font-[family-name:var(--font-manrope)] truncate">
                   {a.email}
                 </p>
               </div>
@@ -1738,24 +1750,24 @@ export default function MailApp() {
         <button
           type="button"
           onClick={addAccount}
-          className="w-full flex items-center gap-3.5 px-3.5 py-3 md:px-4 md:py-3.5 hover:bg-white/[0.05] transition-colors text-left"
+          className="w-full flex items-center gap-3 px-3 py-2.5 md:py-3 hover:bg-white/[0.05] transition-colors text-left"
         >
-          <div className="h-10 w-10 md:h-11 md:w-11 rounded-full bg-[#2a2d36] flex items-center justify-center text-white/70">
-            <Plus size={18} />
+          <div className="h-9 w-9 md:h-10 md:w-10 rounded-full bg-[#2a2d36] flex items-center justify-center text-white/70">
+            <Plus size={16} />
           </div>
-          <span className="text-[15px] md:text-[16px] font-[family-name:var(--font-manrope)]">
+          <span className="text-[14px] md:text-[15px] font-[family-name:var(--font-manrope)]">
             Добавить аккаунт
           </span>
         </button>
         <button
           type="button"
           onClick={() => void logoutAll()}
-          className="w-full flex items-center gap-3.5 px-3.5 py-3 md:px-4 md:py-3.5 hover:bg-white/[0.05] transition-colors text-left"
+          className="w-full flex items-center gap-3 px-3 py-2.5 md:py-3 hover:bg-white/[0.05] transition-colors text-left"
         >
-          <div className="h-10 w-10 md:h-11 md:w-11 rounded-full bg-[#2a2d36] flex items-center justify-center text-white/70">
-            <LogOut size={18} />
+          <div className="h-9 w-9 md:h-10 md:w-10 rounded-full bg-[#2a2d36] flex items-center justify-center text-white/70">
+            <LogOut size={16} />
           </div>
-          <span className="text-[15px] md:text-[16px] font-[family-name:var(--font-manrope)]">
+          <span className="text-[14px] md:text-[15px] font-[family-name:var(--font-manrope)]">
             Выйти из всех аккаунтов
           </span>
         </button>
@@ -1764,13 +1776,13 @@ export default function MailApp() {
       <button
         type="button"
         onClick={manageAccount}
-        className="w-full h-12 md:h-[52px] rounded-full bg-[#17191f] border border-white/12 hover:bg-[#1c1f27] transition-colors px-4 inline-flex items-center gap-3 text-[15px] md:text-[16px] font-[family-name:var(--font-manrope)]"
+        className="w-full h-11 md:h-12 rounded-full bg-[#17191f] border border-white/12 hover:bg-[#1c1f27] transition-colors px-4 inline-flex items-center gap-3 text-[14px] md:text-[15px] font-[family-name:var(--font-manrope)]"
       >
-        <Settings size={18} className="text-white/55" />
+        <Settings size={16} className="text-white/55" />
         Управление аккаунтом
       </button>
 
-      <div className="mt-4 pt-2 flex items-center justify-center gap-2 text-[13px] text-white/35 font-[family-name:var(--font-manrope)]">
+      <div className="mt-3 pt-2 flex items-center justify-center gap-2 text-[12px] text-white/35 font-[family-name:var(--font-manrope)]">
         <Link href="/help" className="hover:text-white/55">
           Справка
         </Link>
@@ -1972,18 +1984,47 @@ export default function MailApp() {
 
   return (
     <div className="mail-app-shell w-full max-w-[100vw] bg-[#0c0d10] text-white flex flex-col overflow-hidden overscroll-none touch-pan-y">
-      {/* Site header strip — buttons from landing header */}
-      <header className="shrink-0 z-50 border-b border-white/5 bg-[#0c0d10]">
-        <div className="h-14 md:h-16 px-3 md:px-5 flex items-center gap-2 md:gap-4">
-          <button
-            type="button"
-            className="md:hidden h-9 w-9 rounded-[10px] flex items-center justify-center text-white/60 hover:bg-white/5"
-            onClick={() => openDrawer()}
-            aria-label="Меню"
-          >
-            <Menu size={20} />
-          </button>
+      {/* Header — mobile pill (screen 2) / desktop bar */}
+      <header className="shrink-0 z-50 bg-[#0c0d10]">
+        {/* Mobile: floating search pill */}
+        <div
+          className="md:hidden px-3 pb-2"
+          style={{ paddingTop: "max(0.5rem, env(safe-area-inset-top, 0px))" }}
+        >
+          <div className="h-11 flex items-center gap-0.5 rounded-full bg-[#2a2d36] pl-1 pr-1.5 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset]">
+            <button
+              type="button"
+              className="h-9 w-9 shrink-0 rounded-full flex items-center justify-center text-white/70 active:bg-white/10"
+              onClick={() => openDrawer()}
+              aria-label="Меню"
+            >
+              <Menu size={20} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setSearchOpen(true)}
+              className="min-w-0 flex-1 h-9 flex items-center gap-2 px-1 text-left"
+              aria-label="Поиск"
+            >
+              <span className="text-[15px] text-white/45 font-[family-name:var(--font-manrope)] truncate">
+                Поиск в почте
+              </span>
+            </button>
+            <button
+              type="button"
+              data-account-trigger
+              onClick={() => setProfileOpen((v) => !v)}
+              className="shrink-0 rounded-full overflow-hidden ring-2 ring-transparent active:ring-white/20"
+              aria-label="Аккаунт"
+              aria-expanded={profileOpen}
+            >
+              <AccountAvatar account={activeAccount} size={32} />
+            </button>
+          </div>
+        </div>
 
+        {/* Desktop header */}
+        <div className="hidden md:flex h-16 px-5 items-center gap-4 border-b border-white/5">
           <button
             type="button"
             onClick={() => window.location.reload()}
@@ -1996,35 +2037,27 @@ export default function MailApp() {
               width={200}
               height={106}
               priority
-              className="h-10 md:h-12 w-auto select-none object-contain"
+              className="h-12 w-auto select-none object-contain"
             />
           </button>
 
-          <div className="ml-auto flex items-center gap-2 md:gap-3 min-w-0">
+          <div className="ml-auto flex items-center gap-3 min-w-0">
             <button
               type="button"
               onClick={() => setSearchOpen(true)}
-              className="hidden sm:flex items-center gap-2 h-10 min-w-[180px] md:min-w-[240px] max-w-[320px] flex-1 rounded-[12px] bg-[#1a1c22] border border-white/8 px-3 text-left hover:border-white/15 transition-colors"
+              className="flex items-center gap-2 h-10 min-w-[240px] max-w-[320px] flex-1 rounded-[12px] bg-[#1a1c22] border border-white/8 px-3 text-left hover:border-white/15 transition-colors"
             >
               <Search size={16} className="text-white/35 shrink-0" />
               <span className="text-[14px] text-white/35 font-[family-name:var(--font-manrope)] truncate">
                 Поиск в почте
               </span>
             </button>
-            <button
-              type="button"
-              className="sm:hidden h-9 w-9 rounded-[10px] flex items-center justify-center text-white/70 hover:bg-white/5"
-              aria-label="Поиск"
-              onClick={() => setSearchOpen(true)}
-            >
-              <Search size={18} />
-            </button>
 
             <button
               type="button"
               onClick={() => copyEmail("header")}
               title="Скопировать адрес"
-              className="relative hidden md:inline-flex items-center gap-1.5 h-9 px-2 rounded-[10px] text-[14px] text-white/70 font-[family-name:var(--font-manrope)] truncate max-w-[200px] hover:bg-white/5 hover:text-white transition-colors"
+              className="relative inline-flex items-center gap-1.5 h-9 px-2 rounded-[10px] text-[14px] text-white/70 font-[family-name:var(--font-manrope)] truncate max-w-[200px] hover:bg-white/5 hover:text-white transition-colors"
             >
               <span className="truncate">{activeAccount.email}</span>
               {copied === "header" && (
@@ -2049,7 +2082,6 @@ export default function MailApp() {
                 <AccountAvatar account={activeAccount} size={40} />
               </button>
 
-              {/* Desktop dropdown — larger */}
               {!isMobileUi && (
                 <>
                   <button
@@ -2078,7 +2110,7 @@ export default function MailApp() {
                           ease: [0.22, 1, 0.36, 1],
                         }}
                         style={{ transformOrigin: "calc(100% - 16px) 0%" }}
-                        className="absolute right-0 top-[calc(100%+12px)] w-[min(calc(100vw-32px),420px)] rounded-[24px] bg-[#22252e] border border-white/22 shadow-[0_16px_48px_rgba(0,0,0,0.75),0_0_0_1px_rgba(255,255,255,0.06)] p-4 z-[70]"
+                        className="absolute right-0 top-[calc(100%+12px)] w-[min(calc(100vw-32px),380px)] rounded-[22px] bg-[#22252e] border border-white/22 shadow-[0_16px_48px_rgba(0,0,0,0.75),0_0_0_1px_rgba(255,255,255,0.06)] p-3.5 z-[70]"
                       >
                         {accountMenuBody}
                       </motion.div>
@@ -2261,7 +2293,7 @@ export default function MailApp() {
           )}
           style={{
             x: drawerX,
-            width: isMobileUi ? "100vw" : DRAWER_W_DESKTOP,
+            width: drawerWRef.current,
             top: 0,
             bottom: 0,
             height: "100%",
@@ -2270,7 +2302,7 @@ export default function MailApp() {
             paddingBottom: "var(--safe-bottom)",
           }}
         >
-          <div className="h-full overflow-y-auto overscroll-contain">
+          <div className="h-full overflow-y-auto overscroll-contain rounded-r-[20px] bg-[#1a1c22] shadow-[8px_0_32px_rgba(0,0,0,0.45)]">
             <Sidebar fullBleed />
           </div>
         </motion.div>
@@ -2477,7 +2509,7 @@ export default function MailApp() {
                 <PullToRefresh
                   disabled={Boolean(openId)}
                   refreshing={listRefreshing}
-                  bottomInset={isMobileUi && !openId ? 88 : 0}
+                  bottomInset={isMobileUi && !openId ? 100 : 0}
                   onScroll={(y, delta) => {
                     if (!isMobileUi || openId) return;
                     if (delta > 6 && y > 48) setMobileTabHidden(true);
@@ -3115,7 +3147,7 @@ export default function MailApp() {
             bottom:
               openId || mobileTabHidden
                 ? "calc(1rem + var(--safe-bottom))"
-                : "calc(4.75rem + var(--safe-bottom))",
+                : "calc(5.75rem + var(--safe-bottom))",
             transition: "bottom 0.22s ease",
           }}
           aria-label="Написать"
@@ -3124,11 +3156,11 @@ export default function MailApp() {
         </button>
       )}
 
-      {/* Mobile bottom tabs — hides when scrolling the list down */}
+      {/* Mobile bottom tabs — grabber strip like ID sheet; hides on scroll-down */}
       {isMobileUi && !composeOpen && !idOverlayUrl && !idOverlayLoading && !openId && (
         <nav
           className={cn(
-            "md:hidden fixed left-0 right-0 z-30 border-t border-white/10 bg-[#14161c]/95 backdrop-blur-md transition-transform duration-[220ms] ease-out",
+            "md:hidden fixed left-0 right-0 z-30 rounded-t-[22px] border border-b-0 border-white/12 bg-[#1a1c22] shadow-[0_-8px_32px_rgba(0,0,0,0.35)] transition-transform duration-[220ms] ease-out",
             mobileTabHidden && "translate-y-full",
           )}
           style={{
@@ -3137,7 +3169,10 @@ export default function MailApp() {
           }}
           aria-label="Основные папки"
         >
-          <div className="grid grid-cols-2 h-[56px]">
+          <div className="flex justify-center pt-2.5 pb-1" aria-hidden>
+            <span className="h-1 w-10 rounded-full bg-white/35" />
+          </div>
+          <div className="grid grid-cols-2 h-[64px]">
             <button
               type="button"
               onClick={() => {
@@ -3146,12 +3181,14 @@ export default function MailApp() {
                 selectFolder("all");
               }}
               className={cn(
-                "flex flex-col items-center justify-center gap-0.5 font-[family-name:var(--font-manrope)] transition-colors",
-                folder === "all" ? "text-[#4d9fff]" : "text-white/45",
+                "flex flex-col items-center justify-center gap-1 font-[family-name:var(--font-manrope)] transition-colors",
+                folder === "all" ? "text-[#4d9fff]" : "text-white/50",
               )}
             >
-              <LayoutGrid size={20} />
-              <span className="text-[11px] font-medium">Вся почта</span>
+              <LayoutGrid size={24} />
+              <span className="text-[12px] font-semibold tracking-[-0.01em]">
+                Вся почта
+              </span>
             </button>
             <button
               type="button"
@@ -3161,12 +3198,14 @@ export default function MailApp() {
                 selectFolder("inbox");
               }}
               className={cn(
-                "flex flex-col items-center justify-center gap-0.5 font-[family-name:var(--font-manrope)] transition-colors",
-                folder === "inbox" ? "text-[#4d9fff]" : "text-white/45",
+                "flex flex-col items-center justify-center gap-1 font-[family-name:var(--font-manrope)] transition-colors",
+                folder === "inbox" ? "text-[#4d9fff]" : "text-white/50",
               )}
             >
-              <Inbox size={20} />
-              <span className="text-[11px] font-medium">Входящие</span>
+              <Inbox size={24} />
+              <span className="text-[12px] font-semibold tracking-[-0.01em]">
+                Входящие
+              </span>
             </button>
           </div>
         </nav>
