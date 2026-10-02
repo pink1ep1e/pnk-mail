@@ -51,8 +51,7 @@ export function BottomSheet({
     return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose, dismissible]);
 
-  // Do not toggle document.body.overflow — it causes a dark flash on iOS/PWA
-  // when the sheet opens (layout jump + double-lock with parent scroll locks).
+  // No document.body.overflow lock — causes dark flash on iOS/PWA.
 
   const onDragEnd = (_: unknown, info: PanInfo) => {
     if (!dismissible || !mobile) return;
@@ -62,16 +61,16 @@ export function BottomSheet({
   return (
     <AnimatePresence>
       {open ? (
-        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center sm:p-4">
+        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center sm:p-4 pointer-events-none">
+          {/* Backdrop: start at opacity 0 in style so first paint never flashes black */}
           <motion.button
             type="button"
             aria-label="Закрыть"
-            className="absolute inset-0 bg-black/55"
+            className="pointer-events-auto absolute inset-0 bg-black/[0.45]"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.18, ease: "easeOut" }}
-            style={{ willChange: "opacity" }}
+            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
             onClick={() => {
               if (dismissible) onClose();
             }}
@@ -82,7 +81,7 @@ export function BottomSheet({
             aria-modal
             aria-labelledby={labelledBy}
             className={cn(
-              "relative z-10 w-full sm:max-w-[520px] max-h-[88dvh] flex flex-col rounded-t-[28px] sm:rounded-[28px] bg-[#1a1c22] shadow-[0_24px_80px_rgba(0,0,0,0.55)]",
+              "pointer-events-auto relative z-10 w-full sm:max-w-[520px] max-h-[88dvh] flex flex-col rounded-t-[28px] sm:rounded-[28px] bg-[#1a1c22] shadow-[0_24px_80px_rgba(0,0,0,0.55)]",
               className,
             )}
             initial={mobile ? { y: "100%" } : { opacity: 0, scale: 0.96, y: 12 }}
@@ -90,7 +89,7 @@ export function BottomSheet({
             exit={mobile ? { y: "100%" } : { opacity: 0, scale: 0.96, y: 12 }}
             transition={
               mobile
-                ? { type: "spring", damping: 36, stiffness: 480, mass: 0.8 }
+                ? { type: "spring", damping: 38, stiffness: 420, mass: 0.85 }
                 : { duration: 0.14, ease: [0.2, 0.8, 0.2, 1] }
             }
             drag={mobile && dismissible ? "y" : false}

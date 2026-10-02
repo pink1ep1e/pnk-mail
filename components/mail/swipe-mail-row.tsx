@@ -212,6 +212,9 @@ export function SwipeMailRow({
         style={{ x }}
         className="relative z-10 flex w-full touch-pan-y"
         onClickCapture={(e) => {
+          // Action buttons must receive the click — don't intercept them
+          const t = e.target as HTMLElement | null;
+          if (t?.closest?.("[data-swipe-action]")) return;
           if (suppressClick.current || Math.abs(x.get()) > 10) {
             e.preventDefault();
             e.stopPropagation();
@@ -235,7 +238,9 @@ export function SwipeMailRow({
           <button
             type="button"
             data-no-press
+            data-swipe-action
             onClick={(e) => {
+              e.preventDefault();
               e.stopPropagation();
               onOpenChange(null);
               onReply();
@@ -251,7 +256,9 @@ export function SwipeMailRow({
           <button
             type="button"
             data-no-press
+            data-swipe-action
             onClick={(e) => {
+              e.preventDefault();
               e.stopPropagation();
               onOpenChange(null);
               onDelete();
