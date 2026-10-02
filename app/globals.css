@@ -202,6 +202,12 @@ main a {
   touch-action: pan-y;
 }
 
+/* Mail action toolbar must scroll horizontally on phones */
+main .mail-toolbar-scroll,
+main .mail-toolbar-scroll button {
+  touch-action: pan-x;
+}
+
 .mail-scroll {
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;

@@ -1651,7 +1651,7 @@ export default function MailApp() {
       disabled={!hasTargets}
       onClick={onClick}
       className={cn(
-        "h-9 px-2 rounded-[10px] inline-flex items-center gap-1.5 text-[13px] font-[family-name:var(--font-manrope)] shrink-0 transition-colors",
+        "h-9 px-2 rounded-[10px] inline-flex items-center gap-1.5 text-[13px] font-[family-name:var(--font-manrope)] shrink-0 transition-colors touch-pan-x",
         !hasTargets
           ? "text-white/25 cursor-default"
           : danger
@@ -1660,7 +1660,7 @@ export default function MailApp() {
       )}
     >
       <Icon size={15} />
-      <span className="hidden xl:inline">{label}</span>
+      <span>{label}</span>
     </button>
   );
 
@@ -2313,9 +2313,9 @@ export default function MailApp() {
         {/* Main — Yandex-style list pane */}
         <main className="flex-1 min-w-0 flex flex-col p-0">
           <div className="flex-1 min-h-0 bg-[#1a1c22] mail-main-pane md:rounded-[20px] flex flex-col overflow-hidden">
-            {/* Toolbar — menus outside overflow-x so dropdowns aren't clipped */}
-            <div className="relative shrink-0">
-              <div className="flex items-center gap-0.5 px-2 md:px-3 py-1.5 overflow-x-auto no-scrollbar">
+            {/* Toolbar — horizontal scroll on mobile; menus outside so dropdowns aren't clipped */}
+            <div className="relative shrink-0 min-w-0">
+              <div className="mail-toolbar-scroll flex items-center gap-0.5 px-2 md:px-3 py-1.5 overflow-x-auto overscroll-x-contain no-scrollbar min-w-0 w-full [-webkit-overflow-scrolling:touch]">
                 <div className="h-9 w-9 flex items-center justify-center shrink-0">
                   <Checkbox
                     checked={allSelected && visible.length > 0}
@@ -2323,29 +2323,6 @@ export default function MailApp() {
                     aria-label="Выбрать все"
                   />
                 </div>
-                <button
-                  type="button"
-                  className={cn(
-                    "h-9 w-9 rounded-[10px] inline-flex items-center justify-center shrink-0 transition-colors",
-                    listRefreshing || loadingMail
-                      ? "text-[#4d9fff]"
-                      : "text-white/55 hover:bg-white/5 hover:text-white",
-                  )}
-                  aria-label="Обновить"
-                  title="Обновить"
-                  disabled={listRefreshing}
-                  onClick={() => {
-                    haptic("light");
-                    void refreshList();
-                  }}
-                >
-                  <Reload
-                    size={15}
-                    className={
-                      listRefreshing || loadingMail ? "animate-spin" : undefined
-                    }
-                  />
-                </button>
                 <ToolbarBtn
                   icon={Reply}
                   label="Ответить"
