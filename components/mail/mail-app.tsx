@@ -1991,7 +1991,7 @@ export default function MailApp() {
       <header className="shrink-0 z-50 bg-[#0c0d10]">
         {/* Mobile: floating search pill — shell already has safe-area top */}
         <div className="md:hidden px-3 pt-1.5 pb-2">
-          <div className="h-11 flex items-center rounded-full bg-[#2a2d36] pl-1 pr-1.5">
+          <div className="h-11 flex items-center rounded-full bg-[#32363f] pl-1 pr-1.5">
             <button
               type="button"
               className="h-9 w-9 shrink-0 rounded-full flex items-center justify-center text-white/75 active:bg-white/10"
@@ -3151,34 +3151,16 @@ export default function MailApp() {
         </div>
       )}
 
-      {!composeOpen && !idOverlayUrl && !idOverlayLoading && (
-        <button
-          type="button"
-          onClick={() => setComposeOpen(true)}
-          className="md:hidden fixed right-4 z-30 h-14 w-14 rounded-full bg-[#0066ff] text-white inline-flex items-center justify-center hover:bg-[#0052cc] transition-colors active:scale-[0.94]"
-          style={{
-            bottom:
-              openId || mobileTabHidden
-                ? "calc(1rem + var(--safe-bottom))"
-                : "calc(4.75rem + var(--safe-bottom))",
-            transition: "bottom 0.22s ease",
-          }}
-          aria-label="Написать"
-        >
-          <Pencil size={22} />
-        </button>
-      )}
-
-      {/* Mobile bottom tabs — same chrome as pnk-id (flat bar, no dim/grabber) */}
+      {/* Mobile bottom tabs — lighter surface + compose in bar */}
       {isMobileUi && !composeOpen && !idOverlayUrl && !idOverlayLoading && !openId && (
         <nav
           className={cn(
-            "mobile-tab-bar md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-white/[0.06] bg-[#12141a] transition-transform duration-[220ms] ease-out",
+            "mobile-tab-bar md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-white/[0.08] bg-[#22252e] transition-transform duration-[220ms] ease-out",
             mobileTabHidden && "translate-y-full",
           )}
           aria-label="Основные папки"
         >
-          <div className="grid grid-cols-2 h-[52px]">
+          <div className="grid grid-cols-3 h-[52px]">
             <button
               type="button"
               onClick={() => {
@@ -3197,6 +3179,22 @@ export default function MailApp() {
               />
               <span className="text-[11px] font-semibold leading-none">
                 Вся почта
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                haptic("medium");
+                setComposeOpen(true);
+              }}
+              className="relative flex flex-col items-center justify-end gap-1 pb-0.5 font-[family-name:var(--font-manrope)] transition-colors duration-75 select-none text-white/40"
+              aria-label="Написать"
+            >
+              <span className="h-[28px] w-[28px] -mt-0.5 rounded-full bg-[#0066ff] text-white inline-flex items-center justify-center">
+                <Pencil size={15} />
+              </span>
+              <span className="text-[11px] font-semibold leading-none text-white/55">
+                Написать
               </span>
             </button>
             <button

@@ -41,6 +41,23 @@ export function BottomSheet({
 }) {
   const mobile = useIsMobileSheet();
   const dragControls = useDragControls();
+  // CSS backdrop fade — avoids first-frame black flash from motion remount
+  const [backdropOn, setBackdropOn] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      setBackdropOn(false);
+      return;
+    }
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => setBackdropOn(true));
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open || !dismissible) return;
@@ -51,8 +68,6 @@ export function BottomSheet({
     return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose, dismissible]);
 
-  // No document.body.overflow lock — causes dark flash on iOS/PWA.
-
   const onDragEnd = (_: unknown, info: PanInfo) => {
     if (!dismissible || !mobile) return;
     if (info.offset.y > 110 || info.velocity.y > 700) onClose();
@@ -62,15 +77,13 @@ export function BottomSheet({
     <AnimatePresence>
       {open ? (
         <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center sm:p-4 pointer-events-none">
-          {/* Backdrop: start at opacity 0 in style so first paint never flashes black */}
-          <motion.button
+          <button
             type="button"
             aria-label="Закрыть"
-            className="pointer-events-auto absolute inset-0 bg-black/[0.45]"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+            className={cn(
+              "pointer-events-auto absolute inset-0 bg-black/40 transition-opacity duration-200 ease-out",
+              backdropOn ? "opacity-100" : "opacity-0",
+            )}
             onClick={() => {
               if (dismissible) onClose();
             }}
