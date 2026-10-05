@@ -23,6 +23,10 @@ export type MailMessage = {
   avatarColor: string;
   /** Sender brand/logo/favicon when available */
   avatarUrl?: string | null;
+  /** Sender domain is in VerifiedDomain table */
+  senderVerified?: boolean;
+  /** Brand label for verified domain tooltip */
+  verifiedLabel?: string;
   deliveryStatus?: string | null;
   deliveryDetail?: string | null;
   /** Deferred send / snooze time (ISO) */

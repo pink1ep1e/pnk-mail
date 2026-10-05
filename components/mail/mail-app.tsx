@@ -341,13 +341,54 @@ function MailBodyFrame({ html }: { html: string }) {
   );
 }
 
-function VerifiedBadge() {
+function VerifiedBadge({
+  domain,
+  label,
+}: {
+  domain?: string | null;
+  label?: string | null;
+}) {
+  const host = (domain || "").trim().toLowerCase();
+  const brand = (label || "").trim();
+  const tip = brand
+    ? `Домен ${host || "отправителя"} верифицирован (${brand}) и является проверенным отправителем`
+    : `Домен ${host || "отправителя"} верифицирован и является проверенным отправителем`;
+
   return (
-    <span
-      className="inline-flex h-[15px] w-[15px] shrink-0 items-center justify-center rounded-full bg-[#22c55e]"
-      aria-label="Проверенный отправитель"
-    >
-      <Check size={9} strokeWidth={3.5} className="text-white" />
+    <span className="relative inline-flex shrink-0 group/vbadge align-middle">
+      <span
+        className="inline-flex h-[15px] w-[15px] items-center justify-center cursor-help"
+        aria-label={tip}
+        tabIndex={0}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/icons/verified-domain.svg"
+          alt=""
+          width={15}
+          height={15}
+          className="h-[15px] w-[15px] select-none"
+          draggable={false}
+        />
+      </span>
+      <span
+        role="tooltip"
+        className={cn(
+          "pointer-events-none absolute left-1/2 bottom-[calc(100%+8px)] z-[80] w-max max-w-[240px] -translate-x-1/2",
+          "rounded-[10px] bg-[#1c1f27] border border-white/12 px-2.5 py-1.5",
+          "text-[11px] leading-snug text-white/80 font-[family-name:var(--font-manrope)] text-center",
+          "shadow-[0_10px_28px_rgba(0,0,0,0.55)]",
+          "opacity-0 scale-[0.98] transition-[opacity,transform] duration-150 ease-out",
+          "group-hover/vbadge:opacity-100 group-hover/vbadge:scale-100",
+          "group-focus-within/vbadge:opacity-100 group-focus-within/vbadge:scale-100",
+        )}
+      >
+        {tip}
+        <span
+          aria-hidden
+          className="absolute left-1/2 top-full -translate-x-1/2 border-[5px] border-transparent border-t-[#1c1f27]"
+        />
+      </span>
     </span>
   );
 }
@@ -2825,9 +2866,16 @@ export default function MailApp() {
                                                   <span className="text-[11px] text-white/28 font-[family-name:var(--font-manrope)]">
                                                     вы
                                                   </span>
-                                                ) : (
-                                                  <VerifiedBadge />
-                                                )}
+                                                ) : msg.senderVerified ? (
+                                                  <VerifiedBadge
+                                                    domain={
+                                                      (msg.fromEmail || "")
+                                                        .split("@")[1]
+                                                        ?.toLowerCase() || null
+                                                    }
+                                                    label={msg.verifiedLabel}
+                                                  />
+                                                ) : null}
                                               </div>
 
                                               {isLast && (

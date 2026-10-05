@@ -5,6 +5,7 @@ import type { FolderId } from "@/lib/mail-data";
 import { maybeSyncResendInbound, repairFalseSubjectThreads } from "@/lib/mail-inbound";
 import { processDueScheduledSends } from "@/lib/mail-scheduled-send";
 import { groupMessagesIntoThreads, toListDto, attachPnkMailAvatars, parseAddressList } from "@/lib/mail-store";
+import { attachVerifiedSenderFlags } from "@/lib/verified-domains";
 import { assertSameOrigin } from "@/lib/request-guard";
 
 const LIST_SELECT = {
@@ -161,7 +162,9 @@ export async function GET(req: NextRequest) {
   const threaded =
     folder === "drafts" ? rows : groupMessagesIntoThreads(rows);
 
-  const messages = await attachPnkMailAvatars(threaded.map(toListDto));
+  const messages = await attachVerifiedSenderFlags(
+    await attachPnkMailAvatars(threaded.map(toListDto)),
+  );
 
   return NextResponse.json({
     ok: true,

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireActiveMailbox } from "@/lib/mail-auth";
 import { toListDto, attachPnkMailAvatars } from "@/lib/mail-store";
+import { attachVerifiedSenderFlags } from "@/lib/verified-domains";
 import {
   extractLogoFromHtml,
   resolveSenderAvatarUrl,
@@ -98,8 +99,14 @@ export async function GET(req: NextRequest, { params }: Params) {
     };
   };
 
-  const message = (await attachPnkMailAvatars([toDetail(row)]))[0];
-  const thread = await attachPnkMailAvatars(threadRows.map(toDetail));
+  const message = (
+    await attachVerifiedSenderFlags(
+      await attachPnkMailAvatars([toDetail(row)]),
+    )
+  )[0];
+  const thread = await attachVerifiedSenderFlags(
+    await attachPnkMailAvatars(threadRows.map(toDetail)),
+  );
 
   return NextResponse.json({
     ok: true,

@@ -11,6 +11,7 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
+    "db:seed-verified": "tsx scripts/seed-verified-domains.ts",
     "icons:generate": "python scripts/generate-streamline-icons.py"
   },
   "dependencies": {

@@ -102,3 +102,14 @@ model PushSubscription {
 
   @@index([mailboxId])
 }
+
+/// Domains of trusted / official senders (Steam, Apple, …). Managed via admin later.
+model VerifiedDomain {
+  id        String   @id @default(cuid())
+  /// Lowercase hostname, e.g. steampowered.com
+  domain    String   @unique
+  /// Optional brand name for tooltips, e.g. "Steam"
+  label     String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
