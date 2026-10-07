@@ -200,10 +200,24 @@ pm2 logs pnk-id --lines 50
 
 ---
 
+## Admin API (для pnk-pmp)
+
+В `.env` mail:
+
+```env
+ADMIN_API_TOKEN="<openssl rand -hex 32>"
+```
+
+Тот же токен укажи в `~/pnk-pmp/.env` как `MAIL_ADMIN_TOKEN` (URL: `http://127.0.0.1:3000`).  
+Эндпоинты: `/api/admin/mailboxes`, `/domains`, `/stats`, `/broadcast`, `/health`.  
+Подробнее: репозиторий [pnk-pmp](https://github.com/pink1ep1e/pnk-pmp) → `docs/install-vps.md`.
+
+---
+
 ## Обновление mail с GitHub
 
 ```bash
-cd /var/www/pnk-mail
+cd ~/pnk-mail
 git pull
 npm ci
 npx prisma generate
