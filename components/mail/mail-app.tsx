@@ -2032,22 +2032,22 @@ export default function MailApp() {
       <header className="shrink-0 z-50 bg-[var(--mail-canvas)]">
         {/* Mobile: floating search pill — shell already has safe-area top */}
         <div className="md:hidden px-3 pt-1.5 pb-2">
-          <div className="h-11 flex items-center rounded-full bg-[var(--mail-search)] pl-1 pr-1.5">
+          <div className="h-14 flex items-center rounded-full bg-[var(--mail-search)] pl-1.5 pr-2">
             <button
               type="button"
-              className="h-9 w-9 shrink-0 rounded-full flex items-center justify-center text-white/70 active:bg-white/10"
+              className="h-11 w-11 shrink-0 rounded-full flex items-center justify-center text-white/70 active:bg-white/10"
               onClick={() => openDrawer()}
               aria-label="Меню"
             >
-              <Menu size={20} />
+              <Menu size={24} />
             </button>
             <button
               type="button"
               onClick={() => setSearchOpen(true)}
-              className="min-w-0 flex-1 h-9 flex items-center px-1 text-left"
+              className="min-w-0 flex-1 h-11 flex items-center px-1.5 text-left"
               aria-label="Поиск"
             >
-              <span className="text-[15px] text-white/40 font-[family-name:var(--font-manrope)] truncate">
+              <span className="text-[16px] text-white/40 font-[family-name:var(--font-manrope)] truncate">
                 Поиск в почте
               </span>
             </button>
@@ -2059,7 +2059,7 @@ export default function MailApp() {
               aria-label="Аккаунт"
               aria-expanded={profileOpen}
             >
-              <AccountAvatar account={activeAccount} size={32} />
+              <AccountAvatar account={activeAccount} size={40} />
             </button>
           </div>
         </div>
